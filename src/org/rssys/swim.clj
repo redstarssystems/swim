@@ -61,11 +61,33 @@
 (s/def ::neighbour-descriptor (s/keys :req-un [::id ::status ::access]))
 (s/def ::neighbours-table (s/map-of ::id ::neighbour-descriptor))
 
+(s/def ::restart-counter pos-int?)
+(s/def ::tx-counter pos-int?)
+
 (s/def ::max-packet-size pos-int?)
 (s/def ::continue? boolean?)
 (s/def ::server-packet-count pos-int?)
 (s/def ::*udp-server (s/keys :req-un [::host ::port ::start-time ::max-packet-size ::server-state ::continue? ::server-packet-count]))
-(s/def ::state (s/keys :req-un [::status ::neighbours-table ::*udp-server]))
+(s/def ::object any?)
+(s/def ::scheduler-pool ::object)
+(s/def ::ping-ids (s/coll-of ::id))
+(s/def ::ping-data (s/map-of ::id ::object))
+(s/def ::suspicious-node-ids (s/coll-of ::id))
+(s/def ::state (s/keys :req-un [::id
+                                ::name
+                                ::host
+                                ::port
+                                ::cluster
+                                ::continue?
+                                ::status
+                                ::neighbours-table
+                                ::*udp-server
+                                ::restart-counter
+                                ::scheduler-pool
+                                ::tx-counter
+                                ::ping-ids
+                                ::ping-data
+                                ::tags]))
 
 
 (s/def ::*state
@@ -76,5 +98,4 @@
     #(s/valid? ::state (deref %))))
 
 
-(s/def ::node (s/keys :req-un [::id ::name ::host ::port ::cluster ::*state ::tags]))
 
