@@ -11,6 +11,7 @@
       ThreadPoolExecutor
       TimeUnit)))
 
+
 (defn thread-factory
   "Factory that helps with spawning new Virtual Threads"
   [name]
@@ -18,12 +19,14 @@
     (.name name 0)
     (.factory)))
 
+
 (defonce unbounded-executor (Executors/newThreadPerTaskExecutor (thread-factory "virtual-pool-")))
 
 (defrecord PoolInfo [thread-pool jobs-ref id-count-ref])
 (defrecord MutablePool [pool-atom])
 (defrecord RecurringJob [id created-at ms-period initial-delay job pool-info desc scheduled?])
 (defrecord ScheduledJob [id created-at initial-delay job pool-info desc scheduled?])
+
 
 (defn- format-date
   "Format date object as a string such as: 2022-05-15 21:03:08"
@@ -164,17 +167,17 @@
   (let [jobs (vals @(:jobs-ref pool-info))]
     (.submit unbounded-executor ^Callable
       #(loop [jobs jobs]
-        (doseq [job jobs]
-          (when (and @(:scheduled? job)
-                  (or
-                    (.isCancelled (:job job))
-                    (.isDone (:job job))))
-            (reset! (:scheduled? job) false)))
+         (doseq [job jobs]
+           (when (and @(:scheduled? job)
+                   (or
+                     (.isCancelled (:job job))
+                     (.isDone (:job job))))
+             (reset! (:scheduled? job) false)))
 
-        (when-let [jobs (filter (fn [j] @(:scheduled? j)) jobs)]
-          (Thread/sleep 500)
-          (when (seq jobs)
-            (recur jobs)))))))
+         (when-let [jobs (filter (fn [j] @(:scheduled? j)) jobs)]
+           (Thread/sleep 500)
+           (when (seq jobs)
+             (recur jobs)))))))
 
 
 

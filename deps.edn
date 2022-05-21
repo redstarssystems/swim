@@ -22,7 +22,7 @@
                                       lambdaisland/kaocha           {:mvn/version "1.66.1034"}
                                       lambdaisland/kaocha-cloverage {:mvn/version "1.0.75"}}
                         :extra-paths ["resources" "test" "test/resources"]
-                        :jvm-opts    []
+                        :jvm-opts    ["--enable-preview"]
                         :main-opts   ["--main" "kaocha.runner"]}
 
 

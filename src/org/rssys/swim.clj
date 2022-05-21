@@ -43,12 +43,25 @@
 
 
 ;; cluster specs
-(s/def ::root-node (s/keys :req-un [::host ::port]))
+(s/def ::root-node
+  (s/keys :req-un [::host
+                   ::port]))
+
+
 (s/def ::root-nodes (s/coll-of ::root-node))
 (s/def ::tag ::ne-string)
 (s/def ::tags (s/coll-of ::tag))
 (s/def ::nspace ::ne-string)
-(s/def ::cluster (s/keys :req-un [::id ::name ::description ::secret-key ::root-nodes ::nspace ::tags]))
+
+
+(s/def ::cluster
+  (s/keys :req-un [::id
+                   ::name
+                   ::description
+                   ::secret-key
+                   ::root-nodes
+                   ::nspace
+                   ::tags]))
 
 
 ;; node specs
@@ -58,7 +71,13 @@
 (s/def ::access #{:direct :indirect})
 (sth/def ::access (format "Should be one of %s" (s/describe ::access)))
 
-(s/def ::neighbour-descriptor (s/keys :req-un [::id ::status ::access]))
+
+(s/def ::neighbour-descriptor
+  (s/keys :req-un [::id
+                   ::status
+                   ::access]))
+
+
 (s/def ::neighbours-table (s/map-of ::id ::neighbour-descriptor))
 
 (s/def ::restart-counter pos-int?)
@@ -67,27 +86,41 @@
 (s/def ::max-packet-size pos-int?)
 (s/def ::continue? boolean?)
 (s/def ::server-packet-count pos-int?)
-(s/def ::*udp-server (s/keys :req-un [::host ::port ::start-time ::max-packet-size ::server-state ::continue? ::server-packet-count]))
+
+
+(s/def ::*udp-server
+  (s/keys :req-un [::host
+                   ::port
+                   ::start-time
+                   ::max-packet-size
+                   ::server-state
+                   ::continue?
+                   ::server-packet-count]))
+
+
 (s/def ::object any?)
 (s/def ::scheduler-pool ::object)
 (s/def ::ping-ids (s/coll-of ::id))
 (s/def ::ping-data (s/map-of ::id ::object))
 (s/def ::suspicious-node-ids (s/coll-of ::id))
-(s/def ::state (s/keys :req-un [::id
-                                ::name
-                                ::host
-                                ::port
-                                ::cluster
-                                ::continue?
-                                ::status
-                                ::neighbours-table
-                                ::*udp-server
-                                ::restart-counter
-                                ::scheduler-pool
-                                ::tx-counter
-                                ::ping-ids
-                                ::ping-data
-                                ::tags]))
+
+
+(s/def ::state
+  (s/keys :req-un [::id
+                   ::name
+                   ::host
+                   ::port
+                   ::cluster
+                   ::continue?
+                   ::status
+                   ::neighbours-table
+                   ::*udp-server
+                   ::restart-counter
+                   ::scheduler-pool
+                   ::tx-counter
+                   ::ping-ids
+                   ::ping-data
+                   ::tags]))
 
 
 (s/def ::*state

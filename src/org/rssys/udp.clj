@@ -1,5 +1,7 @@
 (ns org.rssys.udp
   "UDP server functions"
+  (:require
+    [org.rssys.common :refer [vfuture]])
   (:import
     (java.net
       DatagramPacket
@@ -24,8 +26,8 @@
 
 
 (defn server-start
-  "Starts UDP server in a new Thread using given host and port .
-  Server will process all incoming UDP packets with provided call-back function in a single thread.
+  "Starts UDP server in a new Virtual Thread using given host and port .
+  Server will process each incoming UDP packets with provided call-back function in a new Virtual Thread (Java 19+).
   Empty UDP packets are ignored.
   Returns an atom with a server map with running server parameters:
     {:host                 `host`
@@ -52,35 +54,34 @@
                          :port                port
                          :start-time          (LocalDateTime/now)
                          :max-packet-size     max-packet-size
-                         :state               :running
+                         :server-state        :running
                          :continue?           true
                          :server-packet-count 0})
-
-        buffer        (make-array Byte/TYPE max-packet-size)
-        packet        (DatagramPacket. buffer (alength buffer))
         server-socket (DatagramSocket. port (InetAddress/getByName host))]
     (.setSoTimeout server-socket timeout)
-    (future
+    (vfuture
       (when *server-ready-promise (deliver *server-ready-promise *server-map))
       (while (-> @*server-map :continue?)
-        (try
-          (.receive server-socket packet)
-          (swap! *server-map update :server-packet-count inc)
-          (if (pos? (.getLength packet))
-            (process-cb-fn (byte-array (.getLength packet) (.getData packet)))
-            :nothing)                                  ;; do not process empty packets
-          (catch SocketTimeoutException _)
-          (catch Exception e
-            (.close server-socket)
-            (throw e))))
+        (let [buffer (make-array Byte/TYPE max-packet-size)
+              packet (DatagramPacket. buffer (alength buffer))]
+          (try
+            (.receive server-socket packet)
+            (swap! *server-map update :server-packet-count inc)
+            (if (pos? (.getLength packet))
+              (vfuture (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
+              :nothing)                                      ;; do not process empty packets
+            (catch SocketTimeoutException _)
+            (catch Exception e
+              (.close server-socket)
+              (throw e)))))
       (.close server-socket)
-      (swap! *server-map assoc :state :stopped))
+      (swap! *server-map assoc :server-state :stopped))
     *server-map))
 
 
 (defn server-state
   [*server-map]
-  (-> @*server-map :state))
+  (-> @*server-map :server-state))
 
 
 (defn server-stop
@@ -89,7 +90,7 @@
   [*server-map]
   (let [{:keys [host port]} @*server-map]
     (swap! *server-map assoc :continue? false)
-    (send-packet (.getBytes "") host port) ;; send empty packet to trigger server
+    (send-packet (.getBytes "") host port)                  ;; send empty packet to trigger server
     *server-map))
 
 

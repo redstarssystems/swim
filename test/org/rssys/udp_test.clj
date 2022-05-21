@@ -62,7 +62,7 @@
   (let [host                  "localhost"
         port                  (+ 10000 (rand-int 50000))
         *server-ready-promise (promise)
-        messages              #{"one" "two" "three"}
+        messages              #{"one" "two" "three" "four" "abcdefg" "12345"}
         *results              (atom #{})
         process-message-fn    (fn [data] (swap! *results conj (String. ^bytes data)))
         *server-map           (sut/server-start host port process-message-fn {:*server-ready-promise *server-ready-promise})]
@@ -78,7 +78,7 @@
                              :port                number?
                              :start-time          #(instance? LocalDateTime %)
                              :max-packet-size     number?
-                             :state               (fn [x] (#{:running :stopped} x))
+                             :server-state        :stopped
                              :continue?           boolean?
                              :server-packet-count pos?}))
       (is (= (sut/server-state *stop-result) :stopped) "Server is stopped successfully."))))
