@@ -8,16 +8,16 @@
     (clojure.lang
       Atom)
     (java.time
-      LocalDateTime)))
+      LocalDateTime)
+    (java.io Writer)
+    (java.util UUID)))
 
 
-;;;;;;;;;;;
 ;; SWIM spec
-;;;;;;;;;;;
 
 
 ;; not empty string
-(s/def ::ne-string #(s/and string? (complement string/blank?)))
+(s/def ::ne-string (s/and string? (complement string/blank?)))
 (sth/def ::ne-string "Should be not a blank string.")
 
 (s/def ::timestamp #(instance? LocalDateTime %))
@@ -130,5 +130,52 @@
     #(instance? Atom %)
     #(s/valid? ::state (deref %))))
 
+
+
+;; Domain entities
+
+(declare cluster-str)
+
+
+(defrecord Cluster [id name description secret-key root-nodes nspace tags]
+  Object
+  (toString [this] (cluster-str this)))
+
+
+(defmethod print-method Cluster [cluster ^Writer writer]
+  (.write writer (cluster-str cluster)))
+
+
+(defmethod print-dup Cluster [cluster ^Writer writer]
+  (.write writer (cluster-str cluster)))
+
+
+(defn cluster-str
+  "Returns String representation of Cluster"
+  ^String
+  [^Cluster cluster]
+  (str (into {} (assoc cluster :secret-key "***censored***"))))
+
+
+(defn new-cluster
+  "Returns new Cluster."
+  [{:keys [id name description secret-key root-nodes nspace tags]}]
+  (let [cluster (->Cluster (or id (random-uuid)) name description secret-key root-nodes nspace tags)]
+    (if-not (s/valid? ::cluster cluster)
+      (throw (ex-info "Cluster should correspond to spec" (sth/explain-data ::cluster cluster)))
+      cluster)))
+
+
+
+(comment
+  (def c (new-cluster {:id          #uuid "f876678d-f544-4fb8-a848-dc2c863aba6b"
+                      :name        "cluster1"
+                      :description "Test cluster1"
+                      :secret-key  "12345678"
+                      :root-nodes  [{:host "1.1.1.1" :port 1234} {:host "2.2.2.2" :port 5678}]
+                      :nspace      "ns1"
+                      :tags        ["dc1" "rssys"]}))
+
+  )
 
 
