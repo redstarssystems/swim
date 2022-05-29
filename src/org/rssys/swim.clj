@@ -3,18 +3,20 @@
   (:require
     [clojure.spec.alpha :as s]
     [clojure.string :as string]
+    [org.rssys.scheduler :as scheduler]
     [soothe.core :as sth])
   (:import
     (clojure.lang
       Atom)
+    (java.io
+      Writer)
     (java.time
-      LocalDateTime)
-    (java.io Writer)
-    (java.util UUID)))
+      LocalDateTime)))
 
 
+;;;;;;;;;;;;;;;;
 ;; SWIM spec
-
+;;;;;;;;;;;;;;;;
 
 ;; not empty string
 (s/def ::ne-string (s/and string? (complement string/blank?)))
@@ -65,7 +67,7 @@
 
 
 ;; node specs
-(s/def ::status #{:normal :dead :suspicious :leave})
+(s/def ::status #{:normal :dead :suspicious :leave :stopped})
 (sth/def ::status (format "Should be one of %s" (s/describe ::status)))
 
 (s/def ::access #{:direct :indirect})
@@ -80,22 +82,23 @@
 
 (s/def ::neighbours-table (s/map-of ::id ::neighbour-descriptor))
 
-(s/def ::restart-counter pos-int?)
-(s/def ::tx-counter pos-int?)
+(s/def ::restart-counter nat-int?)
+(s/def ::tx-counter nat-int?)
 
-(s/def ::max-packet-size pos-int?)
+(s/def ::max-packet-size nat-int?)
 (s/def ::continue? boolean?)
-(s/def ::server-packet-count pos-int?)
+(s/def ::server-packet-count nat-int?)
 
 
 (s/def ::*udp-server
-  (s/keys :req-un [::host
-                   ::port
-                   ::start-time
-                   ::max-packet-size
-                   ::server-state
-                   ::continue?
-                   ::server-packet-count]))
+  (s/nilable
+    (s/keys :req-un [::host
+                     ::port
+                     ::start-time
+                     ::max-packet-size
+                     ::server-state
+                     ::continue?
+                     ::server-packet-count])))
 
 
 (s/def ::object any?)
@@ -105,7 +108,7 @@
 (s/def ::suspicious-node-ids (s/coll-of ::id))
 
 
-(s/def ::state
+(s/def ::node
   (s/keys :req-un [::id
                    ::name
                    ::host
@@ -123,23 +126,23 @@
                    ::tags]))
 
 
-(s/def ::*state
-  ;; this node state
-
+(s/def ::*node
   (s/and
     #(instance? Atom %)
-    #(s/valid? ::state (deref %))))
+    #(s/valid? ::node (deref %))))
 
 
-
+;;;;;;;;;;;;;;;;;;;
 ;; Domain entities
+;;;;;;;;;;;;;;;;;;;
 
 (declare cluster-str)
 
 
+
 (defrecord Cluster [id name description secret-key root-nodes nspace tags]
-  Object
-  (toString [this] (cluster-str this)))
+           Object
+           (toString [this] (cluster-str this)))
 
 
 (defmethod print-method Cluster [cluster ^Writer writer]
@@ -158,24 +161,87 @@
 
 
 (defn new-cluster
-  "Returns new Cluster."
+  "Returns new Cluster instance."
   [{:keys [id name description secret-key root-nodes nspace tags]}]
   (let [cluster (->Cluster (or id (random-uuid)) name description secret-key root-nodes nspace tags)]
     (if-not (s/valid? ::cluster cluster)
-      (throw (ex-info "Cluster should correspond to spec" (sth/explain-data ::cluster cluster)))
+      (throw (ex-info "Cluster values should correspond to spec" (sth/explain-data ::cluster cluster)))
       cluster)))
 
 
 
+(defprotocol INode
+  "Node protocol"
+  :extend-via-metadata true
+  (start [node process-cb-fn] "Start this node and process each message using given callback function in a new Virtual Thread")
+  (stop [node] "Stop this node")
+  (state [node] "Get node state value"))
+
+
+(declare node-start)
+(declare node-stop)
+(declare node-state)
+(declare node-to-string)
+
+
+(defrecord Node [id
+                 name
+                 host
+                 port
+                 cluster
+                 continue?
+                 status
+                 neighbours-table
+                 *udp-server
+                 restart-counter
+                 scheduler-pool
+                 tx-counter
+                 ping-ids
+                 ping-data
+                 tags]
+
+
+           INode
+           (start [this process-cb-fn] (node-start this process-cb-fn))
+           (stop [this] (node-stop this))
+           (state [this] (node-state this))
+
+           Object
+           (toString [this] (node-to-string this)))
+
+
+(defn new-node
+  "Returns new Node instance."
+  [{:keys [id name host port cluster tags]}]
+  (let [node (map->Node {:id               (or id (random-uuid))
+                         :name             name
+                         :host             host
+                         :port             port
+                         :cluster          cluster
+                         :continue?        true
+                         :status           :stopped
+                         :neighbours-table {}
+                         :*udp-server      nil
+                         :restart-counter  0
+                         :scheduler-pool   (scheduler/mk-pool)
+                         :tx-counter       0
+                         :ping-ids         []
+                         :ping-data        {}
+                         :tags             tags})]
+    (if-not (s/valid? ::node node)
+      (throw (ex-info "Node values should correspond to spec" (sth/explain-data ::node node)))
+      (atom node))))
+
+
 (comment
+
   (def c (new-cluster {:id          #uuid "f876678d-f544-4fb8-a848-dc2c863aba6b"
-                      :name        "cluster1"
-                      :description "Test cluster1"
-                      :secret-key  "12345678"
-                      :root-nodes  [{:host "1.1.1.1" :port 1234} {:host "2.2.2.2" :port 5678}]
-                      :nspace      "ns1"
-                      :tags        ["dc1" "rssys"]}))
+                       :name        "cluster1"
+                       :description "Test cluster1"
+                       :secret-key  "0123456789abcdef0123456789abcdef"
+                       :root-nodes  [{:host "127.0.0.1" :port 5376} {:host "127.0.0.1" :port 5377}]
+                       :nspace      "test-ns1"
+                       :tags        ["dc1" "rssys"]}))
 
+  (def n1 (new-node {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}))
   )
-
-
