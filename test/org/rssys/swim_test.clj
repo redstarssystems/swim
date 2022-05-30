@@ -65,5 +65,5 @@
           *node1      (sut/new-node node-data)]
       (sut/node-start *node1 (fn [data] (prn "received: " (String. ^bytes data))))
       (is (s/valid? ::sut/*udp-server @(:*udp-server @*node1)) "Node should have valid UDP server structure")
-      (is (#{:normal} (:status @*node1)) "Node should have valid status")
+      (is (#{:joining :normal} (:status @*node1)) "Node should have valid status")
       (sut/node-stop *node1))))
