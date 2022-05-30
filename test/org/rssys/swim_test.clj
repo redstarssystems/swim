@@ -1,5 +1,6 @@
 (ns org.rssys.swim-test
   (:require
+    [clojure.spec.alpha :as s]
     [clojure.test :refer [deftest is testing]]
     [org.rssys.swim :as sut])
   (:import
@@ -49,3 +50,20 @@
 
 
 
+
+(deftest node-start-test
+  (testing "Node start is successful"
+    (let [cluster-data {:id          #uuid "f876678d-f544-4fb8-a848-dc2c863aba6b"
+                        :name        "cluster1"
+                        :description "Test cluster1"
+                        :secret-key  "0123456789abcdef0123456789abcdef"
+                        :root-nodes  [{:host "127.0.0.1" :port 5376} {:host "127.0.0.1" :port 5377}]
+                        :nspace      "test-ns1"
+                        :tags        ["dc1" "rssys"]}
+          cluster      (sut/new-cluster cluster-data)
+          node-data    {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}
+          *node1      (sut/new-node node-data)]
+      (sut/node-start *node1 (fn [data] (prn "received: " (String. ^bytes data))))
+      (is (s/valid? ::sut/*udp-server @(:*udp-server @*node1)) "Node should have valid UDP server structure")
+      (is (#{:normal} (:status @*node1)) "Node should have valid status")
+      (sut/node-stop *node1))))

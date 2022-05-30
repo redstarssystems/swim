@@ -4,6 +4,7 @@
     [clojure.spec.alpha :as s]
     [clojure.string :as string]
     [org.rssys.scheduler :as scheduler]
+    [org.rssys.udp :as udp]
     [soothe.core :as sth])
   (:import
     (clojure.lang
@@ -67,7 +68,7 @@
 
 
 ;; node specs
-(s/def ::status #{:normal :dead :suspicious :leave :stopped})
+(s/def ::status #{:joining :normal :dead :suspicious :leave :stopped})
 (sth/def ::status (format "Should be one of %s" (s/describe ::status)))
 
 (s/def ::access #{:direct :indirect})
@@ -211,7 +212,7 @@
 
 
 (defn new-node
-  "Returns new Node instance."
+  "Returns Atom with new Node inside."
   [{:keys [id name host port cluster tags]}]
   (let [node (map->Node {:id               (or id (random-uuid))
                          :name             name
@@ -233,15 +234,59 @@
       (atom node))))
 
 
+
+(defn join-to-cluster
+  [*node]
+  ;; TODO: implement join to cluster
+  (swap! *node assoc :status :normal))
+
+
+
+(defn node-start
+  "Start node and join to the cluster"
+  [*node process-cb-fn]
+  (let [{:keys [host port]} @*node
+        *udp-server (udp/server-start host port process-cb-fn)]
+    (when-not (s/valid? ::*udp-server @*udp-server)
+      (throw (ex-info "UDP server values should correspond to spec" (sth/explain-data ::*udp-server @*udp-server))))
+    (swap! *node assoc :*udp-server *udp-server :status :joining)
+    (join-to-cluster *node)))
+
+
+
+(defn leave-cluster
+  [*node]
+  ;; TODO: implement leave cluster
+  (swap! *node assoc :status :leave))
+
+
+(defn node-stop
+  "Stop node and leave the cluster"
+  [*node]
+  (let [{:keys [*udp-server]} @*node]
+    (leave-cluster *node)
+    (udp/server-stop *udp-server)
+    (swap! *node assoc :*udp-server nil :status :stopped)))
+
+
+(defn calc-n
+  "Calculate how many nodes should we notify.
+  n - number of nodes in the cluster."
+  [^long n]
+  (int (Math/floor (/ (Math/log n) (Math/log 2)))))
+
+
+
 (comment
 
-  (def c (new-cluster {:id          #uuid "f876678d-f544-4fb8-a848-dc2c863aba6b"
-                       :name        "cluster1"
-                       :description "Test cluster1"
-                       :secret-key  "0123456789abcdef0123456789abcdef"
-                       :root-nodes  [{:host "127.0.0.1" :port 5376} {:host "127.0.0.1" :port 5377}]
-                       :nspace      "test-ns1"
-                       :tags        ["dc1" "rssys"]}))
+  (def cluster (new-cluster {:id          #uuid "f876678d-f544-4fb8-a848-dc2c863aba6b"
+                             :name        "cluster1"
+                             :description "Test cluster1"
+                             :secret-key  "0123456789abcdef0123456789abcdef"
+                             :root-nodes  [{:host "127.0.0.1" :port 5376} {:host "127.0.0.1" :port 5377}]
+                             :nspace      "test-ns1"
+                             :tags        ["dc1" "rssys"]}))
 
-  (def n1 (new-node {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}))
+  (def *n1 (new-node {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}))
+  (prn @n1)
   )
