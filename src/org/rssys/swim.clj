@@ -261,12 +261,17 @@
 
 
 (defn node-stop
-  "Stop node and leave the cluster"
+  "Stop node and leave the cluster.
+  Stop UDP server.
+  Forcefully interrupt all running tasks in scheduler and does not wait.
+  Scheduler pool is reset to a fresh new pool preserving the original size."
   [*node]
-  (let [{:keys [*udp-server]} @*node]
+  (let [{:keys [*udp-server scheduler-pool]} @*node]
     (leave-cluster *node)
-    (udp/server-stop *udp-server)
-    (swap! *node assoc :*udp-server nil :status :stopped)))
+    (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
+    (swap! *node assoc
+      :*udp-server (udp/server-stop *udp-server)
+      :status :stopped)))
 
 
 (defn calc-n
