@@ -49,8 +49,6 @@
             (sut/new-node {:a 1}))))))
 
 
-
-
 (deftest node-start-test
   (testing "Node start is successful"
     (let [cluster-data {:id          #uuid "f876678d-f544-4fb8-a848-dc2c863aba6b"
@@ -98,7 +96,6 @@
           "Stopped UDP server should have valid structure")
 
         (is (#{:stopped} (:status @*node1)) "Node should have stopped status")))))
-
 
 
 (deftest calc-n-test

@@ -3,58 +3,88 @@
   (:require
     [clojure.spec.alpha :as s]
     [clojure.string :as string]
+    [clojure.test.check.generators :as gen]
     [org.rssys.scheduler :as scheduler]
     [org.rssys.udp :as udp]
     [soothe.core :as sth])
   (:import
-    (clojure.lang
-      Atom)
     (java.io
       Writer)
     (java.time
-      LocalDateTime)))
+      Instant)
+    (java.time.temporal
+      ChronoUnit)))
 
 
 ;;;;;;;;;;;;;;;;
 ;; SWIM spec
 ;;;;;;;;;;;;;;;;
 
-;; not empty string
-(s/def ::ne-string (s/and string? (complement string/blank?)))
+
+(def ne-string-gen #(gen/fmap (fn [x] (str "not-empty-string-" x)) (gen/choose 1 1000000)))
+(s/def ::ne-string (s/with-gen (s/and string? (complement string/blank?)) ne-string-gen))
 (sth/def ::ne-string "Should be not a blank string.")
 
-(s/def ::timestamp #(instance? LocalDateTime %))
-(sth/def ::timestamp "Should be LocalDateTime instance.")
+
+(def timestamp-gen #(gen/fmap (fn [x] (.plus (Instant/now) x ChronoUnit/SECONDS)) (gen/choose 0 10000)))
+(s/def ::timestamp (s/with-gen #(instance? Instant %) timestamp-gen))
+(sth/def ::timestamp "Should be an Instant, UTC timestamp.")
 
 
-;; network specs
-(s/def ::host ::ne-string)
+(def host-gen #(gen/fmap (fn [x] (if (even? x) "localhost" "127.0.0.1")) (gen/choose 1 10)))
+(s/def ::host (s/with-gen ::ne-string host-gen))            ;; hostname or ip address
+(sth/def ::host "Should be valid hostname or IP address.")
+
 
 (s/def ::port (s/and pos-int? #(< 1023 % 65536)))
 (sth/def ::port "Should be a valid port number")
 
 
-;; common specs
 (s/def ::id uuid?)
-(s/def ::name ::ne-string)
-(s/def ::description string?)
-(s/def ::secret-key ::ne-string)
+(sth/def ::id "Should be a UUID, a unique identifier")
+
+
+(def name-gen #(gen/fmap (fn [x] (str "name-" x)) (gen/choose 1 1000)))
+(s/def ::name (s/with-gen ::ne-string name-gen))
+(sth/def ::name "Should be a name, non empty string")
+
+
+(def description-gen #(gen/fmap (fn [x] (str "Description string - " x)) (gen/choose 1 1000)))
+(s/def ::description (s/with-gen string? description-gen))
+
+
+(def secret-key-gen (fn [] (gen/such-that #(not= % "") gen/string-alphanumeric)))
+(s/def ::secret-key (s/with-gen ::ne-string secret-key-gen))
+(sth/def ::secret-key "Should be a secret key, non empty string")
+
+
 (s/def ::start-time ::timestamp)
+
 
 (s/def ::server-state #{:running :stopped})
 (sth/def ::server-state (format "Should be one of %s" (s/describe ::server-state)))
 
 
-;; cluster specs
+;; Cluster specs
+
 (s/def ::root-node
   (s/keys :req-un [::host
                    ::port]))
 
 
-(s/def ::root-nodes (s/coll-of ::root-node))
-(s/def ::tag ::ne-string)
-(s/def ::tags (s/coll-of ::tag))
-(s/def ::nspace ::ne-string)
+(s/def ::root-nodes (s/coll-of ::root-node :gen-max 3))
+(gen/sample (s/gen ::root-nodes))
+
+
+(def tag-gen #(gen/fmap (fn [x] (str "tag-" x)) (gen/choose 1 1000)))
+(s/def ::tag (s/with-gen ::ne-string tag-gen))
+
+
+(s/def ::tags (s/coll-of ::tag :gen-max 3))
+
+
+(def nspace-gen #(gen/fmap (fn [x] (str "namespace" x)) (gen/choose 1 1000)))
+(s/def ::nspace (s/with-gen ::ne-string nspace-gen))
 
 
 (s/def ::cluster
@@ -68,8 +98,10 @@
 
 
 ;; node specs
+
 (s/def ::status #{:joining :normal :dead :suspicious :leave :stopped})
 (sth/def ::status (format "Should be one of %s" (s/describe ::status)))
+
 
 (s/def ::access #{:direct :indirect})
 (sth/def ::access (format "Should be one of %s" (s/describe ::access)))
@@ -81,13 +113,23 @@
                    ::access]))
 
 
-(s/def ::neighbours-table (s/map-of ::id ::neighbour-descriptor))
+(s/def ::neighbours-table (s/map-of ::id ::neighbour-descriptor :gen-max 3))
 
+
+;; incremented after each node restart
 (s/def ::restart-counter nat-int?)
+
+
+;; incremented after each event occurred
 (s/def ::tx-counter nat-int?)
 
+
 (s/def ::max-packet-size nat-int?)
+
+
 (s/def ::continue? boolean?)
+
+
 (s/def ::server-packet-count nat-int?)
 
 
@@ -102,11 +144,22 @@
                      ::server-packet-count])))
 
 
-(s/def ::object any?)
+;;
+
+(def object-gen #(gen/fmap (fn [_] (Object.)) (gen/return 1)))
+(s/def ::object (s/with-gen any? object-gen))
+
+
 (s/def ::scheduler-pool ::object)
-(s/def ::ping-ids (s/coll-of ::id))
-(s/def ::ping-data (s/map-of ::id ::object))
-(s/def ::suspicious-node-ids (s/coll-of ::id))
+
+
+(s/def ::ping-ids (s/coll-of ::id :gen-max 3))
+
+
+(s/def ::ping-data (s/map-of ::id ::object :gen-max 3))
+
+
+(s/def ::suspicious-node-ids (s/coll-of ::id :gen-max 3))
 
 
 (s/def ::node
@@ -127,18 +180,11 @@
                    ::tags]))
 
 
-(s/def ::*node
-  (s/and
-    #(instance? Atom %)
-    #(s/valid? ::node (deref %))))
-
-
 ;;;;;;;;;;;;;;;;;;;
 ;; Domain entities
 ;;;;;;;;;;;;;;;;;;;
 
 (declare cluster-str)
-
 
 
 (defrecord Cluster [id name description secret-key root-nodes nspace tags]
@@ -170,19 +216,22 @@
       cluster)))
 
 
-
 (defprotocol INode
   "Node protocol"
   :extend-via-metadata true
   (start [node process-cb-fn] "Start this node and process each message using given callback function in a new Virtual Thread")
   (stop [node] "Stop this node")
-  (state [node] "Get node state value"))
+  (state [node] "Get node state value")
+  (join [node] "Join this node to the cluster")
+  (leave [node] "Leave the cluster"))
 
 
 (declare node-start)
 (declare node-stop)
 (declare node-state)
 (declare node-to-string)
+(declare node-join)
+(declare node-leave)
 
 
 (defrecord Node [id
@@ -201,11 +250,12 @@
                  ping-data
                  tags]
 
-
            INode
            (start [this process-cb-fn] (node-start this process-cb-fn))
            (stop [this] (node-stop this))
            (state [this] (node-state this))
+           (join [this] (node-join this))
+           (leave [this] (node-leave this))
 
            Object
            (toString [this] (node-to-string this)))
@@ -234,43 +284,40 @@
       (atom node))))
 
 
-
-(defn join-to-cluster
+(defn node-join
   [*node]
   ;; TODO: implement join to cluster
   (swap! *node assoc :status :normal))
 
 
-
 (defn node-start
-  "Start node and join to the cluster"
+  "Start the node"
   [*node process-cb-fn]
   (let [{:keys [host port]} @*node
-        *udp-server (udp/server-start host port process-cb-fn)]
+        *udp-server (udp/start host port process-cb-fn)]
     (when-not (s/valid? ::*udp-server @*udp-server)
       (throw (ex-info "UDP server values should correspond to spec" (sth/explain-data ::*udp-server @*udp-server))))
     (swap! *node assoc :*udp-server *udp-server :status :joining)
-    (join-to-cluster *node)))
+    (node-join *node)))
 
 
-
-(defn leave-cluster
+(defn node-leave
   [*node]
   ;; TODO: implement leave cluster
   (swap! *node assoc :status :leave))
 
 
 (defn node-stop
-  "Stop node and leave the cluster.
+  "Stop the node and leave the cluster.
   Stop UDP server.
   Forcefully interrupt all running tasks in scheduler and does not wait.
   Scheduler pool is reset to a fresh new pool preserving the original size."
   [*node]
   (let [{:keys [*udp-server scheduler-pool]} @*node]
-    (leave-cluster *node)
+    (node-leave *node)
     (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
     (swap! *node assoc
-      :*udp-server (udp/server-stop *udp-server)
+      :*udp-server (udp/stop *udp-server)
       :status :stopped)))
 
 
@@ -279,7 +326,6 @@
   n - number of nodes in the cluster."
   [^long n]
   (int (Math/floor (/ (Math/log n) (Math/log 2)))))
-
 
 
 (comment
