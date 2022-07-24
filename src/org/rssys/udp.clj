@@ -9,7 +9,7 @@
       InetAddress
       SocketTimeoutException)
     (java.time
-      LocalDateTime)))
+      Instant)))
 
 
 (defn send-packet
@@ -25,14 +25,15 @@
     length))
 
 
-(defn server-start
+
+(defn start
   "Starts UDP server in a new Virtual Thread using given host and port .
   Server will process each incoming UDP packets with provided call-back function in a new Virtual Thread (Java 19+).
   Empty UDP packets are ignored.
   Returns an atom with a server map with running server parameters:
     {:host                 `host`
      :port                 `port`
-     :start-time           (LocalDateTime/now)
+     :start-time           (Instant/now)
      :max-packet-size      `max-packet-size`
      :server-state         :running
      :continue?            true
@@ -46,13 +47,13 @@
   Opts:
   * `timeout` - time in ms which server waits for incoming packet, default 0 (infinite).
   * `max-packet-size` - max UDP packet size we are ready to accept, default is 1024.
-  * `*server-ready-promise` - if promise is present then deliver *server-map when server is ready to accept UDP."
+  * `*server-ready-promise` - if promise is present then deliver *server when server is ready to accept UDP."
   [host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
                               :or   {timeout 0 max-packet-size 1024}}]
-  (let [*server-map   (atom
+  (let [*server   (atom
                         {:host                host
                          :port                port
-                         :start-time          (LocalDateTime/now)
+                         :start-time          (Instant/now)
                          :max-packet-size     max-packet-size
                          :server-state        :running
                          :continue?           true
@@ -60,13 +61,13 @@
         server-socket (DatagramSocket. port (InetAddress/getByName host))]
     (.setSoTimeout server-socket timeout)
     (vfuture
-      (when *server-ready-promise (deliver *server-ready-promise *server-map))
-      (while (-> @*server-map :continue?)
+      (when *server-ready-promise (deliver *server-ready-promise *server))
+      (while (-> @*server :continue?)
         (let [buffer (make-array Byte/TYPE max-packet-size)
               packet (DatagramPacket. buffer (alength buffer))]
           (try
             (.receive server-socket packet)
-            (swap! *server-map update :server-packet-count inc)
+            (swap! *server update :server-packet-count inc)
             (if (pos? (.getLength packet))
               (vfuture (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
               :nothing)                                      ;; do not process empty packets
@@ -75,29 +76,25 @@
               (.close server-socket)
               (throw e)))))
       (.close server-socket)
-      (swap! *server-map assoc :server-state :stopped))
-    *server-map))
+      (swap! *server assoc :server-state :stopped))
+    *server))
 
 
-(defn server-state
-  [*server-map]
-  (-> @*server-map :server-state))
+(defn server-value
+  [*server]
+  (-> @*server :server-state))
 
 
-(defn server-stop
-  "Stop server using given `*server-map`.
-  Returns: *server-map."
-  [*server-map]
-  (let [{:keys [host port]} @*server-map]
-    (swap! *server-map assoc :continue? false)
+(defn stop
+  "Stops given `*server`.
+  Returns: *server."
+  [*server]
+  (let [{:keys [host port]} @*server]
+    (swap! *server assoc :continue? false)
     (send-packet (.getBytes "") host port)                  ;; send empty packet to trigger server
-    *server-map))
+    *server))
 
 
-(defn server-packets-received
+(defn packets-received
   [*server-map]
   (-> @*server-map :server-packet-count))
-
-
-
-

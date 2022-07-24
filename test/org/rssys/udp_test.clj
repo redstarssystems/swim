@@ -10,7 +10,7 @@
       InetAddress
       SocketTimeoutException)
     (java.time
-      LocalDateTime)))
+      Instant)))
 
 
 (defn test-udp-server
@@ -58,27 +58,27 @@
 
 
 
-(deftest server-start-test
+(deftest start-test
   (let [host                  "localhost"
         port                  (+ 10000 (rand-int 50000))
         *server-ready-promise (promise)
         messages              #{"one" "two" "three" "four" "abcdefg" "12345"}
         *results              (atom #{})
         process-message-fn    (fn [data] (swap! *results conj (String. ^bytes data)))
-        *server-map           (sut/server-start host port process-message-fn {:*server-ready-promise *server-ready-promise})]
+        *server               (sut/start host port process-message-fn {:*server-ready-promise *server-ready-promise})]
     @*server-ready-promise                                  ;; wait until server is ready
     (doseq [m messages]
       (sut/send-packet (.getBytes ^String m) host port)
       (Thread/sleep 1))
-    (let [*stop-result (sut/server-stop *server-map)]
+    (let [*stop-result (sut/stop *server)]
       (is (= messages @*results) "All sent messages are equal to received messages")
-      (is (>= (sut/server-packets-received *server-map) (count messages)) "Number of received messages should be more or equal to ")
+      (is (>= (sut/packets-received *server) (count messages)) "Number of received packets should be more or equal to sent messages")
       (testing "Server map structure is returned as expected."
-        (match @*server-map {:host                string?
-                             :port                number?
-                             :start-time          #(instance? LocalDateTime %)
-                             :max-packet-size     number?
-                             :server-state        :stopped
-                             :continue?           boolean?
-                             :server-packet-count pos?}))
-      (is (= (sut/server-state *stop-result) :stopped) "Server is stopped successfully."))))
+        (match @*server {:host                string?
+                         :port                number?
+                         :start-time          #(instance? Instant %)
+                         :max-packet-size     number?
+                         :server-state        :stopped
+                         :continue?           boolean?
+                         :server-packet-count pos?}))
+      (is (= (sut/server-value *stop-result) :stopped) "Server is stopped successfully."))))
