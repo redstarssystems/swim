@@ -180,7 +180,6 @@
              (recur jobs)))))))
 
 
-
 (defn- mk-sched-thread-pool
   "Create a new scheduled virtual thread pool containing `num-threads` virtual threads."
   [num-threads]

@@ -57,7 +57,6 @@
       (is (= (String. ^bytes (deref *data-promise)) message)))))
 
 
-
 (deftest start-test
   (let [host                  "localhost"
         port                  (+ 10000 (rand-int 50000))

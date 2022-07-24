@@ -1,5 +1,5 @@
 {:rules              {:indentation {:indents {#".*" [[:inner 0]]}},
-                      :blank-lines {:trim-consecutive? false :max-consecutive 3}
+                      :blank-lines {:trim-consecutive? false :max-consecutive 2}
                       :comments    {:leading-prefix ""     ;; don't change all comments to strictly ;;
                                     :inline-prefix  "; "}
                       :types       {:enabled? false}

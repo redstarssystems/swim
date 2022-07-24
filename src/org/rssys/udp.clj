@@ -25,10 +25,9 @@
     length))
 
 
-
 (defn start
-  "Starts UDP server in a new Virtual Thread using given host and port .
-  Server will process each incoming UDP packets with provided call-back function in a new Virtual Thread (Java 19+).
+  "Starts UDP server in a new Virtual Thread using given host and port.
+  Server will process each incoming UDP packets with call-back function in a new Virtual Thread (Java 19+).
   Empty UDP packets are ignored.
   Returns an atom with a server map with running server parameters:
     {:host                 `host`
@@ -51,13 +50,13 @@
   [host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
                               :or   {timeout 0 max-packet-size 1024}}]
   (let [*server   (atom
-                        {:host                host
-                         :port                port
-                         :start-time          (Instant/now)
-                         :max-packet-size     max-packet-size
-                         :server-state        :running
-                         :continue?           true
-                         :server-packet-count 0})
+                    {:host                host
+                     :port                port
+                     :start-time          (Instant/now)
+                     :max-packet-size     max-packet-size
+                     :server-state        :running
+                     :continue?           true
+                     :server-packet-count 0})
         server-socket (DatagramSocket. port (InetAddress/getByName host))]
     (.setSoTimeout server-socket timeout)
     (vfuture
