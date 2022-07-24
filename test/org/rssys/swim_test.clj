@@ -60,11 +60,12 @@
                         :tags        ["dc1" "rssys"]}
           cluster      (sut/new-cluster cluster-data)
           node-data    {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}
-          *node1       (sut/new-node node-data)]
-      (sut/node-start *node1 (fn [data] (prn "received: " (String. ^bytes data))))
-      (is (s/valid? ::sut/*udp-server @(:*udp-server @*node1)) "Node should have valid UDP server structure")
+          *node1       (sut/new-node node-data)
+          node-object  (sut/->NodeObject *node1)]
+      (sut/node-start node-object (fn [data] (prn "received: " (String. ^bytes data))))
+      (is (s/valid? ::sut/*udp-server @(:*udp-server @(:*node node-object))) "Node should have valid UDP server structure")
       (is (#{:joining :normal} (:status @*node1)) "Node should have valid status")
-      (sut/node-stop *node1))))
+      (sut/node-stop node-object))))
 
 
 (deftest node-stop-test
@@ -79,12 +80,13 @@
           cluster        (sut/new-cluster cluster-data)
           node-data      {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}
           *node1         (sut/new-node node-data)
+          node-object    (sut/->NodeObject *node1)
           scheduler-pool (:scheduler-pool @*node1)]
-      (sut/node-start *node1 (fn [data] (prn "received: " (String. ^bytes data))))
-      (sut/node-stop *node1)
+      (sut/node-start node-object (fn [data] (prn "received: " (String. ^bytes data))))
+      (sut/node-stop node-object)
 
-      (let [scheduler-pool-new (:scheduler-pool @*node1)
-            stopped-udp-server @(:*udp-server @*node1)]
+      (let [scheduler-pool-new (:scheduler-pool @(:*node node-object))
+            stopped-udp-server @(:*udp-server @(:*node node-object))]
 
         (is (= scheduler-pool scheduler-pool-new)
           "Scheduler pool should be the same object")
@@ -95,12 +97,12 @@
         (is (s/valid? ::sut/*udp-server stopped-udp-server)
           "Stopped UDP server should have valid structure")
 
-        (is (#{:stopped} (:status @*node1)) "Node should have stopped status")))))
+        (is (#{:stopped} (:status @(:*node node-object))) "Node should have stopped status")))))
 
 
 (deftest calc-n-test
   (testing "How many nodes should we notify depending on N nodes in a cluster"
     (let [nodes-in-cluster [1 2 4 8 16 32 64 128 256 512 1024]
-          result (mapv sut/calc-n nodes-in-cluster)]
+          result           (mapv sut/calc-n nodes-in-cluster)]
       (is (= [0 1 2 3 4 5 6 7 8 9 10] result)))))
 

@@ -8,6 +8,8 @@
     [org.rssys.udp :as udp]
     [soothe.core :as sth])
   (:import
+    (clojure.lang
+      Atom)
     (java.io
       Writer)
     (java.time
@@ -180,6 +182,13 @@
                    ::tags]))
 
 
+
+(s/def ::*node
+  (s/and
+    #(instance? Atom %)
+    #(s/valid? ::node (deref %))))
+
+
 ;;;;;;;;;;;;;;;;;;;
 ;; Domain entities
 ;;;;;;;;;;;;;;;;;;;
@@ -250,13 +259,6 @@
                  ping-data
                  tags]
 
-           INode
-           (start [this process-cb-fn] (node-start this process-cb-fn))
-           (stop [this] (node-stop this))
-           (state [this] (node-state this))
-           (join [this] (node-join this))
-           (leave [this] (node-leave this))
-
            Object
            (toString [this] (node-to-string this)))
 
@@ -284,27 +286,36 @@
       (atom node))))
 
 
+(defrecord NodeObject [*node]
+
+           INode
+           (start [this process-cb-fn] (node-start this process-cb-fn))
+           (stop [this] (node-stop this))
+           (state [this] (node-state this))
+           (join [this] (node-join this))
+           (leave [this] (node-leave this)))
+
+
 (defn node-join
   [*node]
   ;; TODO: implement join to cluster
-  (swap! *node assoc :status :normal))
+  (swap! (:*node *node) assoc :status :normal))
 
 
 (defn node-start
   "Start the node"
   [*node process-cb-fn]
-  (let [{:keys [host port]} @*node
+  (let [{:keys [host port]}  @(:*node *node)
         *udp-server (udp/start host port process-cb-fn)]
     (when-not (s/valid? ::*udp-server @*udp-server)
       (throw (ex-info "UDP server values should correspond to spec" (sth/explain-data ::*udp-server @*udp-server))))
-    (swap! *node assoc :*udp-server *udp-server :status :joining)
-    (node-join *node)))
+    (swap! (:*node *node) assoc :*udp-server *udp-server :status :joining)))
 
 
 (defn node-leave
   [*node]
   ;; TODO: implement leave cluster
-  (swap! *node assoc :status :leave))
+  (swap! (:*node *node) assoc :status :leave))
 
 
 (defn node-stop
@@ -313,10 +324,10 @@
   Forcefully interrupt all running tasks in scheduler and does not wait.
   Scheduler pool is reset to a fresh new pool preserving the original size."
   [*node]
-  (let [{:keys [*udp-server scheduler-pool]} @*node]
+  (let [{:keys [*udp-server scheduler-pool]} @(:*node *node)]
     (node-leave *node)
     (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
-    (swap! *node assoc
+    (swap! (:*node *node) assoc
       :*udp-server (udp/stop *udp-server)
       :status :stopped)))
 
@@ -339,5 +350,14 @@
                              :tags        ["dc1" "rssys"]}))
 
   (def *n1 (new-node {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}))
-  (prn @n1)
+  (prn @*n1)
+  (type *n1)
+
+  (def no1 (->NodeObject *n1))
+
+  (start no1 #(println (String. %)))
+
+  (udp/send-packet (.getBytes "hello world") "127.0.0.1" 5376)
+
+  (stop no1)
   )
