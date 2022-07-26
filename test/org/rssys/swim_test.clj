@@ -4,11 +4,10 @@
     [clojure.test :refer [deftest is testing]]
     [org.rssys.swim :as sut])
   (:import
-    (clojure.lang
-      Atom)
     (org.rssys.swim
       Cluster
-      Node)))
+      Node
+      NodeObject)))
 
 
 (deftest new-cluster-test
@@ -39,12 +38,12 @@
                         :tags        ["dc1" "rssys"]}
           cluster      (sut/new-cluster cluster-data)
           node-data    {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}
-          *result      (sut/new-node node-data)
+          result       (sut/new-node node-data)
           expected-set #{:id :name :host :port :cluster :continue? :status :neighbours-table :*udp-server
                          :restart-counter :scheduler-pool :tx-counter :ping-ids :ping-data :tags}]
-      (is (instance? Atom *result) "Should be an Atom")
-      (is (instance? Node @*result) "Atom should contain a Node instance")
-      (is (= (set (keys @*result)) expected-set) "Key set in a Node instance should be as expected")
+      (is (instance? NodeObject result) "Should be a NodeObject")
+      (is (instance? Node @(:*node result)) "Atom should contain a Node instance")
+      (is (= (set (keys @(:*node result))) expected-set) "Key set in a Node instance should be as expected")
       (is (thrown-with-msg? Exception #"Node values should correspond to spec"
             (sut/new-node {:a 1}))))))
 
@@ -60,11 +59,10 @@
                         :tags        ["dc1" "rssys"]}
           cluster      (sut/new-cluster cluster-data)
           node-data    {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}
-          *node1       (sut/new-node node-data)
-          node-object  (sut/->NodeObject *node1)]
+          node-object       (sut/new-node node-data)]
       (sut/node-start node-object (fn [data] (prn "received: " (String. ^bytes data))))
       (is (s/valid? ::sut/*udp-server @(:*udp-server @(:*node node-object))) "Node should have valid UDP server structure")
-      (is (#{:joining :normal} (:status @*node1)) "Node should have valid status")
+      (is (#{:leave} (:status (sut/node-value node-object))) "Node should have valid status")
       (sut/node-stop node-object))))
 
 
@@ -79,14 +77,13 @@
                           :tags        ["dc1" "rssys"]}
           cluster        (sut/new-cluster cluster-data)
           node-data      {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}
-          *node1         (sut/new-node node-data)
-          node-object    (sut/->NodeObject *node1)
-          scheduler-pool (:scheduler-pool @*node1)]
+          node-object         (sut/new-node node-data)
+          scheduler-pool (:scheduler-pool (sut/node-value node-object))]
       (sut/node-start node-object (fn [data] (prn "received: " (String. ^bytes data))))
       (sut/node-stop node-object)
 
-      (let [scheduler-pool-new (:scheduler-pool @(:*node node-object))
-            stopped-udp-server @(:*udp-server @(:*node node-object))]
+      (let [scheduler-pool-new (:scheduler-pool (sut/node-value node-object))
+            stopped-udp-server @(:*udp-server (sut/node-value node-object))]
 
         (is (= scheduler-pool scheduler-pool-new)
           "Scheduler pool should be the same object")
@@ -97,7 +94,7 @@
         (is (s/valid? ::sut/*udp-server stopped-udp-server)
           "Stopped UDP server should have valid structure")
 
-        (is (#{:stopped} (:status @(:*node node-object))) "Node should have stopped status")))))
+        (is (#{:stopped} (:status (sut/node-value node-object))) "Node should have stopped status")))))
 
 
 (deftest calc-n-test

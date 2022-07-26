@@ -101,7 +101,8 @@
 
 ;; node specs
 
-(s/def ::status #{:joining :normal :dead :suspicious :leave :stopped})
+;; NB: :stopped - about node, joining -> :normal -> :leave -> :dead - about cluster
+(s/def ::status #{:stopped :joining :normal :suspicious :leave :dead})
 (sth/def ::status (format "Should be one of %s" (s/describe ::status)))
 
 
@@ -230,14 +231,14 @@
   :extend-via-metadata true
   (start [node process-cb-fn] "Start this node and process each message using given callback function in a new Virtual Thread")
   (stop [node] "Stop this node")
-  (state [node] "Get node state value")
+  (value [node] "Get node state value")
   (join [node] "Join this node to the cluster")
   (leave [node] "Leave the cluster"))
 
 
 (declare node-start)
 (declare node-stop)
-(declare node-state)
+(declare node-value)
 (declare node-to-string)
 (declare node-join)
 (declare node-leave)
@@ -263,8 +264,18 @@
            (toString [this] (node-to-string this)))
 
 
+(defrecord NodeObject [*node]
+
+           INode
+           (start [this process-cb-fn] (node-start this process-cb-fn))
+           (stop [this] (node-stop this))
+           (value [this] (node-value this))
+           (join [this] (node-join this))
+           (leave [this] (node-leave this)))
+
+
 (defn new-node
-  "Returns Atom with new Node inside."
+  "Returns NodeObject with new Node inside."
   [{:keys [id name host port cluster tags]}]
   (let [node (map->Node {:id               (or id (random-uuid))
                          :name             name
@@ -283,39 +294,38 @@
                          :tags             tags})]
     (if-not (s/valid? ::node node)
       (throw (ex-info "Node values should correspond to spec" (sth/explain-data ::node node)))
-      (atom node))))
+      (->NodeObject (atom node)))))
 
 
-(defrecord NodeObject [*node]
 
-           INode
-           (start [this process-cb-fn] (node-start this process-cb-fn))
-           (stop [this] (node-stop this))
-           (state [this] (node-state this))
-           (join [this] (node-join this))
-           (leave [this] (node-leave this)))
+(defn node-value
+  "Returns node value"
+  [node-object]
+  (-> node-object :*node deref))
 
 
 (defn node-join
-  [*node]
+  "Join this node to the cluster"
+  [node-object]
   ;; TODO: implement join to cluster
-  (swap! (:*node *node) assoc :status :normal))
+  (swap! (:*node node-object) assoc :status :normal))
 
 
 (defn node-start
   "Start the node"
-  [*node process-cb-fn]
-  (let [{:keys [host port]}  @(:*node *node)
+  [node-object process-cb-fn]
+  (let [{:keys [host port]}  (node-value node-object)
         *udp-server (udp/start host port process-cb-fn)]
     (when-not (s/valid? ::*udp-server @*udp-server)
       (throw (ex-info "UDP server values should correspond to spec" (sth/explain-data ::*udp-server @*udp-server))))
-    (swap! (:*node *node) assoc :*udp-server *udp-server :status :joining)))
+    (swap! (:*node node-object) assoc :*udp-server *udp-server :status :leave)))
 
 
 (defn node-leave
-  [*node]
+  "Leave the cluster"
+  [node-object]
   ;; TODO: implement leave cluster
-  (swap! (:*node *node) assoc :status :leave))
+  (swap! (:*node node-object) assoc :status :leave))
 
 
 (defn node-stop
@@ -323,11 +333,11 @@
   Stop UDP server.
   Forcefully interrupt all running tasks in scheduler and does not wait.
   Scheduler pool is reset to a fresh new pool preserving the original size."
-  [*node]
-  (let [{:keys [*udp-server scheduler-pool]} @(:*node *node)]
-    (node-leave *node)
+  [node-object]
+  (let [{:keys [*udp-server scheduler-pool]} (node-value node-object)]
+    (node-leave node-object)
     (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
-    (swap! (:*node *node) assoc
+    (swap! (:*node node-object) assoc
       :*udp-server (udp/stop *udp-server)
       :status :stopped)))
 
@@ -349,11 +359,9 @@
                              :nspace      "test-ns1"
                              :tags        ["dc1" "rssys"]}))
 
-  (def *n1 (new-node {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}))
-  (prn @*n1)
-  (type *n1)
-
-  (def no1 (->NodeObject *n1))
+  (def no1 (new-node {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}))
+  (prn no1 )
+  (type no1)
 
   (start no1 #(println (String. %)))
 
