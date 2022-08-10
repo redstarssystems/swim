@@ -2,7 +2,6 @@
 /target
 /classes
 /checkouts
-/doc
 *.jar
 *.class
 *.xml.asc
