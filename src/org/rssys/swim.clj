@@ -109,22 +109,34 @@
 (s/def ::access #{:direct :indirect})
 (sth/def ::access (format "Should be one of %s" (s/describe ::access)))
 
-
-(s/def ::neighbour-descriptor
-  (s/keys :req-un [::id
-                   ::status
-                   ::access]))
-
-
-(s/def ::neighbours-table (s/map-of ::id ::neighbour-descriptor :gen-max 3))
-
-
 ;; incremented after each node restart
 (s/def ::restart-counter nat-int?)
 
 
 ;; incremented after each event occurred
 (s/def ::tx-counter nat-int?)
+
+(def object-gen #(gen/fmap (fn [_] (Object.)) (gen/return 1)))
+(s/def ::object (s/with-gen any? object-gen))
+
+;; some data attached to node
+(s/def ::payload ::object)
+
+(s/def ::neighbour-descriptor
+  (s/keys :req-un [::id
+                   ::host
+                   ::port
+                   ::status
+                   ::access
+                   ::restart-counter
+                   ::tx-counter
+                   ::payload]))
+
+
+(s/def ::neighbours-table (s/map-of ::id ::neighbour-descriptor :gen-max 3))
+
+
+
 
 
 (s/def ::max-packet-size nat-int?)
@@ -149,8 +161,6 @@
 
 ;;
 
-(def object-gen #(gen/fmap (fn [_] (Object.)) (gen/return 1)))
-(s/def ::object (s/with-gen any? object-gen))
 
 
 (s/def ::scheduler-pool ::object)
@@ -229,11 +239,11 @@
 (defprotocol INode
   "Node protocol"
   :extend-via-metadata true
-  (start [node process-cb-fn] "Start this node and process each message using given callback function in a new Virtual Thread")
+  (start [node process-cb-fn] "Start this node")
   (stop [node] "Stop this node")
   (value [node] "Get node state value")
-  (join [node] "Join this node to the cluster")
-  (leave [node] "Leave the cluster"))
+  (join [node] "Join this node to the cluster and process each message using given callback function in a new Virtual Thread")
+  (leave [node] "Leave the cluster and stop process messages"))
 
 
 (declare node-start)
@@ -275,7 +285,7 @@
 
 
 (defn new-node
-  "Returns NodeObject with new Node inside."
+  "Returns NodeObject with new Node atom inside."
   [{:keys [id name host port cluster tags]}]
   (let [node (map->Node {:id               (or id (random-uuid))
                          :name             name
@@ -319,6 +329,7 @@
     (when-not (s/valid? ::*udp-server @*udp-server)
       (throw (ex-info "UDP server values should correspond to spec" (sth/explain-data ::*udp-server @*udp-server))))
     (swap! (:*node node-object) assoc :*udp-server *udp-server :status :leave)))
+;; NB: when we start node it has status leave, because we out of cluster.
 
 
 (defn node-leave
