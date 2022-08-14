@@ -68,7 +68,7 @@
     @*server-ready-promise                                  ;; wait until server is ready
     (doseq [m messages]
       (sut/send-packet (.getBytes ^String m) host port)
-      (Thread/sleep 1))
+      (Thread/sleep 10))
     (let [*stop-result (sut/stop *server)]
       (is (= messages @*results) "All sent messages are equal to received messages")
       (is (>= (sut/packets-received *server) (count messages)) "Number of received packets should be more or equal to sent messages")

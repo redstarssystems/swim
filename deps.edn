@@ -4,9 +4,8 @@
 
  :paths     ["src" "resources"]
 
- :deps      {org.clojure/clojure         {:mvn/version "1.11.1"}
-             org.clojure/test.check      {:mvn/version "1.1.1"}
-             com.github.igrishaev/soothe {:mvn/version "0.1.1"}}
+ :deps      {org.clojure/clojure       {:mvn/version "1.11.1"}
+             com.cognitect/transit-clj {:mvn/version "1.0.329"}}
 
  :aliases   {
              :repl     {:extra-deps  {nrepl/nrepl          {:mvn/version "0.9.0"}
