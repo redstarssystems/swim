@@ -3,27 +3,16 @@
   (:require
     [clojure.spec.alpha :as s]
     [cognitect.transit :as transit]
+    [org.rssys.encrypt :as e]
     [org.rssys.scheduler :as scheduler]
     [org.rssys.udp :as udp])
   (:import
-    (clojure.lang
-      PersistentVector)
     (java.io
       ByteArrayInputStream
       ByteArrayOutputStream
       Writer)
-    (java.security
-      SecureRandom)
     (java.util
-      UUID)
-    (javax.crypto
-      Cipher
-      SecretKeyFactory)
-    (javax.crypto.spec
-      GCMParameterSpec
-      IvParameterSpec
-      PBEKeySpec
-      SecretKeySpec)))
+      UUID)))
 
 
 ;;;;;;;;;;;;;;;;
@@ -36,7 +25,7 @@
 (s/def ::port (s/and pos-int? #(< % 65536)))
 (s/def ::name string?)
 (s/def ::desc string?)
-(s/def ::status #{:stopped :joining :normal :suspicious :leave :dead :unknown})
+(s/def ::status #{:stop :join :alive :suspect :left :dead :unknown})
 (s/def ::access #{:direct :indirect})
 (s/def ::object any?)
 (s/def ::tags set?)                                         ;; #{"dc1" "test"}
@@ -56,11 +45,18 @@
 
 (s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
+(s/def ::event-queue vector?)
+(s/def ::ping-round-buffer (s/coll-of ::neighbour-id))
 
 
 (s/def ::node
   (s/keys :req-un [::id ::host ::port ::cluster ::status ::neighbours ::restart-counter
-                   ::tx ::ping-events ::payload ::scheduler-pool ::*udp-server]))
+                   ::tx ::ping-events ::payload ::scheduler-pool ::*udp-server ::event-queue
+                   ::ping-round-buffer]))
+
+
+(def event-code
+  {:ping 0 :ack 1 :join 2 :alive 3 :suspect 4 :left 5 :dead 6 :payload 7 :anti-entropy 8})
 
 
 (defn spec-problems
@@ -94,61 +90,6 @@
     (transit/read reader)))
 
 
-;;;;;;;;;;
-
-
-(defn new-iv-12
-  "Create new random init vector using SecureRandom.
-  Returns byte array 12 bytes length with random data."
-  []
-  (let [iv-array (byte-array 12)]
-    (.nextBytes (SecureRandom.) iv-array)
-    iv-array))
-
-
-(defn gen-secret-key
-  "Generate secret key based on a given token string.
-  Returns bytes array 256-bit length."
-  [^String secret-token]
-  (let [salt       (.getBytes "org.rssys.password.salt.string!!")
-        factory    (SecretKeyFactory/getInstance "PBKDF2WithHmacSHA256")
-        spec       (PBEKeySpec. (.toCharArray secret-token) salt 10000 256)
-        secret-key (.getEncoded (.generateSecret factory spec))]
-    secret-key))
-
-
-(defn init-cipher
-  "Init cipher using given secret-key (32 bytes) and IV (12 bytes).
-  Cipher mode may be :encrypt or :decrypt
-  Returns ^Cipher."
-  [^bytes secret-key cipher-mode ^bytes iv-bytes]
-  (let [cipher             (Cipher/getInstance "AES/GCM/NoPadding")
-        gcm-tag-length-bit 128
-        gcm-iv-spec        (GCMParameterSpec. gcm-tag-length-bit iv-bytes)
-        cipher-mode-value  ^long (cond
-                                   (= :encrypt cipher-mode) Cipher/ENCRYPT_MODE
-                                   (= :decrypt cipher-mode) Cipher/DECRYPT_MODE
-                                   :else (throw (ex-info "Wrong cipher mode" {:cipher-mode cipher-mode})))]
-    (.init cipher cipher-mode-value (SecretKeySpec. secret-key "AES") gcm-iv-spec)
-    cipher))
-
-
-(defn encrypt-bytes
-  "Encrypt plain data using given initialized ^Cipher in encryption mode.
-   Returns encrypted bytes array."
-  ^bytes
-  [^Cipher cipher ^bytes plain-bytes]
-  (.doFinal cipher plain-bytes))
-
-
-(defn decrypt-bytes
-  "Decrypt data using given initialized ^Cipher in decryption mode.
-  Returns plain data bytes array."
-  ^bytes
-  [^Cipher cipher ^bytes encrypted-bytes]
-  (.doFinal cipher encrypted-bytes))
-
-
 ;;;;;;;;;;;;;;;;;;;
 ;; Domain entities
 ;;;;;;;;;;;;;;;;;;;
@@ -171,7 +112,7 @@
   (when-not (s/valid? ::cluster c)
     (throw (ex-info "Invalid cluster data" (spec-problems (s/explain-data ::cluster c)))))
   (map->Cluster {:id     (or id (random-uuid)) :name name :desc desc :secret-token secret-token
-                 :nspace nspace :tags tags :secret-key (gen-secret-key secret-token)}))
+                 :nspace nspace :tags tags :secret-key (e/gen-secret-key secret-token)}))
 
 
 (defmethod print-method Cluster [cluster ^Writer writer]
@@ -209,10 +150,9 @@
 
 
 (defrecord Node [id host port cluster status neighbours restart-counter tx ping-events
-                 payload scheduler-pool *udp-server]
+                 payload scheduler-pool *udp-server event-queue ping-round-buffer]
            Object
            (toString [this] (.toString this)))
-
 
 
 (defprotocol ISwimNode
@@ -222,17 +162,24 @@
   ;; Getters
   (value [this] "Get node state value")
   (id [this] "Get node id")
+  (restart-counter [this] "Get node restart counter")
+  (tx [this] "Get node tx")
   (cluster [this] "Get cluster value")
   (payload [this] "Get payload value")
   (neighbours [this] "Get neighbours")
   (status [this] "Get current value of node status")
+  (event-queue [this] "Get vector of prepared events")
 
   ;; Setters
-  (set-cluster [this cluster] "Set new cluster")
-  (set-payload [this payload] "Set new payload for this node")
+  (set-cluster [this cluster] "Set new cluster for this node")
+  (set-payload [this payload] "Set new payload for this node") ;; and announce payload change event to cluster
   (set-restart-counter [this new-value] "Set restart-counter to particular value")
-  (add-neighbour [this neighbour-node] "Add new neighbour to neighbour table")
-  (delete-neighbour [this neighbour-id] "Remove neighbour from neighbour table")
+  (upsert-neighbour [this neighbour-node] "Update existing or insert new neighbour to neighbour table")
+  (delete-neighbour [this neighbour-id] "Delete neighbour from neighbour table")
+  (set-event-queue [this new-event-queue] "Set new event queue value")
+  (put-event [this prepared-event] "Put prepared event to queue (FIFO)") ;; check neighbour :tx and if it's lower then put it to queue
+  (take-event [this] "Take one prepared event from queue (FIFO)")
+  (take-events [this n] "Take `n` prepared events from queue (FIFO)") ;; the group-by [:id :restart-counter :tx] to send the latest events only
 
   ;; Commands
   (start [this process-cb-fn] "Start this node")
@@ -250,15 +197,18 @@
 
            (value [^NodeObject this] @(:*node this))
            (id [^NodeObject this] (:id (.value this)))
+           (restart-counter [^NodeObject this] (:restart-counter (.value this)))
+           (tx [^NodeObject this] (:tx (.value this)))
            (cluster [^NodeObject this] (:cluster (.value this)))
            (payload [^NodeObject this] (:payload (.value this)))
            (neighbours [^NodeObject this] (:neighbours (.value this)))
            (status [^NodeObject this] (:status (.value this)))
+           (event-queue [^NodeObject this] (:event-queue (.value this)))
 
            (set-cluster [^NodeObject this cluster]
              (cond
                (not (s/valid? ::cluster cluster)) (throw (ex-info "Invalid cluster data" (spec-problems (s/explain-data ::cluster cluster))))
-               (not= :stopped (.status this)) (throw (ex-info "Node is not stopped. Can't set new cluster value." {:current-status (.status this)}))
+               (not= :stop (.status this)) (throw (ex-info "Node is not stopped. Can't set new cluster value." {:current-status (.status this)}))
                :else (swap! (:*node this) assoc :cluster cluster)))
 
            (set-payload [^NodeObject this payload]
@@ -270,7 +220,7 @@
                (throw (ex-info "Invalid restart counter data" (spec-problems (s/explain-data ::restart-counter restart-counter))))
                (swap! (:*node this) assoc :restart-counter restart-counter)))
 
-           (add-neighbour [^NodeObject this neighbour-node]
+           (upsert-neighbour [^NodeObject this neighbour-node]
              (if-not (s/valid? ::neighbour-node neighbour-node)
                (throw (ex-info "Invalid neighbour node data" (spec-problems (s/explain-data ::neighbour-node neighbour-node))))
                (swap! (:*node this) assoc :neighbours (assoc (neighbours this) (:id neighbour-node) neighbour-node))))
@@ -278,11 +228,31 @@
            (delete-neighbour [^NodeObject this neighbour-id]
              (swap! (:*node this) assoc :neighbours (dissoc (neighbours this) neighbour-id)))
 
+           (set-event-queue [^NodeObject this new-event-queue]
+             (if-not (s/valid? ::event-queue new-event-queue)
+               (throw (ex-info "Invalid event queue data" (spec-problems (s/explain-data ::event-queue new-event-queue))))
+               (swap! (:*node this) assoc :event-queue new-event-queue)))
+
+           (put-event [^NodeObject this prepared-event]
+             (if (vector? prepared-event)
+               (swap! (:*node this) assoc :event-queue (conj (.event_queue this) prepared-event))
+               (throw (ex-info "Event should be a vector (prepared event)" {:prepared-event prepared-event}))))
+
+           (take-event [^NodeObject this]
+             (let [event (first (.event_queue this))]
+               (swap! (:*node this) assoc :event-queue (->> this .event_queue rest vec))
+               event))
+
+           (take-events [^NodeObject this n]
+             (let [events (->> this (.event_queue) (take n) vec)]
+               (swap! (:*node this) assoc :event-queue (->> this .event_queue (drop n) vec))
+               events))
+
            (start [^NodeObject this cb-fn]
              (let [{:keys [host port restart-counter]} (.value this)]
                (swap! (:*node this) assoc
                  :*udp-server (udp/start host port cb-fn)
-                 :status :leave
+                 :status :left
                  :restart-counter restart-counter)
                (when-not (s/valid? ::node (.value this))
                  (throw (ex-info "Invalid node data" (spec-problems (s/explain-data ::node (:*node this))))))))
@@ -297,7 +267,7 @@
                (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
                (swap! (:*node this) assoc
                  :*udp-server (udp/stop *udp-server)
-                 :status :stopped
+                 :status :stop
                  :restart-counter (inc restart-counter)
                  :ping-events []
                  :tx 0)
@@ -314,117 +284,147 @@
       (map->NodeObject {:*node (atom node-data)})))
 
   (^NodeObject [{:keys [^UUID id ^String host ^long port ^long restart-counter]} ^Cluster cluster]
-    (new-node-object {:id              (or id (random-uuid))
-                      :host            host
-                      :port            port
-                      :cluster         cluster
-                      :status          :stopped
-                      :neighbours      {}
-                      :restart-counter (or restart-counter 0)
-                      :tx              0
-                      :ping-events     []
-                      :payload         {}
-                      :scheduler-pool  (scheduler/mk-pool)
-                      :*udp-server     nil})))
+    (new-node-object {:id                (or id (random-uuid))
+                      :host              host
+                      :port              port
+                      :cluster           cluster
+                      :status            :stop
+                      :neighbours        {}
+                      :restart-counter   (or restart-counter 0)
+                      :tx                0
+                      :ping-events       []                  ;; pings on the fly. we wait ack for them
+                      :event-queue       []                  ;; events that we'll send to random logN neighbours next time
+                      :ping-round-buffer []                  ;; we take logN neighbour ids to send events from event queue
+                      :payload           {}                  ;; data that this node claims in cluster about itself
+                      :scheduler-pool    (scheduler/mk-pool)
+                      :*udp-server       nil})))
 
 
 
-;;;;;;;;;;;;
-;;;; Events
+;;;;;;;;;;
+;; Events
+;;;;;;;;;;
+
+(defprotocol ISwimEvent
+  (prepare [this] "Convert Event to vector of values for subsequent serialization")
+  (restore [this v] "Restore Event from vector of values"))
+
+
+;;;;
+
+(defrecord PingEvent [cmd-type id restart-counter tx neighbour-id]
+
+           ISwimEvent
+
+           (prepare [^PingEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.neighbour_id e)])
+
+           (restore [^PingEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 5 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:ping event-code)) uuid? nat-int? nat-int? uuid?] v)))
+               (apply ->PingEvent v)
+               (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec v})))))
+
+
+(defn new-ping
+  ^PingEvent [^NodeObject n ^UUID neighbour-id]
+  (let [ping-event (map->PingEvent {:cmd-type        (:ping event-code)
+                                    :id              (.id n)
+                                    :restart-counter (.restart_counter n)
+                                    :tx              (.tx n)
+                                    :neighbour-id    neighbour-id})]
+    (if-not (s/valid? ::ping-event ping-event)
+      (throw (ex-info "Invalid ping event" (spec-problems (s/explain-data ::ping-event ping-event))))
+      ping-event)))
+
+
+(defn empty-ping
+  ^PingEvent []
+  (map->PingEvent {:cmd-type        (:ping event-code)
+                   :id              (UUID. 0 0)
+                   :restart-counter 0
+                   :tx              0
+                   :neighbour-id    (UUID. 0 0)}))
+
+
+;;;;
+
+
+
+(defrecord AckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx]
+
+           ISwimEvent
+
+           (prepare [^AckEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.neighbour_id e) (.neighbour_tx e)])
+
+           (restore [^AckEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 6 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:ack event-code)) uuid? nat-int? nat-int? uuid? nat-int?] v)))
+               (apply ->AckEvent v)
+               (throw (ex-info "AckEvent vector has invalid structure" {:ack-vec v})))))
+
+
+(defrecord JoiningEvent [cmd-type id restart-counter tx host port]
+
+           ISwimEvent
+
+           (prepare [^JoiningEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-host e) (.-port e)])
+
+           (restore [^JoiningEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 6 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:join event-code)) uuid? nat-int? nat-int? string? nat-int?] v)))
+               (apply ->JoiningEvent v)
+               (throw (ex-info "JoinEvent vector has invalid structure" {:join-vec v})))))
+
+
+(defrecord NormalEvent [cmd-type id tx]
+           ISwimEvent
+           (prepare [^NormalEvent e]
+             [(.-cmd_type e) (.-id e) (.tx e)]))
+
+
 ;;
-;;(def event-code
-;;  {:ping 0 :ack 1 :joining 2 :normal 3 :suspicious 4 :leave 5 :dead 6 :payload 7 :anti-entropy 8})
+;;(defrecord SuspectEvent [cmd-type id]
+;;  ISwimEvent
+;;  (prepare [^SuspectEvent e]
+;;    [(.-cmd_type e) (.-id e)]))
 ;;
 ;;
-;;(defprotocol ISwimEvent
-;;  (prepare [this] "Convert Event to vector of values for subsequent serialization")
-;;  (restore [this v] "Restore Event from vector of values (overwrites this)."))
-;;
-;;
-;;(defrecord PingEvent [cmd-type id restart-counter tx-counter receiver-id]
-;;
-;;           ISwimEvent
-;;
-;;           (prepare [^PingEvent e]
-;;             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx_counter e) (.-receiver_id e)])
-;;
-;;           (restore [^PingEvent _ v]
-;;             (if (and
-;;                   (vector? v)
-;;                   (= 5 (count v))
-;;                   (every? true? (map #(%1 %2) [#(= % (:ping event-code)) uuid? nat-int? nat-int? uuid?] v)))
-;;               (apply ->PingEvent v)
-;;               (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec v})))))
-;;
-;;
-;;(defrecord AckEvent [cmd-type id restart-counter tx-counter receiver-id receiver-tx-counter]
-;;
-;;           ISwimEvent
-;;
-;;           (prepare [^AckEvent e]
-;;             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx_counter e) (.-receiver_id e) (.-receiver_tx_counter e)])
-;;
-;;           (restore [^AckEvent _ v]
-;;             (if (and
-;;                   (vector? v)
-;;                   (= 6 (count v))
-;;                   (every? true? (map #(%1 %2) [#(= % (:ack event-code)) uuid? nat-int? nat-int? uuid? nat-int?] v)))
-;;               (apply ->AckEvent v)
-;;               (throw (ex-info "AckEvent vector has invalid structure" {:ack-vec v})))))
-;;
-;;
-;;(defrecord JoiningEvent [cmd-type id restart-counter tx-counter host port]
-;;           ISwimEvent
-;;           (prepare [^JoiningEvent e]
-;;             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx_counter e) (.-host e) (.-port e)]))
-;;
-;;
-;;(defrecord NormalEvent [cmd-type id]
-;;           ISwimEvent
-;;           (prepare [^NormalEvent e]
-;;             [(.-cmd_type e) (.-id e)]))
-;;
-;;
-;;(defrecord SuspiciousEvent [cmd-type id]
-;;           ISwimEvent
-;;           (prepare [^SuspiciousEvent e]
-;;             [(.-cmd_type e) (.-id e)]))
-;;
-;;
-;;(defrecord LeaveEvent [cmd-type id]
-;;           ISwimEvent
-;;           (prepare [^LeaveEvent e]
-;;             [(.-cmd_type e) (.-id e)]))
+;;(defrecord LeftEvent [cmd-type id]
+;;  ISwimEvent
+;;  (prepare [^LeftEvent e]
+;;    [(.-cmd_type e) (.-id e)]))
 ;;
 ;;
 ;;(defrecord DeadEvent [cmd-type id]
-;;           ISwimEvent
-;;           (prepare [^DeadEvent e]
-;;             [(.-cmd_type e) (.-id e)]))
+;;  ISwimEvent
+;;  (prepare [^DeadEvent e]
+;;    [(.-cmd_type e) (.-id e)]))
 ;;
 ;;
 ;;(defrecord PayloadEvent [cmd-type, id, data]
-;;           ISwimEvent
-;;           (prepare [^PayloadEvent e]
-;;             [(.-cmd_type e) (.-id e) (.-data e)]))
+;;  ISwimEvent
+;;  (prepare [^PayloadEvent e]
+;;    [(.-cmd_type e) (.-id e) (.-data e)]))
 ;;
 ;;
 ;;(defrecord AntiEntropyEvent [cmd-type data]
-;;           ISwimEvent
-;;           (prepare [^AntiEntropyEvent e]
-;;             [(.-cmd_type e) (.-data e)]))
+;;  ISwimEvent
+;;  (prepare [^AntiEntropyEvent e]
+;;    [(.-cmd_type e) (.-data e)]))
 ;;
 ;;
-;;(defn ^PingEvent new-ping
-;;  [^Node n ^UUID receiver-id]
-;;  (->PingEvent
-;;    (:ping event-code) (:id n) (:restart-counter n) (:tx-counter n) receiver-id))
 ;;
 ;;
-;;(defn ^PingEvent empty-ping
-;;  []
-;;  (->PingEvent
-;;    (:ping event-code) (UUID. 0 0) 0 0 (UUID. 0 0)))
+;;
 ;;
 ;;
 ;;(defn ^PingEvent restore-ping

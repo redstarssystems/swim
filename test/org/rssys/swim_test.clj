@@ -30,7 +30,7 @@
   {:id              #uuid"00000000-0000-0000-0000-000000000002"
    :host            "127.0.0.1"
    :port            5377
-   :status          :normal
+   :status          :alive
    :access          :direct
    :restart-counter 0
    :tx              1
@@ -41,7 +41,7 @@
   {:id              #uuid"00000000-0000-0000-0000-000000000003"
    :host            "127.0.0.1"
    :port            5378
-   :status          :normal
+   :status          :alive
    :access          :direct
    :restart-counter 0
    :tx              1
@@ -52,7 +52,7 @@
   {:id              #uuid"00000000-0000-0000-0000-000000000001"
    :host            "127.0.0.1"
    :port            5376
-   :status          :normal
+   :status          :alive
    :access          :direct
    :restart-counter 0
    :tx              1
@@ -103,18 +103,20 @@
       (is (instance? NodeObject result1) "Should be NodeObject instance")
       (is (s/valid? ::sut/node (.value result1)))
       (match (.value result1)
-        {:id              #uuid "00000000-0000-0000-0000-000000000001"
-         :host            "127.0.0.1"
-         :port            5376
-         :cluster         cluster
-         :status          :stopped
-         :neighbours      {}
-         :restart-counter 0
-         :tx              0
-         :ping-events     []
-         :payload         {}
-         :scheduler-pool  #(instance? MutablePool %)
-         :*udp-server     nil})))
+        {:id                #uuid "00000000-0000-0000-0000-000000000001"
+         :host              "127.0.0.1"
+         :port              5376
+         :cluster           cluster
+         :status            :stop
+         :neighbours        {}
+         :restart-counter   0
+         :tx                0
+         :ping-events       []
+         :payload           {}
+         :event-queue       []
+         :ping-round-buffer []
+         :scheduler-pool    #(instance? MutablePool %)
+         :*udp-server       nil})))
 
   (testing "Wrong data is caught by spec"
     (is (thrown-with-msg? Exception #"Invalid node data"
@@ -127,24 +129,30 @@
     (let [node-object (sut/new-node-object node-data1 cluster)
           result      (.value node-object)]
 
-      (match result {:id              ::sut/id
-                     :host            ::sut/host
-                     :port            ::sut/port
-                     :cluster         ::sut/cluster
-                     :status          ::sut/status
-                     :neighbours      ::sut/neighbours
-                     :restart-counter ::sut/restart-counter
-                     :tx              ::sut/tx
-                     :ping-events     ::sut/ping-events
-                     :payload         ::sut/payload
-                     :scheduler-pool  ::sut/scheduler-pool
-                     :*udp-server     ::sut/*udp-server})
+      (match result {:id                ::sut/id
+                     :host              ::sut/host
+                     :port              ::sut/port
+                     :cluster           ::sut/cluster
+                     :status            ::sut/status
+                     :neighbours        ::sut/neighbours
+                     :restart-counter   ::sut/restart-counter
+                     :tx                ::sut/tx
+                     :ping-events       ::sut/ping-events
+                     :payload           ::sut/payload
+                     :scheduler-pool    ::sut/scheduler-pool
+                     :*udp-server       ::sut/*udp-server
+                     :event-queue       ::sut/event-queue
+                     :ping-round-buffer ::sut/ping-round-buffer})
 
-      (is (uuid? (.id node-object)) "Should be UUID")
+      ;; Tests for getters
+      (is (= #uuid "00000000-0000-0000-0000-000000000001" (.id node-object)) "Should be UUID value")
       (is (= cluster (.cluster node-object)) "Should be Cluster value")
-      (is (s/valid? ::sut/payload (.payload node-object)) "Should be payload value")
-      (is (s/valid? ::sut/neighbours (.neighbours node-object)) "Should be neighbours value")
-      (is (s/valid? ::sut/status (.status node-object)) "Should be status value")))
+      (is (= 0 (.restart_counter node-object)) "Should be restart counter value")
+      (is (= 0 (.tx node-object)) "Should be tx value")
+      (is (= {} (.payload node-object)) "Should be payload value")
+      (is (= {} (.neighbours node-object)) "Should be neighbours value")
+      (is (= :stop (.status node-object)) "Should be a node status value")
+      (is (= [] (.event_queue node-object)) "Event queue should be a vector")))
 
   (testing "Setters should set correct values"
 
@@ -161,7 +169,7 @@
 
         (testing "Cluster change allowed only in stopped status"
           (is (thrown-with-msg? Exception #"Node is not stopped"
-                (swap! (:*node node-object) assoc :status :leave)
+                (swap! (:*node node-object) assoc :status :left)
                 (.set_cluster node-object new-cluster))))))
 
     (testing "Correct payload value should set successfully"
@@ -186,26 +194,56 @@
       (let [neighbour-node (sut/new-neighbour-node neighbour-data1)
             node-object    (sut/new-node-object node-data1 cluster)]
         (is (= {} (.neighbours node-object)) "Node has current (default) neighbours value")
-        (.add_neighbour node-object neighbour-node)
+        (.upsert_neighbour node-object neighbour-node)
         (is (= neighbour-node (get (.neighbours node-object) (:id neighbour-node))) "Node has new neighbours value")
 
         (testing "Wrong data is caught by spec"
           (is (thrown-with-msg? Exception #"Invalid neighbour node data"
-                (.add_neighbour node-object {:a :bad-value}))))))
+                (.upsert_neighbour node-object {:a :bad-value}))))))
 
     (testing "Neighbour node is deleted successfully successfully"
       (let [neighbour-node1 (sut/new-neighbour-node neighbour-data1)
             neighbour-node2 (sut/new-neighbour-node neighbour-data2)
             neighbour-node3 (sut/new-neighbour-node neighbour-data3)
             node-object     (sut/new-node-object node-data1 cluster)]
-        (.add_neighbour node-object neighbour-node1)
-        (.add_neighbour node-object neighbour-node2)
-        (.add_neighbour node-object neighbour-node3)
+        (.upsert_neighbour node-object neighbour-node1)
+        (.upsert_neighbour node-object neighbour-node2)
+        (.upsert_neighbour node-object neighbour-node3)
         (is (= neighbour-node1 (get (.neighbours node-object) (:id neighbour-node1))) "Neighbour1 is present")
 
         (.delete_neighbour node-object (:id neighbour-node1))
         (is (= (keys (.neighbours node-object)) (map :id [neighbour-node2 neighbour-node3]))
-          "Neighbour1 should not present")))))
+          "Neighbour1 should not present")))
+
+    (testing "Correct event queue value should set successfully"
+      (let [new-event-queue [[(:left sut/event-code) (random-uuid)]]
+            node-object     (sut/new-node-object node-data1 cluster)]
+        (is (= [] (.event_queue node-object)) "Event queue has current (default) value")
+        (.set_event_queue node-object new-event-queue)
+        (is (= new-event-queue (.event_queue node-object)) "Node has new event queue value")))
+
+    (testing "Put event to queue is successful"
+      (let [prepared-left-event [(:left sut/event-code) (random-uuid)]
+            node-object          (sut/new-node-object node-data1 cluster)]
+        (is (= [] (.event_queue node-object)) "Event queue has current (default) value")
+        (.put_event node-object prepared-left-event)
+        (is (= [prepared-left-event] (.event_queue node-object)) "Node has new event queue value")))
+
+    (testing "Take event from queue is successful"
+      (let [prepared-left-event [(:left sut/event-code) (random-uuid)]
+            node-object          (sut/new-node-object node-data1 cluster)]
+        (.put_event node-object prepared-left-event)
+        (is (= prepared-left-event (.take_event node-object)) "Take event got expected value from queue")
+        (is (= [] (.event_queue node-object)) "Event queue should be empty")))
+
+    (testing "Take events from queue is successful"
+      (let [node-object          (sut/new-node-object node-data1 cluster)]
+        (.put_event node-object [1])
+        (.put_event node-object [2])
+        (.put_event node-object [3])
+        (.put_event node-object [4])
+        (is (= [[1] [2]] (.take_events node-object 2)) "Take events got expected values from queue")
+        (is (= [[3] [4]] (.event_queue node-object)) "Event queue should have expected values")))))
 
 
 ;;;;;;;;;;
@@ -246,86 +284,12 @@
 ;;;;;;;;;;
 
 
-
-(deftest new-iv-12-test
-  (testing "IV for AES/GCM should be 12 bytes length"
-    (let [iv12 (sut/new-iv-12)]
-      (match (alength iv12) 12))))
-
-
-(deftest gen-secret-key-test
-
-  (testing "Generating secret key from string token is successful"
-    (let [secret-token "qMkaS3^%&%@lOIOJN7h7sbrgojv"
-          result       (sut/gen-secret-key secret-token)]
-      (is (bytes? result) "Should be bytes array")
-      (is (= 32 (alength result)) "Secret key hould be 256-bit length")))
-
-  (testing "Secret keys from the same token are always the same"
-    (let [secret-token "qMkaS3^%&%@lOIOJN7h7sqbrgojv"
-          secret-bytes1 (sut/gen-secret-key secret-token)
-          secret-bytes2 (sut/gen-secret-key secret-token)]
-      (match (into [] secret-bytes1) (into [] secret-bytes2))))
-
-  (testing "Secret keys from different tokens are NOT equal"
-    (let [password1     "1234567890"
-          password2     "123456789"
-          secret-bytes1 (sut/gen-secret-key password1)
-          secret-bytes2 (sut/gen-secret-key password2)]
-      (is (not= (into [] secret-bytes1) (into [] secret-bytes2))))))
-
-
-(deftest init-cipher-test
-
-  (testing "Init cipher in encryption mode is successful"
-    (let [cipher (sut/init-cipher (sut/gen-secret-key "123456") :encrypt (.getBytes "1234567890ab"))]
-      (is (instance? Cipher cipher) "Should be Cipher instance")))
-
-  (testing "Init cipher in decryption mode is successful"
-    (let [cipher (sut/init-cipher (sut/gen-secret-key "123456") :decrypt (.getBytes "1234567890ab"))]
-      (is (instance? Cipher cipher) "Should be Cipher instance")))
-
-  (testing "Wrong cipher mode is prohibited"
-    (is (thrown-with-msg? Exception #"Wrong cipher mode"
-          (sut/init-cipher (sut/gen-secret-key "123456") :bad-mode (.getBytes "1234567890ab"))))))
-
-
-
-(deftest encrypt-bytes-test
-
-  (testing "Encryption is successful"
-    (let [cipher (sut/init-cipher (sut/gen-secret-key "123456") :encrypt (.getBytes "1234567890ab"))
-          plain-text "Suppose the original message has length = 50 bytes"
-          result (sut/encrypt-bytes cipher (.getBytes plain-text))]
-      (is (bytes? result) "Should be bytes array")
-      (is (> (count result) (.length plain-text)) "Encrypted bytes size should be more than plain text"))))
-
-
-(deftest decrypt-bytes-test
-
-  (testing "Decryption of encrypted text is successful"
-    (let [secret-key (sut/gen-secret-key "123456")
-          iv (.getBytes "1234567890ab")
-          e-cipher (sut/init-cipher secret-key :encrypt iv)
-          d-cipher (sut/init-cipher secret-key :decrypt iv)
-          plain-text "Suppose the original message has length = 50 bytes"
-          encrypted-bytes (sut/encrypt-bytes e-cipher (.getBytes plain-text))
-          corrupted-bytes (byte-array (update (into [] encrypted-bytes) 4 inc))
-          result (String. (sut/decrypt-bytes d-cipher encrypted-bytes))]
-
-      (is (= plain-text result) "Original text and decrypted text should be the same")
-
-      (testing "Corrupted data will be not decrypted"
-        (is (thrown-with-msg? Exception #"Tag mismatch"
-              (sut/decrypt-bytes d-cipher corrupted-bytes)))))))
-
-
-;;;;;;;;;;
-
-
 (def node-object1 (sut/new-node-object node-data1 cluster))
 (def node-object2 (sut/new-node-object node-data2 cluster))
 (def node-object3 (sut/new-node-object node-data3 cluster))
+
+
+(def pe1 (sut/new-ping node-object1 (random-uuid)))
 
 
 ;;
