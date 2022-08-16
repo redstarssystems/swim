@@ -49,3 +49,4 @@ logs
 *.swp
 *~
 trace.edn
+/doc/
