@@ -34,7 +34,8 @@
    :access          :direct
    :restart-counter 0
    :tx              1
-   :payload         {:tcp-port 4567}})
+   :payload         {:tcp-port 4567}
+   :updated-at      (System/currentTimeMillis)})
 
 
 (def neighbour-data2
@@ -45,7 +46,8 @@
    :access          :direct
    :restart-counter 0
    :tx              1
-   :payload         {:tcp-port 4567}})
+   :payload         {:tcp-port 4567}
+   :updated-at      (System/currentTimeMillis)})
 
 
 (def neighbour-data3
@@ -56,7 +58,8 @@
    :access          :direct
    :restart-counter 0
    :tx              1
-   :payload         {:tcp-port 4567}})
+   :payload         {:tcp-port 4567}
+   :updated-at      (System/currentTimeMillis)})
 
 
 (def node-data1 {:id #uuid "00000000-0000-0000-0000-000000000001" :host "127.0.0.1" :port 5376})
@@ -90,7 +93,8 @@
                       :access          :direct
                       :restart-counter 0
                       :tx              0
-                      :payload         {}}))))
+                      :payload         {}
+                      :updated-at      nat-int?}))))
 
 
 (def cluster (sut/new-cluster cluster-data))
@@ -195,7 +199,21 @@
             node-object    (sut/new-node-object node-data1 cluster)]
         (is (= {} (.neighbours node-object)) "Node has current (default) neighbours value")
         (.upsert_neighbour node-object neighbour-node)
-        (is (= neighbour-node (get (.neighbours node-object) (:id neighbour-node))) "Node has new neighbours value")
+        (is (= (-> neighbour-node (dissoc :updated-at)) (-> node-object .neighbours (get (:id neighbour-node)) (dissoc :updated-at))) "Node has new neighbours value")
+
+        (testing "Wrong data is caught by spec"
+          (is (thrown-with-msg? Exception #"Invalid neighbour node data"
+                (.upsert_neighbour node-object {:a :bad-value}))))))
+
+    (testing "Set timestamp after every neighbour update"
+      (let [neighbour-node (sut/new-neighbour-node neighbour-data1)
+            node-object    (sut/new-node-object node-data1 cluster)
+            _              (.upsert_neighbour node-object neighbour-node)
+            t1             (:updated-at (get (.neighbours node-object) (.-id neighbour-node)))
+            _ (Thread/sleep 1)
+            _              (.upsert_neighbour node-object neighbour-node)
+            t2             (:updated-at (get (.neighbours node-object) (.-id neighbour-node)))]
+        (is (> t2 t1) "Timestamp should be updated")
 
         (testing "Wrong data is caught by spec"
           (is (thrown-with-msg? Exception #"Invalid neighbour node data"
@@ -209,7 +227,7 @@
         (.upsert_neighbour node-object neighbour-node1)
         (.upsert_neighbour node-object neighbour-node2)
         (.upsert_neighbour node-object neighbour-node3)
-        (is (= neighbour-node1 (get (.neighbours node-object) (:id neighbour-node1))) "Neighbour1 is present")
+        (is (= (-> neighbour-node1 (dissoc :updated-at)) (-> node-object .neighbours (get (:id neighbour-node1)) (dissoc :updated-at))) "Neighbour1 is present")
 
         (.delete_neighbour node-object (:id neighbour-node1))
         (is (= (keys (.neighbours node-object)) (map :id [neighbour-node2 neighbour-node3]))
@@ -224,20 +242,20 @@
 
     (testing "Put event to queue is successful"
       (let [prepared-left-event [(:left sut/event-code) (random-uuid)]
-            node-object          (sut/new-node-object node-data1 cluster)]
+            node-object         (sut/new-node-object node-data1 cluster)]
         (is (= [] (.event_queue node-object)) "Event queue has current (default) value")
         (.put_event node-object prepared-left-event)
         (is (= [prepared-left-event] (.event_queue node-object)) "Node has new event queue value")))
 
     (testing "Take event from queue is successful"
       (let [prepared-left-event [(:left sut/event-code) (random-uuid)]
-            node-object          (sut/new-node-object node-data1 cluster)]
+            node-object         (sut/new-node-object node-data1 cluster)]
         (.put_event node-object prepared-left-event)
         (is (= prepared-left-event (.take_event node-object)) "Take event got expected value from queue")
         (is (= [] (.event_queue node-object)) "Event queue should be empty")))
 
     (testing "Take events from queue is successful"
-      (let [node-object          (sut/new-node-object node-data1 cluster)]
+      (let [node-object (sut/new-node-object node-data1 cluster)]
         (.put_event node-object [1])
         (.put_event node-object [2])
         (.put_event node-object [3])

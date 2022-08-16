@@ -37,7 +37,8 @@
 (s/def ::restart-counter nat-int?)
 (s/def ::tx nat-int?)
 (s/def ::payload ::object)                                  ;; some data attached to node
-(s/def ::neighbour-node (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter ::tx ::payload]))
+(s/def ::updated-at nat-int?)
+(s/def ::neighbour-node (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter ::tx ::payload ::updated-at]))
 (s/def ::neighbours (s/map-of ::neighbour-id ::neighbour-node))
 
 (s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id]))
@@ -126,7 +127,7 @@
 ;;;;;;;;;
 
 
-(defrecord NeighbourNode [id host port status access restart-counter tx payload])
+(defrecord NeighbourNode [id host port status access restart-counter tx payload updated-at])
 
 
 (defn new-neighbour-node
@@ -145,7 +146,9 @@
                          :status          :unknown
                          :access          :direct
                          :restart-counter 0
-                         :tx              0 :payload {}})))
+                         :tx              0
+                         :payload {}
+                         :updated-at      (System/currentTimeMillis)})))
 
 
 
@@ -223,7 +226,7 @@
            (upsert-neighbour [^NodeObject this neighbour-node]
              (if-not (s/valid? ::neighbour-node neighbour-node)
                (throw (ex-info "Invalid neighbour node data" (spec-problems (s/explain-data ::neighbour-node neighbour-node))))
-               (swap! (:*node this) assoc :neighbours (assoc (neighbours this) (:id neighbour-node) neighbour-node))))
+               (swap! (:*node this) assoc :neighbours (assoc (neighbours this) (:id neighbour-node) (assoc neighbour-node :updated-at (System/currentTimeMillis))))))
 
            (delete-neighbour [^NodeObject this neighbour-id]
              (swap! (:*node this) assoc :neighbours (dissoc (neighbours this) neighbour-id)))
