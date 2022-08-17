@@ -111,7 +111,7 @@
   "Returns new Cluster instance."
   ^Cluster [{:keys [id name desc secret-token nspace tags] :as c}]
   (when-not (s/valid? ::cluster c)
-    (throw (ex-info "Invalid cluster data" (spec-problems (s/explain-data ::cluster c)))))
+    (throw (ex-info "Invalid cluster data" (->> c (s/explain-data ::cluster) spec-problems))))
   (map->Cluster {:id     (or id (random-uuid)) :name name :desc desc :secret-token secret-token
                  :nspace nspace :tags tags :secret-key (e/gen-secret-key secret-token)}))
 
@@ -135,7 +135,7 @@
 
   (^NeighbourNode [nn]
     (if-not (s/valid? ::neighbour-node nn)
-      (throw (ex-info "Invalid neighbour data" (spec-problems (s/explain-data ::neighbour-node nn))))
+      (throw (ex-info "Invalid neighbour data" (->> nn (s/explain-data ::neighbour-node) spec-problems)))
       (map->NeighbourNode nn)))
 
 
@@ -210,7 +210,7 @@
 
            (set-cluster [^NodeObject this cluster]
              (cond
-               (not (s/valid? ::cluster cluster)) (throw (ex-info "Invalid cluster data" (spec-problems (s/explain-data ::cluster cluster))))
+               (not (s/valid? ::cluster cluster)) (throw (ex-info "Invalid cluster data" (->> cluster (s/explain-data ::cluster) spec-problems)))
                (not= :stop (.status this)) (throw (ex-info "Node is not stopped. Can't set new cluster value." {:current-status (.status this)}))
                :else (swap! (:*node this) assoc :cluster cluster)))
 
@@ -220,20 +220,20 @@
 
            (set-restart-counter [^NodeObject this restart-counter]
              (if-not (s/valid? ::restart-counter restart-counter)
-               (throw (ex-info "Invalid restart counter data" (spec-problems (s/explain-data ::restart-counter restart-counter))))
+               (throw (ex-info "Invalid restart counter data" (->> restart-counter (s/explain-data ::restart-counter) spec-problems)))
                (swap! (:*node this) assoc :restart-counter restart-counter)))
 
            (upsert-neighbour [^NodeObject this neighbour-node]
              (if-not (s/valid? ::neighbour-node neighbour-node)
-               (throw (ex-info "Invalid neighbour node data" (spec-problems (s/explain-data ::neighbour-node neighbour-node))))
-               (swap! (:*node this) assoc :neighbours (assoc (neighbours this) (:id neighbour-node) (assoc neighbour-node :updated-at (System/currentTimeMillis))))))
+               (throw (ex-info "Invalid neighbour node data" (->> neighbour-node (s/explain-data ::neighbour-node) spec-problems)))
+               (swap! (:*node this) assoc :neighbours (assoc (neighbours this) (.-id neighbour-node) (assoc neighbour-node :updated-at (System/currentTimeMillis))))))
 
            (delete-neighbour [^NodeObject this neighbour-id]
              (swap! (:*node this) assoc :neighbours (dissoc (neighbours this) neighbour-id)))
 
            (set-event-queue [^NodeObject this new-event-queue]
              (if-not (s/valid? ::event-queue new-event-queue)
-               (throw (ex-info "Invalid event queue data" (spec-problems (s/explain-data ::event-queue new-event-queue))))
+               (throw (ex-info "Invalid event queue data" (->> new-event-queue (s/explain-data ::event-queue) spec-problems)))
                (swap! (:*node this) assoc :event-queue new-event-queue)))
 
            (put-event [^NodeObject this prepared-event]
@@ -247,7 +247,7 @@
                event))
 
            (take-events [^NodeObject this n]
-             (let [events (->> this (.event_queue) (take n) vec)]
+             (let [events (->> this .event_queue (take n) vec)]
                (swap! (:*node this) assoc :event-queue (->> this .event_queue (drop n) vec))
                events))
 
@@ -258,7 +258,7 @@
                  :status :left
                  :restart-counter restart-counter)
                (when-not (s/valid? ::node (.value this))
-                 (throw (ex-info "Invalid node data" (spec-problems (s/explain-data ::node (:*node this))))))))
+                 (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::node) spec-problems))))))
 
            (leave [^NodeObject this]
              ;;TODO

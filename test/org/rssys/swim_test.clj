@@ -210,7 +210,7 @@
             node-object    (sut/new-node-object node-data1 cluster)
             _              (.upsert_neighbour node-object neighbour-node)
             t1             (:updated-at (get (.neighbours node-object) (.-id neighbour-node)))
-            _ (Thread/sleep 1)
+            _              (Thread/sleep 1)
             _              (.upsert_neighbour node-object neighbour-node)
             t2             (:updated-at (get (.neighbours node-object) (.-id neighbour-node)))]
         (is (> t2 t1) "Timestamp should be updated")
