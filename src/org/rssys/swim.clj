@@ -41,8 +41,9 @@
 (s/def ::neighbour-node (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter ::tx ::payload ::updated-at]))
 (s/def ::neighbours (s/map-of ::neighbour-id ::neighbour-node))
 
-(s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id]))
-(s/def ::ping-events (s/coll-of ::ping-event))
+(s/def ::attempt-number pos-int?)
+(s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::attempt-number]))
+(s/def ::ping-events (s/map-of ::neighbour-id ::ping-event))
 
 (s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
@@ -172,6 +173,8 @@
   (neighbours [this] "Get neighbours")
   (status [this] "Get current value of node status")
   (event-queue [this] "Get vector of prepared events")
+  (ping-event [this neighbour-id] "Get ping event by neighbour id if exist")
+  (ping-events [this] "Get map of active ping events")
 
   ;; Setters
   (set-cluster [this cluster] "Set new cluster for this node")
@@ -183,6 +186,8 @@
   (put-event [this prepared-event] "Put prepared event to queue (FIFO)") ;; check neighbour :tx and if it's lower then put it to queue
   (take-event [this] "Take one prepared event from queue (FIFO)")
   (take-events [this n] "Take `n` prepared events from queue (FIFO)") ;; the group-by [:id :restart-counter :tx] to send the latest events only
+  (upsert-ping [this ping-event] "Update existing or insert new ping event to a table")
+  (delete-ping [this neighbour-id] "Delete ping event from table")
 
   ;; Commands
   (start [this process-cb-fn] "Start this node")
@@ -207,6 +212,8 @@
            (neighbours [^NodeObject this] (:neighbours (.value this)))
            (status [^NodeObject this] (:status (.value this)))
            (event-queue [^NodeObject this] (:event-queue (.value this)))
+           (ping-event [^NodeObject this neighbour-id] (get (:ping-events (.value this)) neighbour-id))
+           (ping-events [^NodeObject this] (:ping-events (.value this)))
 
            (set-cluster [^NodeObject this cluster]
              (cond
@@ -250,6 +257,14 @@
              (let [events (->> this .event_queue (take n) vec)]
                (swap! (:*node this) assoc :event-queue (->> this .event_queue (drop n) vec))
                events))
+
+           (upsert-ping [^NodeObject this ping-event]
+             (if-not (s/valid? ::ping-event ping-event)
+               (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::ping-event) spec-problems)))
+               (swap! (:*node this) assoc :ping-events (assoc (ping-events this) (.-neighbour_id ping-event) ping-event))))
+
+           (delete-ping [^NodeObject this neighbour-id]
+             (swap! (:*node this) assoc :ping-events (dissoc (.ping_events this) neighbour-id)))
 
            (start [^NodeObject this cb-fn]
              (let [{:keys [host port restart-counter]} (.value this)]
@@ -295,7 +310,7 @@
                       :neighbours        {}
                       :restart-counter   (or restart-counter 0)
                       :tx                0
-                      :ping-events       []                  ;; pings on the fly. we wait ack for them
+                      :ping-events       {}                 ;; pings on the fly. we wait ack for them. key ::neighbour-id
                       :event-queue       []                  ;; events that we'll send to random logN neighbours next time
                       :ping-round-buffer []                  ;; we take logN neighbour ids to send events from event queue
                       :payload           {}                  ;; data that this node claims in cluster about itself
@@ -315,7 +330,7 @@
 
 ;;;;
 
-(defrecord PingEvent [cmd-type id restart-counter tx neighbour-id]
+(defrecord PingEvent [cmd-type id restart-counter tx neighbour-id attempt-number]
 
            ISwimEvent
 
@@ -332,12 +347,13 @@
 
 
 (defn new-ping
-  ^PingEvent [^NodeObject n ^UUID neighbour-id]
+  ^PingEvent [^NodeObject n ^UUID neighbour-id attempt-number]
   (let [ping-event (map->PingEvent {:cmd-type        (:ping event-code)
                                     :id              (.id n)
                                     :restart-counter (.restart_counter n)
                                     :tx              (.tx n)
-                                    :neighbour-id    neighbour-id})]
+                                    :neighbour-id    neighbour-id
+                                    :attempt-number attempt-number})]
     (if-not (s/valid? ::ping-event ping-event)
       (throw (ex-info "Invalid ping event" (spec-problems (s/explain-data ::ping-event ping-event))))
       ping-event)))
@@ -349,7 +365,8 @@
                    :id              (UUID. 0 0)
                    :restart-counter 0
                    :tx              0
-                   :neighbour-id    (UUID. 0 0)}))
+                   :neighbour-id    (UUID. 0 0)
+                   :attempt-number  0}))
 
 
 ;;;;

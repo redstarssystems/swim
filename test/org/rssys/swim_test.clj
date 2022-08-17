@@ -115,7 +115,7 @@
          :neighbours        {}
          :restart-counter   0
          :tx                0
-         :ping-events       []
+         :ping-events       {}
          :payload           {}
          :event-queue       []
          :ping-round-buffer []
@@ -156,7 +156,8 @@
       (is (= {} (.payload node-object)) "Should be payload value")
       (is (= {} (.neighbours node-object)) "Should be neighbours value")
       (is (= :stop (.status node-object)) "Should be a node status value")
-      (is (= [] (.event_queue node-object)) "Event queue should be a vector")))
+      (is (= [] (.event_queue node-object)) "Event queue should be a vector")
+      (is (= {} (.ping_events node-object)) "Ping events should be a map")))
 
   (testing "Setters should set correct values"
 
@@ -261,7 +262,23 @@
         (.put_event node-object [3])
         (.put_event node-object [4])
         (is (= [[1] [2]] (.take_events node-object 2)) "Take events got expected values from queue")
-        (is (= [[3] [4]] (.event_queue node-object)) "Event queue should have expected values")))))
+        (is (= [[3] [4]] (.event_queue node-object)) "Event queue should have expected values")))
+
+    (testing "Ping event getters/setters test"
+      (let [neighbour-node (sut/new-neighbour-node neighbour-data1)
+            node-object    (sut/new-node-object node-data1 cluster)
+            neighbour-id   (.-id neighbour-node)
+            ping-event     (sut/new-ping node-object neighbour-id 1)]
+        (is (= {} (.ping_events node-object)) "Node has empty (default) ping events table")
+        (.upsert_ping node-object ping-event)
+        (is (= ping-event  (.ping_event node-object neighbour-id)) "Ping event should exist in a table")
+        (is (= {neighbour-id ping-event} (.ping_events node-object)) "Ping table has new ping event")
+        (.delete_ping node-object neighbour-id)
+        (is (= {} (.ping_events node-object)) "Ping event should be deleted in a table")
+
+        (testing "Wrong data is caught by spec"
+          (is (thrown-with-msg? Exception #"Invalid ping event data"
+                (.upsert_ping node-object {:a :bad-value}))))))))
 
 
 ;;;;;;;;;;
@@ -289,12 +306,12 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                       [-110 -93 126 35 39 -52 -128]
-                       [-110 -93 126 35 39 -91 104 101 108 108 111]
-                       [-110 -93 126 35 39 -64]
-                       [-110 -93 126 35 39 -93 126 58 107]
-                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                       [-110, -50, 73, -106, 2, -46, 1]))
+                      [-110 -93 126 35 39 -52 -128]
+                      [-110 -93 126 35 39 -91 104 101 108 108 111]
+                      [-110 -93 126 35 39 -64]
+                      [-110 -93 126 35 39 -93 126 58 107]
+                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                      [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
       (match dvalues values))))
 
@@ -307,7 +324,7 @@
 (def node-object3 (sut/new-node-object node-data3 cluster))
 
 
-(def pe1 (sut/new-ping node-object1 (random-uuid)))
+(def pe1 (sut/new-ping node-object1 (random-uuid) 1))
 
 
 ;;
