@@ -74,7 +74,8 @@
   (testing "Create Cluster instance is successful"
     (let [result (sut/new-cluster cluster-data)]
       (is (instance? Cluster result) "Should be Cluster instance")
-      (is (s/valid? ::sut/cluster result)))))
+      (is (s/valid? ::sut/cluster result))
+      (is (= 1 (.-cluster_size result))))))
 
 
 (deftest new-neighbour-node-test
@@ -151,6 +152,7 @@
       ;; Tests for getters
       (is (= #uuid "00000000-0000-0000-0000-000000000001" (.id node-object)) "Should be UUID value")
       (is (= cluster (.cluster node-object)) "Should be Cluster value")
+      (is (= 1 (.cluster_size node-object)) "Should be Cluster size")
       (is (= 0 (.restart_counter node-object)) "Should be restart counter value")
       (is (= 0 (.tx node-object)) "Should be tx value")
       (is (= {} (.payload node-object)) "Should be payload value")
@@ -167,10 +169,16 @@
         (is (= cluster (.cluster node-object)) "Node has current cluster value")
         (.set_cluster node-object new-cluster)
         (is (= new-cluster (.cluster node-object)) "Node has new cluster value")
+        (.set_cluster_size node-object 42)
+        (is (= (:cluster-size (.cluster node-object)) 42) "Cluster size should have new value")
 
         (testing "Wrong data is caught by spec"
           (is (thrown-with-msg? Exception #"Invalid cluster data"
                 (.set_cluster node-object (assoc cluster :id 1)))))
+
+        (testing "Wrong data is caught by spec"
+          (is (thrown-with-msg? Exception #"Invalid cluster size"
+                (.set_cluster_size node-object :bad-value))))
 
         (testing "Cluster change allowed only in stopped status"
           (is (thrown-with-msg? Exception #"Node is not stopped"
@@ -306,12 +314,12 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                      [-110 -93 126 35 39 -52 -128]
-                      [-110 -93 126 35 39 -91 104 101 108 108 111]
-                      [-110 -93 126 35 39 -64]
-                      [-110 -93 126 35 39 -93 126 58 107]
-                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                      [-110, -50, 73, -106, 2, -46, 1]))
+                       [-110 -93 126 35 39 -52 -128]
+                       [-110 -93 126 35 39 -91 104 101 108 108 111]
+                       [-110 -93 126 35 39 -64]
+                       [-110 -93 126 35 39 -93 126 58 107]
+                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                       [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
       (match dvalues values))))
 

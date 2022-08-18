@@ -30,12 +30,13 @@
 (s/def ::object any?)
 (s/def ::tags set?)                                         ;; #{"dc1" "test"}
 (s/def ::nspace (s/or :symbol symbol? :keyword keyword? :string string?)) ;; cluster namespace
-(s/def ::secret-token string?)
-(s/def ::secret-key ::object)                               ;; 256-bit SecretKey
-(s/def ::cluster (s/keys :req-un [::id ::name ::desc ::secret-token ::nspace ::tags] :opt-un [::secret-key]))
+(s/def ::secret-token string?)                              ;; string token for secret key gen to access to cluster
+(s/def ::secret-key ::object)                               ;; 256-bit SecretKey generated from secret token
+(s/def ::cluster-size nat-int?)                             ;; number of nodes in the cluster
+(s/def ::cluster (s/keys :req-un [::id ::name ::desc ::secret-token ::nspace ::tags] :opt-un [::secret-key ::cluster-size]))
 
-(s/def ::restart-counter nat-int?)
-(s/def ::tx nat-int?)
+(s/def ::restart-counter nat-int?)                          ;; increase every node restart. part of incarnation.
+(s/def ::tx nat-int?)                                       ;; increase every event on node. part of incarnation.
 (s/def ::payload ::object)                                  ;; some data attached to node
 (s/def ::updated-at nat-int?)
 (s/def ::neighbour-node (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter ::tx ::payload ::updated-at]))
@@ -103,18 +104,19 @@
   (str (into {} (assoc cluster :secret-token "***censored***"))))
 
 
-(defrecord Cluster [id name desc secret-token nspace tags secret-key]
+(defrecord Cluster [id name desc secret-token nspace tags secret-key cluster-size]
            Object
            (toString [this] (cluster-str this)))
 
 
 (defn new-cluster
   "Returns new Cluster instance."
-  ^Cluster [{:keys [id name desc secret-token nspace tags] :as c}]
+  ^Cluster [{:keys [id name desc secret-token nspace tags cluster-size] :as c}]
   (when-not (s/valid? ::cluster c)
     (throw (ex-info "Invalid cluster data" (->> c (s/explain-data ::cluster) spec-problems))))
   (map->Cluster {:id     (or id (random-uuid)) :name name :desc desc :secret-token secret-token
-                 :nspace nspace :tags tags :secret-key (e/gen-secret-key secret-token)}))
+                 :nspace nspace :tags tags :secret-key (e/gen-secret-key secret-token)
+                 :cluster-size (or cluster-size 1)}))
 
 
 (defmethod print-method Cluster [cluster ^Writer writer]
@@ -169,6 +171,7 @@
   (restart-counter [this] "Get node restart counter")
   (tx [this] "Get node tx")
   (cluster [this] "Get cluster value")
+  (cluster-size [this] "Get cluster size value")
   (payload [this] "Get payload value")
   (neighbours [this] "Get neighbours")
   (status [this] "Get current value of node status")
@@ -178,6 +181,7 @@
 
   ;; Setters
   (set-cluster [this cluster] "Set new cluster for this node")
+  (set-cluster-size [this new-cluster-size] "Set new cluster size") ;; this is event for cluster
   (set-payload [this payload] "Set new payload for this node") ;; and announce payload change event to cluster
   (set-restart-counter [this new-value] "Set restart-counter to particular value")
   (upsert-neighbour [this neighbour-node] "Update existing or insert new neighbour to neighbour table")
@@ -199,6 +203,10 @@
   (ack [this ping-event] "Send Ack event to neighbour node"))
 
 
+;; TODO:
+;; How to clean neighbour table from old nodes?
+;;
+
 (defrecord NodeObject [*node]
 
            ISwimNode
@@ -208,6 +216,7 @@
            (restart-counter [^NodeObject this] (:restart-counter (.value this)))
            (tx [^NodeObject this] (:tx (.value this)))
            (cluster [^NodeObject this] (:cluster (.value this)))
+           (cluster-size [^NodeObject this] (.-cluster_size (:cluster (.value this))))
            (payload [^NodeObject this] (:payload (.value this)))
            (neighbours [^NodeObject this] (:neighbours (.value this)))
            (status [^NodeObject this] (:status (.value this)))
@@ -220,6 +229,11 @@
                (not (s/valid? ::cluster cluster)) (throw (ex-info "Invalid cluster data" (->> cluster (s/explain-data ::cluster) spec-problems)))
                (not= :stop (.status this)) (throw (ex-info "Node is not stopped. Can't set new cluster value." {:current-status (.status this)}))
                :else (swap! (:*node this) assoc :cluster cluster)))
+
+           (set-cluster-size [^NodeObject this new-cluster-size]
+             (if-not (s/valid? ::cluster-size new-cluster-size)
+               (throw (ex-info "Invalid cluster size" (->> new-cluster-size (s/explain-data ::cluster-size) spec-problems)))
+               (swap! (:*node this) assoc :cluster (assoc (.cluster this) :cluster-size new-cluster-size))))
 
            (set-payload [^NodeObject this payload]
              ;;TODO: send event to cluster about new payload
