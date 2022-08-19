@@ -1,6 +1,14 @@
 (ns user
   (:require
-    [hashp.core]))
+    [hashp.core]
+    [puget.printer]))
 
 
-(set! *warn-on-reflection* true)
+(defn run-common
+  []
+  (set! *warn-on-reflection* true)
+  (add-tap (bound-fn* puget.printer/cprint)))
+
+
+(comment
+  (run-common))
