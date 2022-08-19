@@ -6,6 +6,7 @@
     (java.text
       SimpleDateFormat)
     (java.util.concurrent
+      ExecutorService
       Executors
       ScheduledThreadPoolExecutor
       ThreadPoolExecutor
@@ -14,13 +15,13 @@
 
 (defn thread-factory
   "Factory that helps with spawning new Virtual Threads"
-  [name]
+  [^String name]
   (-> (Thread/ofVirtual)
     (.name name 0)
     (.factory)))
 
 
-(defonce unbounded-executor (Executors/newThreadPerTaskExecutor (thread-factory "virtual-pool-")))
+(defonce unbounded-executor ^ExecutorService (Executors/newThreadPerTaskExecutor (thread-factory "virtual-pool-")))
 
 (defrecord PoolInfo [thread-pool jobs-ref id-count-ref])
 (defrecord MutablePool [pool-atom])
@@ -165,7 +166,7 @@
   [pool-info]
   (.shutdown (:thread-pool pool-info))
   (let [jobs (vals @(:jobs-ref pool-info))]
-    (.submit unbounded-executor ^Callable
+    (.submit  unbounded-executor ^Callable
       #(loop [jobs jobs]
          (doseq [job jobs]
            (when (and @(:scheduled? job)

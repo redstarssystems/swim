@@ -1,12 +1,16 @@
 (ns org.rssys.common
   (:import
+    (clojure.lang
+      IFn)
     (java.util.concurrent
-      Executors)))
+      ExecutorService
+      Executors
+      ThreadFactory)))
 
 
 (defn thread-factory
   "Factory that helps with spawning new Virtual Threads"
-  [name]
+  ^ThreadFactory [^String name]
   (-> (Thread/ofVirtual)
     (.name name 0)
     (.factory)))
@@ -19,5 +23,5 @@
   "Takes a body of expressions and invoke the body in another virtual thread.
   Returns ^java.util.concurrent.ThreadPerTaskExecutor$ThreadBoundFuture"
   [& body]
-  `(.submit unbounded-executor (^{:once true} fn* [] ~@body)))
+  `(.submit ^ExecutorService unbounded-executor ^Callable (^{:once true} fn* [] ~@body)))
 

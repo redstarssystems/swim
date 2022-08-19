@@ -166,15 +166,15 @@
   :extend-via-metadata true
 
   ;; Getters
-  (value [this] "Get node state value")
+  (value [this] "Get node value")
   (id [this] "Get node id")
   (restart-counter [this] "Get node restart counter")
   (tx [this] "Get node tx")
   (cluster [this] "Get cluster value")
-  (cluster-size [this] "Get cluster size value")
-  (payload [this] "Get payload value")
-  (neighbours [this] "Get neighbours")
-  (status [this] "Get current value of node status")
+  (cluster-size [this] "Get cluster size")
+  (payload [this] "Get node payload")
+  (neighbours [this] "Get node neighbours")
+  (status [this] "Get current node status")
   (event-queue [this] "Get vector of prepared events")
   (ping-event [this neighbour-id] "Get ping event by neighbour id if exist")
   (ping-events [this] "Get map of active ping events")
@@ -216,7 +216,7 @@
            (restart-counter [^NodeObject this] (:restart-counter (.value this)))
            (tx [^NodeObject this] (:tx (.value this)))
            (cluster [^NodeObject this] (:cluster (.value this)))
-           (cluster-size [^NodeObject this] (.-cluster_size (:cluster (.value this))))
+           (cluster-size [^NodeObject this] (:cluster-size (:cluster (.value this))))
            (payload [^NodeObject this] (:payload (.value this)))
            (neighbours [^NodeObject this] (:neighbours (.value this)))
            (status [^NodeObject this] (:status (.value this)))
@@ -247,7 +247,7 @@
            (upsert-neighbour [^NodeObject this neighbour-node]
              (if-not (s/valid? ::neighbour-node neighbour-node)
                (throw (ex-info "Invalid neighbour node data" (->> neighbour-node (s/explain-data ::neighbour-node) spec-problems)))
-               (swap! (:*node this) assoc :neighbours (assoc (neighbours this) (.-id neighbour-node) (assoc neighbour-node :updated-at (System/currentTimeMillis))))))
+               (swap! (:*node this) assoc :neighbours (assoc (neighbours this) (.-id ^NeighbourNode neighbour-node) (assoc neighbour-node :updated-at (System/currentTimeMillis))))))
 
            (delete-neighbour [^NodeObject this neighbour-id]
              (swap! (:*node this) assoc :neighbours (dissoc (neighbours this) neighbour-id)))
@@ -259,7 +259,8 @@
 
            (put-event [^NodeObject this prepared-event]
              (if (vector? prepared-event)
-               (swap! (:*node this) assoc :event-queue (conj (.event_queue this) prepared-event))
+               (swap! (:*node this) assoc :event-queue (conj (.event_queue this) prepared-event)
+                 :tx (inc (tx this)))
                (throw (ex-info "Event should be a vector (prepared event)" {:prepared-event prepared-event}))))
 
            (take-event [^NodeObject this]
@@ -275,7 +276,7 @@
            (upsert-ping [^NodeObject this ping-event]
              (if-not (s/valid? ::ping-event ping-event)
                (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::ping-event) spec-problems)))
-               (swap! (:*node this) assoc :ping-events (assoc (ping-events this) (.-neighbour_id ping-event) ping-event))))
+               (swap! (:*node this) assoc :ping-events (assoc (ping-events this) (:neighbour-id ping-event) ping-event))))
 
            (delete-ping [^NodeObject this neighbour-id]
              (swap! (:*node this) assoc :ping-events (dissoc (.ping_events this) neighbour-id)))
@@ -332,7 +333,6 @@
                       :*udp-server       nil})))
 
 
-
 ;;;;;;;;;;
 ;; Events
 ;;;;;;;;;;
@@ -349,13 +349,13 @@
            ISwimEvent
 
            (prepare [^PingEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.neighbour_id e)])
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.neighbour_id e) (.-attempt_number e)])
 
            (restore [^PingEvent _ v]
              (if (and
                    (vector? v)
-                   (= 5 (count v))
-                   (every? true? (map #(%1 %2) [#(= % (:ping event-code)) uuid? nat-int? nat-int? uuid?] v)))
+                   (= 6 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:ping event-code)) uuid? nat-int? nat-int? uuid? pos-int?] v)))
                (apply ->PingEvent v)
                (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec v})))))
 
@@ -380,7 +380,7 @@
                    :restart-counter 0
                    :tx              0
                    :neighbour-id    (UUID. 0 0)
-                   :attempt-number  0}))
+                   :attempt-number  1}))
 
 
 ;;;;

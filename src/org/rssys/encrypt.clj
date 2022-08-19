@@ -31,9 +31,9 @@
   "Generate secret key based on a given token string.
   Returns bytes array 256-bit length."
   [^String secret-token]
-  (let [salt       (.getBytes "org.rssys.password.salt.string!!")
-        factory    (SecretKeyFactory/getInstance "PBKDF2WithHmacSHA256")
-        spec       (PBEKeySpec. (.toCharArray secret-token) salt 10000 256)]
+  (let [salt    (.getBytes "org.rssys.password.salt.string!!")
+        factory (SecretKeyFactory/getInstance "PBKDF2WithHmacSHA256")
+        spec    (PBEKeySpec. (.toCharArray secret-token) salt 10000 256)]
     (.getEncoded (.generateSecret factory spec))))
 
 
@@ -41,15 +41,16 @@
   "Init cipher using given secret-key (32 bytes) and IV (`iv-length` bytes).
   Cipher mode may be :encrypt or :decrypt
   Returns ^Cipher."
+  ^Cipher
   [^bytes secret-key cipher-mode ^bytes iv-bytes]
-  (let [cipher             (Cipher/getInstance "AES/GCM/NoPadding")
+  (let [cipher             ^Cipher (Cipher/getInstance "AES/GCM/NoPadding")
         gcm-tag-length-bit 128
         gcm-iv-spec        (GCMParameterSpec. gcm-tag-length-bit iv-bytes)
-        cipher-mode-value  ^long (cond
-                                   (= :encrypt cipher-mode) Cipher/ENCRYPT_MODE
-                                   (= :decrypt cipher-mode) Cipher/DECRYPT_MODE
-                                   :else (throw (ex-info "Wrong cipher mode" {:cipher-mode cipher-mode})))]
-    (.init cipher cipher-mode-value (SecretKeySpec. secret-key "AES") gcm-iv-spec)
+        cipher-mode-value  (cond
+                             (= :encrypt cipher-mode) Cipher/ENCRYPT_MODE
+                             (= :decrypt cipher-mode) Cipher/DECRYPT_MODE
+                             :else (throw (ex-info "Wrong cipher mode" {:cipher-mode cipher-mode})))]
+    (.init cipher ^int cipher-mode-value (SecretKeySpec. secret-key "AES") gcm-iv-spec)
     cipher))
 
 

@@ -62,7 +62,7 @@
     (vfuture
       (when *server-ready-promise (deliver *server-ready-promise *server))
       (while (-> @*server :continue?)
-        (let [buffer (make-array Byte/TYPE max-packet-size)
+        (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
               packet (DatagramPacket. buffer (alength buffer))]
           (try
             (.receive server-socket packet)

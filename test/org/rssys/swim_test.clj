@@ -254,7 +254,11 @@
             node-object         (sut/new-node-object node-data1 cluster)]
         (is (= [] (.event_queue node-object)) "Event queue has current (default) value")
         (.put_event node-object prepared-left-event)
-        (is (= [prepared-left-event] (.event_queue node-object)) "Node has new event queue value")))
+        (is (= [prepared-left-event] (.event_queue node-object)) "Node has new event queue value")
+        (.put_event node-object [2])
+        (.put_event node-object [3])
+        (.put_event node-object [4])
+        (is (= 4 (.tx node-object)) "Every put event on node should increase tx value")))
 
     (testing "Take event from queue is successful"
       (let [prepared-left-event [(:left sut/event-code) (random-uuid)]
