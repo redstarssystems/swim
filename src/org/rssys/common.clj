@@ -1,7 +1,5 @@
 (ns org.rssys.common
   (:import
-    (clojure.lang
-      IFn)
     (java.util.concurrent
       ExecutorService
       Executors
