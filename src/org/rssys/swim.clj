@@ -46,6 +46,9 @@
 (s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::attempt-number]))
 (s/def ::ping-events (s/map-of ::neighbour-id ::ping-event))
 
+(s/def ::neighbour-tx ::tx)
+(s/def ::ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
+
 (s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
 (s/def ::event-queue vector?)
@@ -114,8 +117,8 @@
   ^Cluster [{:keys [id name desc secret-token nspace tags cluster-size] :as c}]
   (when-not (s/valid? ::cluster c)
     (throw (ex-info "Invalid cluster data" (->> c (s/explain-data ::cluster) spec-problems))))
-  (map->Cluster {:id     (or id (random-uuid)) :name name :desc desc :secret-token secret-token
-                 :nspace nspace :tags tags :secret-key (e/gen-secret-key secret-token)
+  (map->Cluster {:id           (or id (random-uuid)) :name name :desc desc :secret-token secret-token
+                 :nspace       nspace :tags tags :secret-key (e/gen-secret-key secret-token)
                  :cluster-size (or cluster-size 1)}))
 
 
@@ -150,7 +153,7 @@
                          :access          :direct
                          :restart-counter 0
                          :tx              0
-                         :payload {}
+                         :payload         {}
                          :updated-at      (System/currentTimeMillis)})))
 
 
@@ -325,7 +328,7 @@
                       :neighbours        {}
                       :restart-counter   (or restart-counter 0)
                       :tx                0
-                      :ping-events       {}                 ;; pings on the fly. we wait ack for them. key ::neighbour-id
+                      :ping-events       {}                  ;; pings on the fly. we wait ack for them. key ::neighbour-id
                       :event-queue       []                  ;; events that we'll send to random logN neighbours next time
                       :ping-round-buffer []                  ;; we take logN neighbour ids to send events from event queue
                       :payload           {}                  ;; data that this node claims in cluster about itself
@@ -349,7 +352,7 @@
            ISwimEvent
 
            (prepare [^PingEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.neighbour_id e) (.-attempt_number e)])
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx e) (.-neighbour_id e) (.-attempt_number e)])
 
            (restore [^PingEvent _ v]
              (if (and
@@ -367,7 +370,7 @@
                                     :restart-counter (.restart_counter n)
                                     :tx              (.tx n)
                                     :neighbour-id    neighbour-id
-                                    :attempt-number attempt-number})]
+                                    :attempt-number  attempt-number})]
     (if-not (s/valid? ::ping-event ping-event)
       (throw (ex-info "Invalid ping event" (spec-problems (s/explain-data ::ping-event ping-event))))
       ping-event)))
@@ -386,13 +389,12 @@
 ;;;;
 
 
-
 (defrecord AckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx]
 
            ISwimEvent
 
            (prepare [^AckEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.neighbour_id e) (.neighbour_tx e)])
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e) (.-neighbour_tx e)])
 
            (restore [^AckEvent _ v]
              (if (and
@@ -403,147 +405,26 @@
                (throw (ex-info "AckEvent vector has invalid structure" {:ack-vec v})))))
 
 
-(defrecord JoiningEvent [cmd-type id restart-counter tx host port]
-
-           ISwimEvent
-
-           (prepare [^JoiningEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-host e) (.-port e)])
-
-           (restore [^JoiningEvent _ v]
-             (if (and
-                   (vector? v)
-                   (= 6 (count v))
-                   (every? true? (map #(%1 %2) [#(= % (:join event-code)) uuid? nat-int? nat-int? string? nat-int?] v)))
-               (apply ->JoiningEvent v)
-               (throw (ex-info "JoinEvent vector has invalid structure" {:join-vec v})))))
+(defn new-ack
+  ^AckEvent [^NodeObject n ^PingEvent e]
+  (let [ack-event (map->AckEvent {:cmd-type        (:ack event-code)
+                                  :id              (.id n)
+                                  :restart-counter (.restart_counter n)
+                                  :tx              (.tx n)
+                                  :neighbour-id    (.-id e)
+                                  :neighbour-tx    (.-tx e)})]
+    (if-not (s/valid? ::ack-event ack-event)
+      (throw (ex-info "Invalid ack event" (spec-problems (s/explain-data ::ack-event ack-event))))
+      ack-event)))
 
 
-(defrecord NormalEvent [cmd-type id tx]
-           ISwimEvent
-           (prepare [^NormalEvent e]
-             [(.-cmd_type e) (.-id e) (.tx e)]))
 
+(defn empty-ack
+  ^AckEvent []
+  (map->AckEvent {:cmd-type        (:ack event-code)
+                  :id              (UUID. 0 0)
+                  :restart-counter 0
+                  :tx              0
+                  :neighbour-id    (UUID. 0 0)
+                  :neighbour-tx    0}))
 
-;;
-;;(defrecord SuspectEvent [cmd-type id]
-;;  ISwimEvent
-;;  (prepare [^SuspectEvent e]
-;;    [(.-cmd_type e) (.-id e)]))
-;;
-;;
-;;(defrecord LeftEvent [cmd-type id]
-;;  ISwimEvent
-;;  (prepare [^LeftEvent e]
-;;    [(.-cmd_type e) (.-id e)]))
-;;
-;;
-;;(defrecord DeadEvent [cmd-type id]
-;;  ISwimEvent
-;;  (prepare [^DeadEvent e]
-;;    [(.-cmd_type e) (.-id e)]))
-;;
-;;
-;;(defrecord PayloadEvent [cmd-type, id, data]
-;;  ISwimEvent
-;;  (prepare [^PayloadEvent e]
-;;    [(.-cmd_type e) (.-id e) (.-data e)]))
-;;
-;;
-;;(defrecord AntiEntropyEvent [cmd-type data]
-;;  ISwimEvent
-;;  (prepare [^AntiEntropyEvent e]
-;;    [(.-cmd_type e) (.-data e)]))
-;;
-;;
-;;
-;;
-;;
-;;
-;;
-;;(defn ^PingEvent restore-ping
-;;  "Resto"
-;;  [v]
-;;  (if (and
-;;        (vector? v)
-;;        (= 5 (count v))
-;;        (every? true? (map #(%1 %2) [#(= % (:ping event-code)) uuid? nat-int? nat-int? uuid?] v)))
-;;    (apply ->PingEvent v)
-;;    (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec v}))))
-;;
-;;
-;;(defn new-ack
-;;  [^Node n ^PingEvent e]
-;;  (->AckEvent
-;;    (:ack event-code) (:id n) (:restart-counter n) (:tx-counter n) (:id e) (:tx-counter e)))
-;;
-;;
-;;(defn prepare-ack
-;;  [^AckEvent e]
-;;  [(.cmd_type e) (.-id e) (.-restart_counter e) (.-tx_counter e) (.-receiver_id e) (.-receiver_tx_counter e)])
-;;
-;;
-;;(defn restore-ack
-;;  [^PersistentVector v]
-;;  (if (and
-;;        (vector? v)
-;;        (= 6 (count v))
-;;        (every? true? (map #(%1 %2) [#(= % (:ack event-code)) uuid? nat-int? nat-int? uuid? nat-int?] v)))
-;;    (apply ->AckEvent v)
-;;    (throw (ex-info "AckEvent vector has invalid structure" {:ack-vec v}))))
-;;
-;;
-;;(defn new-joining
-;;  [^Node n]
-;;  (->JoiningEvent
-;;    (:joining event-code) (:id n) (:restart-counter n) (:tx-counter n) (.-host n) (.-port n)))
-;;
-;;
-;;(defn prepare-joining
-;;  [^PingEvent this]
-;;  [(.cmd_type this) (.-id this) (.-restart_counter this) (.-tx_counter this) (.receiver_id this)])
-;;
-;;
-;;(defn restore-joining
-;;  [^PersistentVector ping-vec]
-;;  (if (and
-;;        (vector? ping-vec)
-;;        (= 5 (count ping-vec))
-;;        (every? true? (map #(%1 %2) [#(= % (:ping event-code)) uuid? nat-int? nat-int? uuid?] ping-vec)))
-;;    (apply ->PingEvent ping-vec)
-;;    (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec ping-vec}))))
-;;
-;;
-;;(comment
-;;
-;;  (def cluster (new-cluster {:id          #uuid "f876678d-f544-4fb8-a848-dc2c863aba6b"
-;;                             :name        "cluster1"
-;;                             :description "Test cluster1"
-;;                             :secret-key  "0123456789abcdef0123456789abcdef"
-;;                             :root-nodes  [{:host "127.0.0.1" :port 5376} {:host "127.0.0.1" :port 5377}]
-;;                             :nspace      "test-ns1"
-;;                             :tags        ["dc1" "rssys"]}))
-;;
-;;  (def node1 (new-node {:name "node1" :host "127.0.0.1" :port 5376 :cluster cluster :tags ["dc1" "node1"]}))
-;;  (def node2 (new-node {:name "node2" :host "127.0.0.2" :port 5377 :cluster cluster :tags ["dc1" "node2"]}))
-;;
-;;
-;;  (start node1 #(println (String. %)))
-;;
-;;  (udp/send-packet (.getBytes "hello world") "127.0.0.1" 5376)
-;;
-;;  (stop node1)
-;;
-;;  (def ping1 (new-ping (node-value node1) (random-uuid)))
-;;
-;;  (def prepared-ping1 (prepare ping1))
-;;  (restore-ping prepared-ping1)
-;;  (restore (empty-ping) prepared-ping1)
-;;
-;;  (count (serialize prepared-ping1))
-;;  (count (serialize ping1))
-;;
-;;  (def ack1 (new-ack (node-value node2) ping1))
-;;  )
-;;
-;;

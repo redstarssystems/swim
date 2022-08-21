@@ -5,14 +5,14 @@
     [matcho.core :refer [match]]
     [org.rssys.swim :as sut])
   (:import
-    (javax.crypto
-      Cipher)
     (org.rssys.scheduler
       MutablePool)
     (org.rssys.swim
+      AckEvent
       Cluster
       NeighbourNode
-      NodeObject)))
+      NodeObject
+      PingEvent)))
 
 
 ;;;;;;;;;;
@@ -32,8 +32,8 @@
    :port            5377
    :status          :alive
    :access          :direct
-   :restart-counter 0
-   :tx              1
+   :restart-counter 3
+   :tx              0
    :payload         {:tcp-port 4567}
    :updated-at      (System/currentTimeMillis)})
 
@@ -44,8 +44,8 @@
    :port            5378
    :status          :alive
    :access          :direct
-   :restart-counter 0
-   :tx              1
+   :restart-counter 5
+   :tx              0
    :payload         {:tcp-port 4567}
    :updated-at      (System/currentTimeMillis)})
 
@@ -56,15 +56,15 @@
    :port            5376
    :status          :alive
    :access          :direct
-   :restart-counter 0
-   :tx              1
+   :restart-counter 7
+   :tx              0
    :payload         {:tcp-port 4567}
    :updated-at      (System/currentTimeMillis)})
 
 
-(def node-data1 {:id #uuid "00000000-0000-0000-0000-000000000001" :host "127.0.0.1" :port 5376})
-(def node-data2 {:id #uuid "00000000-0000-0000-0000-000000000002" :host "127.0.0.1" :port 5377})
-(def node-data3 {:id #uuid "00000000-0000-0000-0000-000000000003" :host "127.0.0.1" :port 5378})
+(def node-data1 {:id #uuid "00000000-0000-0000-0000-000000000001" :host "127.0.0.1" :port 5376 :restart-counter 7})
+(def node-data2 {:id #uuid "00000000-0000-0000-0000-000000000002" :host "127.0.0.1" :port 5377 :restart-counter 5})
+(def node-data3 {:id #uuid "00000000-0000-0000-0000-000000000003" :host "127.0.0.1" :port 5378 :restart-counter 6})
 
 
 ;;;;;;;;;;
@@ -153,7 +153,7 @@
       (is (= #uuid "00000000-0000-0000-0000-000000000001" (.id node-object)) "Should be UUID value")
       (is (= cluster (.cluster node-object)) "Should be Cluster value")
       (is (= 1 (.cluster_size node-object)) "Should be Cluster size")
-      (is (= 0 (.restart_counter node-object)) "Should be restart counter value")
+      (is (= 7 (.restart_counter node-object)) "Should be restart counter value")
       (is (= 0 (.tx node-object)) "Should be tx value")
       (is (= {} (.payload node-object)) "Should be payload value")
       (is (= {} (.neighbours node-object)) "Should be neighbours value")
@@ -195,7 +195,7 @@
     (testing "Correct restart counter value should set successfully"
       (let [new-restart-counter 123
             node-object         (sut/new-node-object node-data1 cluster)]
-        (is (= 0 (:restart-counter (.value node-object))) "Node has current (default) restart counter value")
+        (is (= 7 (:restart-counter (.value node-object))) "Node has current restart counter value")
         (.set_restart_counter node-object new-restart-counter)
         (is (= new-restart-counter (:restart-counter (.value node-object))) "Node has new restart counter value")
 
@@ -283,7 +283,7 @@
             ping-event     (sut/new-ping node-object neighbour-id 1)]
         (is (= {} (.ping_events node-object)) "Node has empty (default) ping events table")
         (.upsert_ping node-object ping-event)
-        (is (= ping-event  (.ping_event node-object neighbour-id)) "Ping event should exist in a table")
+        (is (= ping-event (.ping_event node-object neighbour-id)) "Ping event should exist in a table")
         (is (= {neighbour-id ping-event} (.ping_events node-object)) "Ping table has new ping event")
         (.delete_ping node-object neighbour-id)
         (is (= {} (.ping_events node-object)) "Ping event should be deleted in a table")
@@ -330,27 +330,166 @@
 
 ;;;;;;;;;;
 
+(deftest new-ping-test
+
+  (testing "PingEvent creation"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          node2  (sut/new-node-object node-data2 cluster)
+          result (sut/new-ping node1 (.id node2) 1)]
+
+      (is (= PingEvent (type result)) "PingEvent has correct type")
+
+      (is (= #{:cmd-type :id :restart-counter :tx :neighbour-id :attempt-number}
+            (into #{} (keys result))) "PingEvent has expected keys")
+
+      (testing "PingEvent has correct structure and expected values"
+        (match result {:cmd-type        (:ping sut/event-code)
+                       :id              (.id node1)
+                       :restart-counter (.restart_counter node1)
+                       :tx              (.tx node1)
+                       :neighbour-id    (.id node2)
+                       :attempt-number  1})))))
+
+
+(deftest empty-ping-test
+
+  (testing "Empty PingEvent has correct structure"
+    (let [result (sut/empty-ping)]
+
+      (is (= PingEvent (type result)) "PingEvent has correct type")
+
+      (match result {:cmd-type        (:ping sut/event-code)
+                     :id              #uuid"00000000-0000-0000-0000-000000000000"
+                     :restart-counter 0
+                     :tx              0
+                     :neighbour-id    #uuid"00000000-0000-0000-0000-000000000000"
+                     :attempt-number  1}))))
+
+
+(deftest map->PingEvent-test
+
+  (testing "PingEvent"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          ping1  (sut/new-ping node1 #uuid "8acc376e-f90d-470b-aa58-400a339d9424" 42)
+          result (.prepare ping1)]
+
+      (testing "Prepare PingEvent to vector"
+        (match result [(:ping sut/event-code) (.-id ping1) (.-restart_counter ping1) (.-tx ping1) (.-neighbour_id ping1) (.-attempt_number ping1)]))
+
+      (testing "Restore PingEvent from vector"
+
+        (let [v           [0
+                           #uuid "00000000-0000-0000-0000-000000000001"
+                           7
+                           0
+                           #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
+                           42]
+              result-ping (.restore (sut/empty-ping) v)]
+
+          (is (= PingEvent (type result-ping)) "Should be PingEvent type")
+
+          (is (= result-ping ping1) "Restored PingEvent should be equals to original event")
+
+          (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
+                (.restore (sut/empty-ping) [])))
+
+          (testing "Wrong command type code"
+            (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
+                  (.restore (sut/empty-ping) [999
+                                              #uuid "00000000-0000-0000-0000-000000000001"
+                                              7
+                                              0
+                                              #uuid "8b8d59ca-f1c5-4c9e-a4db-6d09bfb2751c"
+                                              1])))))))))
+
+
+;;;;;;;;;;
+
+
+(deftest new-ack-test
+  (testing "AckEvent creation"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          node2  (sut/new-node-object node-data2 cluster)
+          ping1  (sut/new-ping node1 (.id node2) 42)
+          result (sut/new-ack node2 ping1)]
+
+      (is (= AckEvent (type result)) "PingEvent has correct type")
+
+      (is (= #{:cmd-type :id :restart-counter :tx :neighbour-id :neighbour-tx}
+            (into #{} (keys result))) "AckEvent has expected keys")
+
+      (testing "AckEvent has correct structure and values"
+        (match result {:cmd-type        (:ack sut/event-code)
+                       :id              (.id node2)
+                       :restart-counter (.restart_counter node2)
+                       :tx              (.tx node2)
+                       :neighbour-id    (.id node1)
+                       :neighbour-tx    (.tx node1)})))))
+
+
+(deftest empty-ack-test
+
+  (testing "Empty AckEvent has correct structure"
+    (let [result (sut/empty-ack)]
+
+      (is (= AckEvent (type result)) "AckEvent has correct type")
+
+      (match result {:cmd-type        (:ack sut/event-code)
+                     :id              #uuid"00000000-0000-0000-0000-000000000000"
+                     :restart-counter 0
+                     :tx              0
+                     :neighbour-id    #uuid"00000000-0000-0000-0000-000000000000"
+                     :neighbour-tx    0}))))
+
+
+(deftest map->AckEvent-test
+
+  (testing "AckEvent"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          node2  (sut/new-node-object node-data2 cluster)
+          ping1  (sut/new-ping node1 (.id node2) 42)
+          ack1   (sut/new-ack node2 ping1)
+          result (.prepare ack1)]
+
+      (testing "Prepare AckEvent to vector"
+        (match result [(:ack sut/event-code) (.id node2) (.restart_counter node2) (.tx node2) (.id node1) (.tx node1)]))
+
+      (testing "Restore AckEvent from vector"
+
+        (let [v          [1
+                          #uuid "00000000-0000-0000-0000-000000000002"
+                          5
+                          0
+                          #uuid "00000000-0000-0000-0000-000000000001"
+                          0]
+              result-ack (.restore (sut/empty-ack) v)]
+
+          (is (= AckEvent (type result-ack)) "Should be AckEvent type")
+
+          (is (= result-ack ack1) "Restored AckEvent should be equals to original event")
+
+          (is (thrown-with-msg? Exception #"AckEvent vector has invalid structure"
+                (.restore (sut/empty-ack) [])))
+
+          (testing "Wrong command type code"
+            (is (thrown-with-msg? Exception #"AckEvent vector has invalid structure"
+                  (.restore (sut/empty-ack) [999
+                                             #uuid "00000000-0000-0000-0000-000000000002"
+                                             5
+                                             0
+                                             #uuid "00000000-0000-0000-0000-000000000001"
+                                             1])))))))))
+
+
+;;;;;;;;;;
 
 (def node-object1 (sut/new-node-object node-data1 cluster))
 (def node-object2 (sut/new-node-object node-data2 cluster))
 (def node-object3 (sut/new-node-object node-data3 cluster))
 
+(def ping1 (sut/new-ping node-object1 (.id node-object2) 1))
 
-(def pe1 (sut/new-ping node-object1 (random-uuid) 1))
 
-
-;;
-;;(deftest new-node-test
-;;  (testing "Create Node instance is successful"
-;;    (let [result       (sut/new-node node1-data)
-;;          expected-set #{:id :name :host :port :cluster :continue? :status :neighbours-table :*udp-server
-;;                         :restart-counter :scheduler-pool :tx-counter :ping-ids :ping-data :tags}]
-;;      (is (instance? NodeObject result) "Should be a NodeObject")
-;;      (is (instance? Node @(:*node result)) "Atom should contain a Node instance")
-;;      (is (= (set (keys @(:*node result))) expected-set) "Key set in a Node instance should be as expected")
-;;      (is (thrown-with-msg? Exception #"Node values should correspond to spec"
-;;            (sut/new-node {:a 1}))))))
-;;
 ;;
 ;;(deftest node-start-test
 ;;  (testing "Node start is successful"
@@ -382,110 +521,6 @@
 ;;
 ;;        (is (#{:stopped} (:status (sut/node-value node-object))) "Node should have stopped status")))))
 ;;
-;;
-
-;;;;;;;;;;;;
-;;
-;;(deftest new-ping-test
-;;
-;;  (testing "PingEvent creation"
-;;    (let [node1  (sut/new-node node1-data)
-;;          result (sut/new-ping (sut/node-value node1) (random-uuid))]
-;;
-;;      (is (= PingEvent (type result)) "PingEvent has correct type")
-;;
-;;      (is (= #{:cmd-type :id :restart-counter :tx-counter :receiver-id}
-;;            (into #{} (keys result))) "PingEvent has expected keys")
-;;
-;;      (testing "PingEvent has correct structure"
-;;        (match result {:cmd-type        0
-;;                       :id              uuid?
-;;                       :restart-counter nat-int?
-;;                       :tx-counter      nat-int?
-;;                       :receiver-id     uuid?})))))
-;;
-;;
-;;(deftest empty-ping-test
-;;
-;;  (testing "Empty PingEvent has correct structure"
-;;    (let [result (sut/empty-ping)]
-;;
-;;      (is (= PingEvent (type result)) "PingEvent has correct type")
-;;
-;;      (match result {:cmd-type        0
-;;                     :id              #uuid"00000000-0000-0000-0000-000000000000"
-;;                     :restart-counter 0
-;;                     :tx-counter      0
-;;                     :receiver-id     #uuid"00000000-0000-0000-0000-000000000000"}))))
-;;
-;;
-;;(deftest map->PingEvent-test
-;;
-;;  (testing "Prepare PingEvent to vector"
-;;    (let [node1  (sut/new-node node1-data)
-;;          ping1  (sut/new-ping (sut/node-value node1) (random-uuid))
-;;          result (.prepare ping1)]
-;;
-;;      (match result [0 uuid? 0 0 uuid?])
-;;      (match result [(:ping sut/event-code) (.-id ping1) (.-restart_counter ping1) (.-tx_counter ping1) (.-receiver_id ping1)])))
-;;
-;;  (testing "Restore PingEvent from vector"
-;;
-;;    (let [v      [0 #uuid "742b6766-2867-46b9-b9b1-828f7dbaeb2a" 1 2 #uuid "5be622f2-8600-4c13-8298-4795f7f000c9"]
-;;          result (.restore (sut/empty-ping) v)]
-;;
-;;      (is (= PingEvent (type result)))
-;;
-;;      (match result {:cmd-type        0
-;;                     :id              #uuid "742b6766-2867-46b9-b9b1-828f7dbaeb2a"
-;;                     :restart-counter 1
-;;                     :tx-counter      2
-;;                     :receiver-id     #uuid "5be622f2-8600-4c13-8298-4795f7f000c9"})
-;;
-;;      (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
-;;            (.restore (sut/empty-ping) [])))
-;;
-;;      (testing "Wrong command type code"
-;;        (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
-;;              (.restore (sut/empty-ping) [1 #uuid "742b6766-2867-46b9-b9b1-828f7dbaeb2a" 1 2 #uuid "5be622f2-8600-4c13-8298-4795f7f000c9"]))))
-;;
-;;      (testing "Wrong structure"
-;;        (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
-;;              (.restore (sut/empty-ping) [0 1 2 3 4])))))))
-;;
-;;
-;;;;;;;;;;;;
-;;
-;;
-;;(deftest new-ack-test
-;;  (testing "AckEvent"
-;;    (let [node1  (sut/new-node node1-data)
-;;          node2  (sut/new-node node2-data)
-;;          ping   (sut/new-ping (sut/node-value node1) (-> node2 sut/node-value :id))
-;;          result (sut/new-ack (sut/node-value node2) ping)]
-;;
-;;      (is (= AckEvent (type result)) "PingEvent has correct type")
-;;
-;;      (is (= #{:cmd-type :id :restart-counter :tx-counter :receiver-id :receiver-tx-counter}
-;;            (into #{} (keys result))) "AckEvent has keys as expected")
-;;
-;;      (testing "AckEvent has correct structure"
-;;        (match result {:cmd-type            1
-;;                       :id                  (-> node2 sut/node-value :id)
-;;                       :restart-counter     nat-int?
-;;                       :tx-counter          nat-int?
-;;                       :receiver-id         uuid?
-;;                       :receiver-tx-counter nat-int?})))))
-;;
-;;
-;;
-;;
-;;
-;;
-;;
-;;
-;;(deftest map->AckEvent-test)
-
 
 
 
