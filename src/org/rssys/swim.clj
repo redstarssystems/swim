@@ -184,6 +184,7 @@
 
   ;; Setters
   (set-cluster [this cluster] "Set new cluster for this node")
+  (set-status [this new-status] "Set new status for this node")
   (set-cluster-size [this new-cluster-size] "Set new cluster size") ;; this is event for cluster
   (set-payload [this payload] "Set new payload for this node") ;; and announce payload change event to cluster
   (set-restart-counter [this new-value] "Set restart-counter to particular value")
@@ -237,6 +238,11 @@
              (if-not (s/valid? ::cluster-size new-cluster-size)
                (throw (ex-info "Invalid cluster size" (->> new-cluster-size (s/explain-data ::cluster-size) spec-problems)))
                (swap! (:*node this) assoc :cluster (assoc (.cluster this) :cluster-size new-cluster-size))))
+
+           (set-status [^NodeObject this new-status]
+             (if-not (s/valid? ::status new-status)
+               (throw (ex-info "Invalid node status" (->> new-status (s/explain-data ::status) spec-problems)))
+               (swap! (:*node this) assoc :status new-status)))
 
            (set-payload [^NodeObject this payload]
              ;;TODO: send event to cluster about new payload
@@ -427,4 +433,8 @@
                   :tx              0
                   :neighbour-id    (UUID. 0 0)
                   :neighbour-tx    0}))
+
+
+;;;;;;;;;;
+
 

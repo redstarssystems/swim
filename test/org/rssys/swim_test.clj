@@ -192,6 +192,17 @@
         (.set_payload node-object new-payload)
         (is (= new-payload (.payload node-object)) "Node has new payload value")))
 
+    (testing "Correct node status should set successfully"
+      (let [new-status  :left
+            node-object (sut/new-node-object node-data1 cluster)]
+        (is (= :stop (.status node-object)) "Node has stop status")
+        (.set_status node-object new-status)
+        (is (= new-status (.status node-object)) "Node has new status")
+
+        (testing "Wrong data is caught by spec"
+          (is (thrown-with-msg? Exception #"Invalid node status"
+                (.set_status node-object :wrong-value))))))
+
     (testing "Correct restart counter value should set successfully"
       (let [new-restart-counter 123
             node-object         (sut/new-node-object node-data1 cluster)]
