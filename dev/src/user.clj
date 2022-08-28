@@ -1,14 +1,29 @@
 (ns user
   (:require
+    [clojure.stacktrace :as trace]
     [hashp.core]
-    [puget.printer]))
+    [puget.printer :refer [cprint] :rename {cprint cprn}]))
 
 
-(defn run-common
+(defn t-prn>
+  [v]
+  (when (:org.rssys.swim/cmd v)
+    (cprn v)
+    (cprn "-----------------------------------------------------")))
+
+
+(defn run-dev
   []
-  (set! *warn-on-reflection* true)
-  (add-tap (bound-fn* puget.printer/cprint)))
-
+  (add-tap t-prn>)
+  (set! *warn-on-reflection* true))
 
 (comment
-  (run-common))
+  (run-dev)
+  (add-tap (bound-fn* puget.printer/cprint))
+  (tap> {:org.rssys.swim/cmd true :a 1 :b "2"})
+
+  (remove-tap t-prn>)
+  )
+
+
+
