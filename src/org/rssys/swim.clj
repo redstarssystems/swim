@@ -34,6 +34,13 @@
     nil))
 
 
+(defmacro safe
+  [& body]
+  `(try
+     ~@body
+     (catch Exception e#)))
+
+
 ;;;;;;;;;;;;;;;;
 ;; SWIM spec
 ;;;;;;;;;;;;;;;;
@@ -563,7 +570,7 @@
   [^NodeObject this ^PingEvent e]
 
   #_(cond
-    (not (suitable-restart-counter? this e)) ())
+      (not (suitable-restart-counter? this e)) ())
   ;; проверить restart counter у соседа и если он меньше чем нам известно, то ответить что узел нуждается в перезагрузке
   ;; прекратить дальнейшую обработку
   ;; проверить, знаем ли мы такого соседа. Если нет, то внести в таблицу соседей.
@@ -575,19 +582,19 @@
   ;; установить статус соседа как :alive
 
   #_(when-let [nb ^NeighbourNode (.neighbour this (.-id e))]
-    (when (not=
-            [(.-host e) (.-port e)]
-            [(.-host nb) (.-port nb)])
-      ())
-    (.upsert_neighbour this (new-neighbour-node {:id              (.-id e)
-                                                 :host            (.-host e)
-                                                 :port            (.-port e)
-                                                 :status          :alive
-                                                 :access          :direct
-                                                 :restart-counter (.-restart_counter e)
-                                                 :tx              (.-tx e)
-                                                 :payload         {}
-                                                 :updated-at      (System/currentTimeMillis)})))
+      (when (not=
+              [(.-host e) (.-port e)]
+              [(.-host nb) (.-port nb)])
+        ())
+      (.upsert_neighbour this (new-neighbour-node {:id              (.-id e)
+                                                   :host            (.-host e)
+                                                   :port            (.-port e)
+                                                   :status          :alive
+                                                   :access          :direct
+                                                   :restart-counter (.-restart_counter e)
+                                                   :tx              (.-tx e)
+                                                   :payload         {}
+                                                   :updated-at      (System/currentTimeMillis)})))
   #_(let [neighbour-id (.-id e)                             ;; от кого получили пинг
 
           ])
@@ -605,7 +612,7 @@
 (defn udp-dispatcher-fn
   [^NodeObject this ^bytes udp-data]
   (let [secret-key     (-> this .cluster :secret-key)
-        decrypted-data (try (e/decrypt-data ^bytes secret-key ^bytes udp-data) (catch Exception _)) ;; Ignore bad messages
+        decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes udp-data)) ;; Ignore bad messages
         events-vector  (deserialize ^bytes decrypted-data)]
     (if (vector? events-vector)
       (doseq [serialized-event events-vector]

@@ -714,3 +714,11 @@
     (testing "Nil or absent value for neighbour id will not crash"
       (is (not (sut/suitable-incarnation? node2 nil)))
       (is (not (sut/suitable-incarnation? node2 {:id 123}))))))
+
+
+(deftest safe-test
+  (is (= nil (sut/safe (/ 1 0))) "Any Exceptions should be prevented")
+  (is (= 1/2 (sut/safe (/ 1 2)))) "Any normal expression should be succeed")
+
+
+(deftest udp-dispatcher-fn-test)
