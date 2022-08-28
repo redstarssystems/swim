@@ -3,6 +3,7 @@
     [clojure.spec.alpha :as s]
     [clojure.test :refer [deftest is testing]]
     [matcho.core :refer [match]]
+    [org.rssys.encrypt :as e]
     [org.rssys.swim :as sut])
   (:import
     (org.rssys.scheduler
@@ -81,7 +82,7 @@
 (deftest new-neighbour-node-test
   (testing "Create NeighbourNode instance is successful"
     (let [result1 (sut/new-neighbour-node neighbour-data1)
-          result2 (sut/new-neighbour-node "127.0.0.1" 5379)]
+          result2 (sut/new-neighbour-node #uuid "00000000-0000-0000-0000-000000000000" "127.0.0.1" 5379)]
       (is (instance? NeighbourNode result1) "Should be NeighbourNode instance")
       (is (instance? NeighbourNode result2) "Should be NeighbourNode instance")
       (is (s/valid? ::sut/neighbour-node result1))
@@ -117,6 +118,7 @@
          :restart-counter   0
          :tx                0
          :ping-events       {}
+         :ack-events        {}
          :payload           {}
          :event-queue       []
          :ping-round-buffer []
@@ -143,6 +145,7 @@
                      :restart-counter   ::sut/restart-counter
                      :tx                ::sut/tx
                      :ping-events       ::sut/ping-events
+                     :ack-events        ::sut/ack-events
                      :payload           ::sut/payload
                      :scheduler-pool    ::sut/scheduler-pool
                      :*udp-server       ::sut/*udp-server
@@ -151,6 +154,8 @@
 
       ;; Tests for getters
       (is (= #uuid "00000000-0000-0000-0000-000000000001" (.id node-object)) "Should be UUID value")
+      (is (= "127.0.0.1" (.host node-object)))
+      (is (= 5376 (.port node-object)))
       (is (= cluster (.cluster node-object)) "Should be Cluster value")
       (is (= 1 (.cluster_size node-object)) "Should be Cluster size")
       (is (= 7 (.restart_counter node-object)) "Should be restart counter value")
@@ -159,7 +164,8 @@
       (is (= {} (.neighbours node-object)) "Should be neighbours value")
       (is (= :stop (.status node-object)) "Should be a node status value")
       (is (= [] (.event_queue node-object)) "Event queue should be a vector")
-      (is (= {} (.ping_events node-object)) "Ping events should be a map")))
+      (is (= {} (.ping_events node-object)) "Ping events should be a map")
+      (is (= {} (.ack_events node-object)) "Ack events should be a map")))
 
   (testing "Setters should set correct values"
 
@@ -184,6 +190,12 @@
           (is (thrown-with-msg? Exception #"Node is not stopped"
                 (swap! (:*node node-object) assoc :status :left)
                 (.set_cluster node-object new-cluster))))))
+
+    (testing "Increment tx should be successful"
+      (let [node-object (sut/new-node-object node-data1 cluster)]
+        (is (= 0 (.tx node-object)) "Node has current (default) value")
+        (.inc_tx node-object)
+        (is (= 1 (.tx node-object)) "Node has expected tx value")))
 
     (testing "Correct payload value should set successfully"
       (let [new-payload {:tcp-port 1234 :role "data node"}
@@ -220,6 +232,7 @@
         (is (= {} (.neighbours node-object)) "Node has current (default) neighbours value")
         (.upsert_neighbour node-object neighbour-node)
         (is (= (-> neighbour-node (dissoc :updated-at)) (-> node-object .neighbours (get (:id neighbour-node)) (dissoc :updated-at))) "Node has new neighbours value")
+        (is (= (-> neighbour-node (dissoc :updated-at)) (-> node-object (.neighbour (:id neighbour-node)) (dissoc :updated-at))) "Neighbour getter by id works")
 
         (testing "Wrong data is caught by spec"
           (is (thrown-with-msg? Exception #"Invalid neighbour node data"
@@ -292,16 +305,31 @@
             node-object    (sut/new-node-object node-data1 cluster)
             neighbour-id   (.-id neighbour-node)
             ping-event     (sut/new-ping node-object neighbour-id 1)]
-        (is (= {} (.ping_events node-object)) "Node has empty (default) ping events table")
+        (is (= {} (.ping_events node-object)) "Node has empty (default) ping events map")
         (.upsert_ping node-object ping-event)
-        (is (= ping-event (.ping_event node-object neighbour-id)) "Ping event should exist in a table")
-        (is (= {neighbour-id ping-event} (.ping_events node-object)) "Ping table has new ping event")
+        (is (= ping-event (.ping_event node-object neighbour-id)) "Ping event should exist in map")
+        (is (= {neighbour-id ping-event} (.ping_events node-object)) "Ping map has new ping event")
         (.delete_ping node-object neighbour-id)
-        (is (= {} (.ping_events node-object)) "Ping event should be deleted in a table")
+        (is (= {} (.ping_events node-object)) "Ping event should be deleted from map")
 
         (testing "Wrong data is caught by spec"
           (is (thrown-with-msg? Exception #"Invalid ping event data"
-                (.upsert_ping node-object {:a :bad-value}))))))))
+                (.upsert_ping node-object {:a :bad-value}))))))
+
+    (testing "Ack event getters/setters test"
+      (let [node-object1 (sut/new-node-object node-data1 cluster)
+            node-object2 (sut/new-node-object node-data2 cluster)
+            ping-event   (sut/new-ping node-object1 (.id node-object2) 1)
+            ack-event    (sut/new-ack node-object2 ping-event)]
+        (is (= {} (.ack_events node-object2)) "Node has empty (default) ping events map")
+        (.upsert_ack node-object2 ack-event)
+        (is (= {(.id node-object1) ack-event} (.ack_events node-object2)) "Ack event should exist in map")
+        (.delete_ack node-object2 (.id node-object1))
+        (is (= {} (.ack_events node-object2)) "Ack event should be deleted from map")
+
+        (testing "Wrong data is caught by spec"
+          (is (thrown-with-msg? Exception #"Invalid ack event data"
+                (.upsert_ack node-object1 {:a :bad-value}))))))))
 
 
 ;;;;;;;;;;
@@ -350,12 +378,14 @@
 
       (is (= PingEvent (type result)) "PingEvent has correct type")
 
-      (is (= #{:cmd-type :id :restart-counter :tx :neighbour-id :attempt-number}
+      (is (= #{:cmd-type :id :host :port :restart-counter :tx :neighbour-id :attempt-number}
             (into #{} (keys result))) "PingEvent has expected keys")
 
       (testing "PingEvent has correct structure and expected values"
         (match result {:cmd-type        (:ping sut/event-code)
                        :id              (.id node1)
+                       :host            (.host node1)
+                       :port            (.port node1)
                        :restart-counter (.restart_counter node1)
                        :tx              (.tx node1)
                        :neighbour-id    (.id node2)
@@ -385,12 +415,14 @@
           result (.prepare ping1)]
 
       (testing "Prepare PingEvent to vector"
-        (match result [(:ping sut/event-code) (.-id ping1) (.-restart_counter ping1) (.-tx ping1) (.-neighbour_id ping1) (.-attempt_number ping1)]))
+        (match result [(:ping sut/event-code) (.-id ping1) (.-host ping1) (.-port ping1) (.-restart_counter ping1) (.-tx ping1) (.-neighbour_id ping1) (.-attempt_number ping1)]))
 
       (testing "Restore PingEvent from vector"
 
         (let [v           [0
                            #uuid "00000000-0000-0000-0000-000000000001"
+                           "127.0.0.1"
+                           5376
                            7
                            0
                            #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
@@ -501,6 +533,22 @@
 (def ping1 (sut/new-ping node-object1 (.id node-object2) 1))
 
 
+(comment
+  (.start node-object1 sut/node-process-fn sut/udp-dispatcher-fn)
+  (.stop ^NodeObject node-object1)
+
+
+  (let [ping1 (sut/new-ping node-object1 (.id node-object2) 1)
+        {:keys [host port]} (.value node-object1)]
+    (org.rssys.udp/send-packet
+      (e/encrypt-data
+        (-> node-object1 .cluster :secret-key)
+        (sut/serialize [(.prepare ping1)]))
+      host port))
+  )
+
+
+
 ;;
 ;;(deftest node-start-test
 ;;  (testing "Node start is successful"
@@ -535,9 +583,134 @@
 
 
 
+(deftest suitable-restart-counter?-test
+  (let [node1 (sut/new-node-object node-data1 cluster)
+        node2 (sut/new-node-object node-data2 cluster)
+        ping1 (sut/new-ping node1 (.id node2) 42)]
 
 
+    (testing "Normal restart counter from ping should be accepted"
+      ;; add new normal neighbour in map
+      (.upsert_neighbour node2 (sut/new-neighbour-node {:id              (.-id ping1)
+                                                        :host            (.-host ping1)
+                                                        :port            (.-port ping1)
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter (.-restart_counter ping1)
+                                                        :tx              (.-tx ping1)
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (true? (sut/suitable-restart-counter? node2 ping1))))
 
 
+    (testing "Restart counter from ping should be denied"
+      ;; add neighbour with restart counter more than ping has
+      (.upsert_neighbour node2 (sut/new-neighbour-node {:id              (.-id ping1)
+                                                        :host            (.-host ping1)
+                                                        :port            (.-port ping1)
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter (inc (.-restart_counter ping1)) ;;
+                                                        :tx              (.-tx ping1)
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (not (sut/suitable-restart-counter? node2 ping1))))
+
+    (testing "Nil or absent value for neighbour id will not crash"
+      (is (not (sut/suitable-restart-counter? node2 nil)))
+      (is (not (sut/suitable-restart-counter? node2 {:id 123}))))))
 
 
+(deftest suitable-tx?-test
+  (let [node1 (sut/new-node-object node-data1 cluster)
+        node2 (sut/new-node-object node-data2 cluster)
+        ping1 (sut/new-ping node1 (.id node2) 42)]
+
+
+    (testing "Normal tx from ping should be accepted"
+      ;; add new normal neighbour in map
+      (.upsert_neighbour node2 (sut/new-neighbour-node {:id              (.-id ping1)
+                                                        :host            (.-host ping1)
+                                                        :port            (.-port ping1)
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter (.-restart_counter ping1)
+                                                        :tx              (.-tx ping1)
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (true? (sut/suitable-tx? node2 ping1))))
+
+
+    (testing "tx from ping should be denied"
+      ;; add neighbour with tx more than ping has
+      (.upsert_neighbour node2 (sut/new-neighbour-node {:id              (.-id ping1)
+                                                        :host            (.-host ping1)
+                                                        :port            (.-port ping1)
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter (.-restart_counter ping1) ;;
+                                                        :tx              (inc (.-tx ping1))
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (not (sut/suitable-tx? node2 ping1))))
+
+    (testing "Nil or absent value for neighbour id will not crash"
+      (is (not (sut/suitable-tx? node2 nil)))
+      (is (not (sut/suitable-tx? node2 {:id 123}))))))
+
+
+(deftest suitable-incarnation?-test
+  (let [node1 (sut/new-node-object node-data1 cluster)
+        node2 (sut/new-node-object node-data2 cluster)
+        ping1 (sut/new-ping node1 (.id node2) 42)]
+
+    (testing "ping from normal neighbour should be accepted"
+      ;; add new normal neighbour in map
+      (.upsert_neighbour node2 (sut/new-neighbour-node {:id              (.-id ping1)
+                                                        :host            (.-host ping1)
+                                                        :port            (.-port ping1)
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter (.-restart_counter ping1)
+                                                        :tx              (.-tx ping1)
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (true? (sut/suitable-incarnation? node2 ping1))))
+
+
+    (testing "ping with older tx should be denied"
+      ;; add neighbour with tx more than ping has
+      (.upsert_neighbour node2 (sut/new-neighbour-node {:id              (.-id ping1)
+                                                        :host            (.-host ping1)
+                                                        :port            (.-port ping1)
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter (.-restart_counter ping1) ;;
+                                                        :tx              (inc (.-tx ping1))
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (not (sut/suitable-incarnation? node2 ping1))))
+
+    (testing "ping with older restart counter should be denied"
+      ;; add neighbour with tx more than ping has
+      (.upsert_neighbour node2 (sut/new-neighbour-node {:id              (.-id ping1)
+                                                        :host            (.-host ping1)
+                                                        :port            (.-port ping1)
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter (inc (.-restart_counter ping1)) ;;
+                                                        :tx              (.-tx ping1)
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (not (sut/suitable-incarnation? node2 ping1))))
+
+    (testing "Nil or absent value for neighbour id will not crash"
+      (is (not (sut/suitable-incarnation? node2 nil)))
+      (is (not (sut/suitable-incarnation? node2 {:id 123}))))))
