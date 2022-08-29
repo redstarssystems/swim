@@ -871,3 +871,51 @@
                                                5568])))))))))
 
 
+
+(deftest build-anti-entropy-data-test
+  (let [node1 (sut/new-node-object node-data1 cluster)
+        node2 (sut/new-node-object node-data2 cluster)
+        node3 (sut/new-node-object node-data3 cluster)]
+
+    (testing "Anti entropy is build successfully"
+      ;; add new normal neighbour in map
+      (.upsert_neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000002"
+                                                        :host            "127.0.0.1"
+                                                        :port            5432
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter 2
+                                                        :tx              2
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+      (.upsert_neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000003"
+                                                        :host            "127.0.0.1"
+                                                        :port            5433
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter 3
+                                                        :tx              3
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+      (.upsert_neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000004"
+                                                        :host            "127.0.0.1"
+                                                        :port            5434
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter 4
+                                                        :tx              4
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+      (.upsert_neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000005"
+                                                        :host            "127.0.0.1"
+                                                        :port            5434
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter 5
+                                                        :tx              5
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}))
+
+      (is (= 2 (count (sut/build-anti-entropy-data node1))) "Default size of vector as expected")
+      (is (= 4 (count (sut/build-anti-entropy-data node1 :num 4))) "Size of vector as requested")
+      (is (every? #(instance? NeighbourNode %) (sut/build-anti-entropy-data node1)) "Every value in vector is NeighbourNode"))))

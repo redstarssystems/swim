@@ -646,6 +646,22 @@
   (= [true true] [(suitable-restart-counter? this e) (suitable-tx? this e)]))
 
 
+;;;;;;;;;;
+
+(defn build-anti-entropy-data
+  "Build anti-entropy data – subset of known nodes from neighbours map.
+  This data is propagated from node to node and thus nodes can get knowledge about unknown hosts.
+  To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
+  if node has older data.
+  Returns vector of known neighbors size of `num`."
+  [^NodeObject this & {:keys [num] :or {num 2}}]
+  (->>
+    (.neighbours this)
+    vals
+    shuffle
+    (take num)
+    vec))
+
 
 (defmulti process-incoming-event (fn [this e] (type e)))
 
