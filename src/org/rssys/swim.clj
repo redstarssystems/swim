@@ -49,6 +49,8 @@
 (s/def ::neighbour-id ::id)
 (s/def ::host string?)
 (s/def ::port (s/and pos-int? #(< % 65536)))
+(s/def ::neighbour-host ::host)
+(s/def ::neighbour-port ::port)
 (s/def ::name string?)
 (s/def ::desc string?)
 (s/def ::status #{:stop :join :alive :suspect :left :dead :unknown})
@@ -75,8 +77,11 @@
 (s/def ::neighbour-tx ::tx)
 (s/def ::ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 
+
 ;; ::neighbour-id - dead node
 (s/def ::dead-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
+
+(s/def ::probe-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-host ::neighbour-port]))
 
 (s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
@@ -91,7 +96,7 @@
 
 
 (def event-code
-  {:ping 0 :ack 1 :join 2 :alive 3 :suspect 4 :left 5 :dead 6 :payload 7 :anti-entropy 8})
+  {:ping 0 :ack 1 :join 2 :alive 3 :suspect 4 :left 5 :dead 6 :payload 7 :anti-entropy 8 :probe 9})
 
 
 (defn spec-problems
@@ -497,6 +502,7 @@
                   :neighbour-id    (UUID. 0 0)
                   :neighbour-tx    0}))
 
+
 ;;;;;
 
 (defrecord DeadEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx]
@@ -538,6 +544,53 @@
                    :neighbour-id    (UUID. 0 0)
                    :neighbour-tx    0}))
 
+
+;;;;
+
+(defrecord ProbeEvent [cmd-type id host port restart-counter tx neighbour-host neighbour-port]
+
+           ISwimEvent
+
+           (prepare [^ProbeEvent e]
+             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e) (.-neighbour_host e) (.-neighbour_port e)])
+
+           (restore [^ProbeEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 8 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:probe event-code)) uuid? string? pos-int? nat-int? nat-int? string? pos-int?] v)))
+               (apply ->ProbeEvent v)
+               (throw (ex-info "ProbeEvent vector has invalid structure" {:probe-vec v})))))
+
+
+(defn new-probe
+  ^ProbeEvent [^NodeObject n ^String neighbour-host neighbour-port]
+  (let [probe-event (map->ProbeEvent {:cmd-type        (:probe event-code)
+                                      :id              (.id n)
+                                      :host            (.host n)
+                                      :port            (.port n)
+                                      :restart-counter (.restart_counter n)
+                                      :tx              (.tx n)
+                                      :neighbour-host  neighbour-host
+                                      :neighbour-port  neighbour-port})]
+    (if-not (s/valid? ::probe-event probe-event)
+      (throw (ex-info "Invalid probe event" (spec-problems (s/explain-data ::probe-event probe-event))))
+      probe-event)))
+
+
+(defn empty-probe
+  ^ProbeEvent []
+  (map->ProbeEvent {:cmd-type        (:probe event-code)
+                    :id              (UUID. 0 0)
+                    :host            "localhost"
+                    :port            0
+                    :restart-counter 0
+                    :tx              0
+                    :neighbour-host  "localhost"
+                    :neighbour-port  0}))
+
+
+;;;;
 
 
 

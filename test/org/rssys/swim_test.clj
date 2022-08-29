@@ -14,7 +14,8 @@
       DeadEvent
       NeighbourNode
       NodeObject
-      PingEvent)))
+      PingEvent
+      ProbeEvent)))
 
 
 ;;;;;;;;;;
@@ -312,8 +313,7 @@
 
         (testing "Wrong data is caught by spec"
           (is (thrown-with-msg? Exception #"Invalid ping event data"
-                (.upsert_ping node-object {:a :bad-value}))))))
-    ))
+                (.upsert_ping node-object {:a :bad-value}))))))))
 
 
 ;;;;;;;;;;
@@ -385,6 +385,8 @@
 
       (match result {:cmd-type        (:ping sut/event-code)
                      :id              #uuid"00000000-0000-0000-0000-000000000000"
+                     :host            "localhost"
+                     :port            0
                      :restart-counter 0
                      :tx              0
                      :neighbour-id    #uuid"00000000-0000-0000-0000-000000000000"
@@ -552,7 +554,7 @@
     (let [node1  (sut/new-node-object node-data1 cluster)
           node2  (sut/new-node-object node-data2 cluster)
           ping1  (sut/new-ping node1 (.id node2) 42)
-          dead1   (sut/new-dead node2 ping1)
+          dead1  (sut/new-dead node2 ping1)
           result (.prepare dead1)]
 
       (testing "Prepare DeadEvent to vector"
@@ -560,12 +562,12 @@
 
       (testing "Restore DeadEvent from vector"
 
-        (let [v          [6
-                          #uuid "00000000-0000-0000-0000-000000000002"
-                          5
-                          0
-                          #uuid "00000000-0000-0000-0000-000000000001"
-                          0]
+        (let [v           [6
+                           #uuid "00000000-0000-0000-0000-000000000002"
+                           5
+                           0
+                           #uuid "00000000-0000-0000-0000-000000000001"
+                           0]
               result-dead (.restore (sut/empty-dead) v)]
 
           (is (= DeadEvent (type result-dead)) "Should be DeadEvent type")
@@ -578,11 +580,11 @@
           (testing "Wrong command type code"
             (is (thrown-with-msg? Exception #"DeadEvent vector has invalid structure"
                   (.restore (sut/empty-dead) [999
-                                             #uuid "00000000-0000-0000-0000-000000000002"
-                                             5
-                                             0
-                                             #uuid "00000000-0000-0000-0000-000000000001"
-                                             1])))))))))
+                                              #uuid "00000000-0000-0000-0000-000000000002"
+                                              5
+                                              0
+                                              #uuid "00000000-0000-0000-0000-000000000001"
+                                              1])))))))))
 
 
 
@@ -783,5 +785,89 @@
   (is (= 1/2 (sut/safe (/ 1 2)))) "Any normal expression should be succeed")
 
 
-(deftest udp-dispatcher-fn-test)
+;;(deftest udp-dispatcher-fn-test)
+
+
+;;;;;;;;;;
+
+(deftest new-probe-test
+
+  (testing "ProbeEvent creation"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          node2  (sut/new-node-object node-data2 cluster)
+          result (sut/new-probe node1 (.host node2) (.port node2))]
+
+      (is (= ProbeEvent (type result)) "ProbeEvent has correct type")
+
+      (is (= #{:cmd-type :id :host :port :restart-counter :tx :neighbour-host :neighbour-port}
+            (into #{} (keys result))) "ProbeEvent has expected keys")
+
+      (testing "ProbeEvent has correct structure and expected values"
+        (match result {:cmd-type        (:probe sut/event-code)
+                       :id              (.id node1)
+                       :host            (.host node1)
+                       :port            (.port node1)
+                       :restart-counter (.restart_counter node1)
+                       :tx              (.tx node1)
+                       :neighbour-host  (.host node2)
+                       :neighbour-port  (.port node2)})))))
+
+
+(deftest empty-probe-test
+
+  (testing "Empty ProbeEvent has correct structure"
+    (let [result (sut/empty-probe)]
+
+      (is (= ProbeEvent (type result)) "ProbeEvent has correct type")
+
+      (match result {:cmd-type       (:probe sut/event-code)
+                     :id              #uuid"00000000-0000-0000-0000-000000000000"
+                     :host            "localhost"
+                     :port            0
+                     :restart-counter 0
+                     :tx              0
+                     :neighbour-host  "localhost"
+                     :neighbour-port  0}))))
+
+
+(deftest map->ProbeEvent-test
+
+  (testing "ProbeEvent"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          probe  (sut/new-probe node1 "1.2.3.4" 5568)
+          result (.prepare probe)]
+
+      (testing "Prepare ProbeEvent to vector"
+        (match result [(:probe sut/event-code) (.-id probe) (.-host probe) (.-port probe) (.-restart_counter probe) (.-tx probe) (.-neighbour_host probe) (.-neighbour_port probe)]))
+
+      (testing "Restore ProbeEvent from vector"
+
+        (let [v           [9
+                           #uuid "00000000-0000-0000-0000-000000000001"
+                           "127.0.0.1"
+                           5376
+                           7
+                           0
+                           "1.2.3.4"
+                           5568]
+              result-probe (.restore (sut/empty-probe) v)]
+
+          (is (= ProbeEvent (type result-probe)) "Should be ProbeEvent type")
+
+          (is (= result-probe probe) "Restored ProbeEvent should be equals to original event")
+
+          (is (thrown-with-msg? Exception #"ProbeEvent vector has invalid structure"
+                (.restore (sut/empty-probe) [])))
+
+          (testing "Wrong command type code"
+            (is (thrown-with-msg? Exception #"ProbeEvent vector has invalid structure"
+                  (.restore (sut/empty-probe) [999
+                                               #uuid "00000000-0000-0000-0000-000000000001"
+                                               "127.0.0.1"
+                                               5376
+                                               7
+                                               0
+                                               "1.2.3.4"
+                                               5568])))))))))
+
 
