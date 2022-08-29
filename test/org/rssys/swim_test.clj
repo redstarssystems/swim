@@ -13,7 +13,7 @@
       Cluster
       NeighbourNode
       NodeObject
-      PingEvent)))
+      PingEvent DeadEvent)))
 
 
 ;;;;;;;;;;
@@ -524,6 +524,84 @@
                                              1])))))))))
 
 
+;;;;;;
+
+(deftest new-dead-test
+  (testing "DeadEvent creation"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          node2  (sut/new-node-object node-data2 cluster)
+          ping1  (sut/new-ping node1 (.id node2) 42)
+          result (sut/new-dead node2 ping1)]
+
+      (is (= DeadEvent (type result)) "DeadEvent has correct type")
+
+      (is (= #{:cmd-type :id :restart-counter :tx :neighbour-id :neighbour-tx}
+            (into #{} (keys result))) "DeadEvent has expected keys")
+
+      (testing "DeadEvent has correct structure and values"
+        (match result {:cmd-type        (:dead sut/event-code)
+                       :id              (.id node2)
+                       :restart-counter (.restart_counter node2)
+                       :tx              (.tx node2)
+                       :neighbour-id    (.id node1)
+                       :neighbour-tx    (.tx node1)})))))
+
+
+(deftest empty-dead-test
+
+  (testing "Empty DeadEvent has correct structure"
+    (let [result (sut/empty-dead)]
+
+      (is (= DeadEvent (type result)) "DeadEvent has correct type")
+
+      (match result {:cmd-type        (:dead sut/event-code)
+                     :id              #uuid"00000000-0000-0000-0000-000000000000"
+                     :restart-counter 0
+                     :tx              0
+                     :neighbour-id    #uuid"00000000-0000-0000-0000-000000000000"
+                     :neighbour-tx    0}))))
+
+
+(deftest map->DeadEvent-test
+
+  (testing "DeadEvent"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          node2  (sut/new-node-object node-data2 cluster)
+          ping1  (sut/new-ping node1 (.id node2) 42)
+          dead1   (sut/new-dead node2 ping1)
+          result (.prepare dead1)]
+
+      (testing "Prepare DeadEvent to vector"
+        (match result [(:dead sut/event-code) (.id node2) (.restart_counter node2) (.tx node2) (.id node1) (.tx node1)]))
+
+      (testing "Restore DeadEvent from vector"
+
+        (let [v          [6
+                          #uuid "00000000-0000-0000-0000-000000000002"
+                          5
+                          0
+                          #uuid "00000000-0000-0000-0000-000000000001"
+                          0]
+              result-dead (.restore (sut/empty-dead) v)]
+
+          (is (= DeadEvent (type result-dead)) "Should be DeadEvent type")
+
+          (is (= result-dead dead1) "Restored DeadEvent should be equals to original event")
+
+          (is (thrown-with-msg? Exception #"DeadEvent vector has invalid structure"
+                (.restore (sut/empty-dead) [])))
+
+          (testing "Wrong command type code"
+            (is (thrown-with-msg? Exception #"DeadEvent vector has invalid structure"
+                  (.restore (sut/empty-dead) [999
+                                             #uuid "00000000-0000-0000-0000-000000000002"
+                                             5
+                                             0
+                                             #uuid "00000000-0000-0000-0000-000000000001"
+                                             1])))))))))
+
+
+
 ;;;;;;;;;;
 
 (def node-object1 (sut/new-node-object node-data1 cluster))
@@ -722,3 +800,4 @@
 
 
 (deftest udp-dispatcher-fn-test)
+
