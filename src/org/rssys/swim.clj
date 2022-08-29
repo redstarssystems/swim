@@ -74,7 +74,6 @@
 
 (s/def ::neighbour-tx ::tx)
 (s/def ::ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
-(s/def ::ack-events (s/map-of ::neighbour-id ::ack-event))  ;; buffer for outgoing ack events for neighbours
 
 ;; ::neighbour-id - dead node
 (s/def ::dead-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
@@ -88,7 +87,7 @@
 (s/def ::node
   (s/keys :req-un [::id ::host ::port ::cluster ::status ::neighbours ::restart-counter
                    ::tx ::ping-events ::payload ::scheduler-pool ::*udp-server ::event-queue
-                   ::ping-round-buffer ::ack-events]))
+                   ::ping-round-buffer]))
 
 
 (def event-code
@@ -171,26 +170,26 @@
   "Returns new NeighbourNode instance."
 
   (^NeighbourNode [neighbour-map]
-   (if-not (s/valid? ::neighbour-node neighbour-map)
-     (throw (ex-info "Invalid neighbour data" (->> neighbour-map (s/explain-data ::neighbour-node) spec-problems)))
-     (map->NeighbourNode neighbour-map)))
+    (if-not (s/valid? ::neighbour-node neighbour-map)
+      (throw (ex-info "Invalid neighbour data" (->> neighbour-map (s/explain-data ::neighbour-node) spec-problems)))
+      (map->NeighbourNode neighbour-map)))
 
 
   (^NeighbourNode [^UUID id ^String host ^long port]
-   (new-neighbour-node {:id              id
-                        :host            host
-                        :port            port
-                        :status          :unknown
-                        :access          :direct
-                        :restart-counter 0
-                        :tx              0
-                        :payload         {}
-                        :updated-at      (System/currentTimeMillis)})))
+    (new-neighbour-node {:id              id
+                         :host            host
+                         :port            port
+                         :status          :unknown
+                         :access          :direct
+                         :restart-counter 0
+                         :tx              0
+                         :payload         {}
+                         :updated-at      (System/currentTimeMillis)})))
 
 
 
 (defrecord Node [id host port cluster status neighbours restart-counter tx ping-events
-                 payload scheduler-pool *udp-server event-queue ping-round-buffer ack-events]
+                 payload scheduler-pool *udp-server event-queue ping-round-buffer]
            Object
            (toString [this] (.toString this)))
 
@@ -215,7 +214,6 @@
   (event-queue [this] "Get vector of prepared outgoing events")
   (ping-event [this neighbour-id] "Get active ping event by neighbour id if exist")
   (ping-events [this] "Get map of active ping events which we sent to neighbours")
-  (ack-events [this] "Get map of outgoing ack events for neighbours")
 
   ;; Setters
   (set-cluster [this cluster] "Set new cluster for this node")
@@ -232,8 +230,6 @@
   (take-events [this n] "Take `n` prepared outgoing events from queue (FIFO)") ;; the group-by [:id :restart-counter :tx] to send the latest events only
   (upsert-ping [this ping-event] "Update existing or insert new active ping event in map")
   (delete-ping [this neighbour-id] "Delete active ping event from map")
-  (upsert-ack [this ack-event] "Update existing or insert new outgoing ack event in map")
-  (delete-ack [this neighbour-id] "Delete outgoing ack event from map")
 
   ;; Commands
   (start [this node-process-fn udp-dispatcher-fn] "Start this node and use `node-process-fn` as main node process and `udp-dispatcher-fn` to process incoming UDP packets")
@@ -268,7 +264,6 @@
            (event-queue [^NodeObject this] (:event-queue (.value this)))
            (ping-event [^NodeObject this neighbour-id] (get (:ping-events (.value this)) neighbour-id))
            (ping-events [^NodeObject this] (:ping-events (.value this)))
-           (ack-events [^NodeObject this] (:ack-events (.value this)))
 
            (set-cluster [^NodeObject this cluster]
              (cond
@@ -346,15 +341,6 @@
              (d> :delete-ping (.id this) {:neighbour-id neighbour-id})
              (swap! (:*node this) assoc :ping-events (dissoc (.ping_events this) neighbour-id)))
 
-           (upsert-ack [^NodeObject this ack-event]
-             (when-not (s/valid? ::ack-event ack-event)
-               (throw (ex-info "Invalid ack event data" (->> ack-event (s/explain-data ::ack-event) spec-problems))))
-             (d> :upsert-ack (.id this) {:ack-event ack-event})
-             (swap! (:*node this) assoc :ack-events (assoc (ack-events this) (:neighbour-id ack-event) ack-event)))
-
-           (delete-ack [^NodeObject this neighbour-id]
-             (d> :delete-ack (.id this) {:neighbour-id neighbour-id})
-             (swap! (:*node this) assoc :ack-events (dissoc (.ack_events this) neighbour-id)))
 
            ;; NB: `node-process-fn` is a fn with one arg - [this], `udp-dispatcher-fn` is fn with two args: [this, udp-received-data]
            ;; `node-process-fn` looks for :continue? flag in UDP server. If it's false then `node-process-fn` terminates.
@@ -393,27 +379,26 @@
   "Returns new NodeObject instance."
 
   (^NodeObject [node-data]
-   (when-not (s/valid? ::node node-data)
-     (throw (ex-info "Invalid node data" (spec-problems (s/explain-data ::node node-data)))))
-   (d> :new-node-object (:id node-data) {:node-data (select-keys node-data [:host :port :status :restart-counter :tx])})
-   (map->NodeObject {:*node (atom node-data)}))
+    (when-not (s/valid? ::node node-data)
+      (throw (ex-info "Invalid node data" (spec-problems (s/explain-data ::node node-data)))))
+    (d> :new-node-object (:id node-data) {:node-data (select-keys node-data [:host :port :status :restart-counter :tx])})
+    (map->NodeObject {:*node (atom node-data)}))
 
   (^NodeObject [{:keys [^UUID id ^String host ^long port ^long restart-counter]} ^Cluster cluster]
-   (new-node-object {:id                (or id (random-uuid))
-                     :host              host
-                     :port              port
-                     :cluster           cluster
-                     :status            :stop
-                     :neighbours        {}
-                     :restart-counter   (or restart-counter 0)
-                     :tx                0
-                     :ping-events       {}                  ;; active pings on the fly. we wait ack for them. key ::neighbour-id
-                     :ack-events        {}                  ;; outgoing ack events
-                     :event-queue       []                  ;; outgoing events that we'll send to random logN neighbours next time
-                     :ping-round-buffer []                  ;; we take logN neighbour ids to send events from event queue
-                     :payload           {}                  ;; data that this node claims in cluster about itself
-                     :scheduler-pool    (scheduler/mk-pool)
-                     :*udp-server       nil})))
+    (new-node-object {:id                (or id (random-uuid))
+                      :host              host
+                      :port              port
+                      :cluster           cluster
+                      :status            :stop
+                      :neighbours        {}
+                      :restart-counter   (or restart-counter 0)
+                      :tx                0
+                      :ping-events       {}                  ;; active pings on the fly. we wait ack for them. key ::neighbour-id
+                      :event-queue       []                  ;; outgoing events that we'll send to random logN neighbours next time
+                      :ping-round-buffer []                  ;; we take logN neighbour ids to send events from event queue
+                      :payload           {}                  ;; data that this node claims in cluster about itself
+                      :scheduler-pool    (scheduler/mk-pool)
+                      :*udp-server       nil})))
 
 
 ;;;;;;;;;;

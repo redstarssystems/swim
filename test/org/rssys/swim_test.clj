@@ -11,9 +11,10 @@
     (org.rssys.swim
       AckEvent
       Cluster
+      DeadEvent
       NeighbourNode
       NodeObject
-      PingEvent DeadEvent)))
+      PingEvent)))
 
 
 ;;;;;;;;;;
@@ -118,7 +119,6 @@
          :restart-counter   0
          :tx                0
          :ping-events       {}
-         :ack-events        {}
          :payload           {}
          :event-queue       []
          :ping-round-buffer []
@@ -145,7 +145,6 @@
                      :restart-counter   ::sut/restart-counter
                      :tx                ::sut/tx
                      :ping-events       ::sut/ping-events
-                     :ack-events        ::sut/ack-events
                      :payload           ::sut/payload
                      :scheduler-pool    ::sut/scheduler-pool
                      :*udp-server       ::sut/*udp-server
@@ -164,8 +163,7 @@
       (is (= {} (.neighbours node-object)) "Should be neighbours value")
       (is (= :stop (.status node-object)) "Should be a node status value")
       (is (= [] (.event_queue node-object)) "Event queue should be a vector")
-      (is (= {} (.ping_events node-object)) "Ping events should be a map")
-      (is (= {} (.ack_events node-object)) "Ack events should be a map")))
+      (is (= {} (.ping_events node-object)) "Ping events should be a map")))
 
   (testing "Setters should set correct values"
 
@@ -315,21 +313,7 @@
         (testing "Wrong data is caught by spec"
           (is (thrown-with-msg? Exception #"Invalid ping event data"
                 (.upsert_ping node-object {:a :bad-value}))))))
-
-    (testing "Ack event getters/setters test"
-      (let [node-object1 (sut/new-node-object node-data1 cluster)
-            node-object2 (sut/new-node-object node-data2 cluster)
-            ping-event   (sut/new-ping node-object1 (.id node-object2) 1)
-            ack-event    (sut/new-ack node-object2 ping-event)]
-        (is (= {} (.ack_events node-object2)) "Node has empty (default) ping events map")
-        (.upsert_ack node-object2 ack-event)
-        (is (= {(.id node-object1) ack-event} (.ack_events node-object2)) "Ack event should exist in map")
-        (.delete_ack node-object2 (.id node-object1))
-        (is (= {} (.ack_events node-object2)) "Ack event should be deleted from map")
-
-        (testing "Wrong data is caught by spec"
-          (is (thrown-with-msg? Exception #"Invalid ack event data"
-                (.upsert_ack node-object1 {:a :bad-value}))))))))
+    ))
 
 
 ;;;;;;;;;;
