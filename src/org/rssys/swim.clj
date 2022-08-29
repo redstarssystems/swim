@@ -24,7 +24,7 @@
 
 
 (defn d>
-  "If `*enable-diag-tap?*` is true (default), then put diagnostic data to tap>
+  "If `*enable-diag-tap?*` is true (default), then put diagnostic data to tap>.
    Returns true if there was room in the tap> queue, false if not (dropped),
    nil if `*enable-diag-tap?*` disabled."
   [cmd-kw node-id data]
@@ -70,6 +70,8 @@
 (s/def ::neighbour-node (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter ::tx ::payload ::updated-at]))
 (s/def ::neighbours (s/map-of ::neighbour-id ::neighbour-node))
 
+(s/def ::anti-entropy-data (s/coll-of ::neighbour-node))
+
 (s/def ::attempt-number pos-int?)
 (s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-id ::attempt-number]))
 (s/def ::ping-events (s/map-of ::neighbour-id ::ping-event)) ;; buffer is used to remember whom we sent a ping and waiting for an ack
@@ -82,6 +84,7 @@
 (s/def ::dead-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 
 (s/def ::probe-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-host ::neighbour-port]))
+(s/def ::anti-entropy-event (s/keys :req-un [::cmd-type ::anti-entropy-data]))
 
 (s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
@@ -592,6 +595,51 @@
 
 ;;;;
 
+(defn build-anti-entropy-data
+  "Build anti-entropy data – subset of known nodes from neighbours map.
+  This data is propagated from node to node and thus nodes can get knowledge about unknown hosts.
+  To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
+  if node has older data.
+  Returns vector of known neighbors size of `num`."
+  [^NodeObject this & {:keys [num] :or {num 2}}]
+  (->>
+    (.neighbours this)
+    vals
+    shuffle
+    (take num)
+    (map #(into {} %))
+    vec))
+
+
+(defrecord AntiEntropy [cmd-type anti-entropy-data]
+           ISwimEvent
+
+           (prepare [^AntiEntropy e]
+             [(.-cmd_type e) (.-anti_entropy_data e)])
+
+           (restore [^AntiEntropy _ v]
+             (if (and
+                   (vector? v)
+                   (= 2 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:anti-entropy event-code)) vector?] v)))
+               (apply ->AntiEntropy v)
+               (throw (ex-info "AntiEntropy vector has invalid structure" {:anti-entropy-vec v})))))
+
+
+(defn new-anti-entropy
+  ^AntiEntropy [^NodeObject this]
+  (let [anti-entropy-data (build-anti-entropy-data this)
+        ae-event          (map->AntiEntropy {:cmd-type          (:anti-entropy event-code)
+                                             :anti-entropy-data anti-entropy-data})]
+    (if-not (s/valid? ::anti-entropy-event ae-event)
+      (throw (ex-info "Invalid anti-entropy event" (spec-problems (s/explain-data ::anti-entropy-event ae-event))))
+      ae-event)))
+
+
+(defn empty-anti-entropy
+  ^AntiEntropy []
+  (map->AntiEntropy {:cmd-type          (:anti-entropy event-code)
+                     :anti-entropy-data []}))
 
 
 ;;;;;;;;;;
@@ -616,6 +664,8 @@
 
 (defmethod restore-event 0 ^PingEvent [e] (.restore (empty-ping) e))
 (defmethod restore-event 1 ^AckEvent [e] (.restore (empty-dead) e))
+(defmethod restore-event 8 ^AntiEntropy [e] (.restore (empty-anti-entropy) e))
+(defmethod restore-event 9 ^ProbeEvent [e] (.restore (empty-probe) e))
 
 
 ;;;;
@@ -664,6 +714,7 @@
 
 
 (defmulti process-incoming-event (fn [this e] (type e)))
+
 
 
 (defmethod process-incoming-event PingEvent

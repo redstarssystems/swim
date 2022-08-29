@@ -10,6 +10,7 @@
       MutablePool)
     (org.rssys.swim
       AckEvent
+      AntiEntropy
       Cluster
       DeadEvent
       NeighbourNode
@@ -820,7 +821,7 @@
 
       (is (= ProbeEvent (type result)) "ProbeEvent has correct type")
 
-      (match result {:cmd-type       (:probe sut/event-code)
+      (match result {:cmd-type        (:probe sut/event-code)
                      :id              #uuid"00000000-0000-0000-0000-000000000000"
                      :host            "localhost"
                      :port            0
@@ -842,14 +843,14 @@
 
       (testing "Restore ProbeEvent from vector"
 
-        (let [v           [9
-                           #uuid "00000000-0000-0000-0000-000000000001"
-                           "127.0.0.1"
-                           5376
-                           7
-                           0
-                           "1.2.3.4"
-                           5568]
+        (let [v            [9
+                            #uuid "00000000-0000-0000-0000-000000000001"
+                            "127.0.0.1"
+                            5376
+                            7
+                            0
+                            "1.2.3.4"
+                            5568]
               result-probe (.restore (sut/empty-probe) v)]
 
           (is (= ProbeEvent (type result-probe)) "Should be ProbeEvent type")
@@ -918,4 +919,53 @@
 
       (is (= 2 (count (sut/build-anti-entropy-data node1))) "Default size of vector as expected")
       (is (= 4 (count (sut/build-anti-entropy-data node1 :num 4))) "Size of vector as requested")
-      (is (every? #(instance? NeighbourNode %) (sut/build-anti-entropy-data node1)) "Every value in vector is NeighbourNode"))))
+      (is (every? #(instance? NeighbourNode (sut/new-neighbour-node %)) (sut/build-anti-entropy-data node1)) "Every value in vector is NeighbourNode"))))
+
+
+
+(deftest map->AntiEntropy-test
+  (testing "AntiEntropy"
+    (let [node1  (sut/new-node-object node-data1 cluster)
+          nb-map {:id              #uuid "00000000-0000-0000-0000-000000000002"
+                  :host            "127.0.0.1"
+                  :port            5432
+                  :status          :alive
+                  :access          :direct
+                  :restart-counter 2
+                  :tx              2
+                  :payload         {}
+                  :updated-at      1661799880969}
+          _      (.upsert_neighbour node1 (sut/new-neighbour-node nb-map))
+          ae-event  (sut/new-anti-entropy node1)
+          result (.prepare ae-event)]
+
+      (testing "Prepare AntiEntropy to vector"
+        (match result [(:anti-entropy sut/event-code) (.-anti_entropy_data ae-event)]))
+
+      (testing "Restore AntiEntropy from vector"
+
+        (let [v            [8 [nb-map]]
+              result-ae (.restore (sut/empty-anti-entropy) v)]
+
+          (is (= AntiEntropy (type result-ae)) "Should be AntiEntropy type")
+
+          (is (=
+                (dissoc (-> result-ae :anti-entropy-data first) :updated-at)
+                (dissoc (-> ae-event :anti-entropy-data first) :updated-at))
+            "Restored AntiEntropy should be equals to original event")
+
+          (is (thrown-with-msg? Exception #"AntiEntropy vector has invalid structure"
+                (.restore (sut/empty-anti-entropy) [])))
+
+          (testing "Wrong command type code"
+            (is (thrown-with-msg? Exception #"AntiEntropy vector has invalid structure"
+                  (.restore (sut/empty-anti-entropy) [999
+                                                      [{:id              #uuid "00000000-0000-0000-0000-000000000002"
+                                                        :host            "127.0.0.1"
+                                                        :port            5432
+                                                        :status          :alive
+                                                        :access          :direct
+                                                        :restart-counter 2
+                                                        :tx              2
+                                                        :payload         {}
+                                                        :updated-at      (System/currentTimeMillis)}]])))))))))
