@@ -25,13 +25,13 @@
 
 (defn d>
   "If `*enable-diag-tap?*` is true (default), then put diagnostic data to tap>
-  Returns nil."
+   Returns true if there was room in the tap> queue, false if not (dropped),
+   nil if `*enable-diag-tap?*` disabled."
   [cmd-kw node-id data]
   (when *enable-diag-tap?*
     (tap> {::cmd    cmd-kw
            :node-id node-id
-           :data    data})
-    nil))
+           :data    data})))
 
 
 (defmacro safe
