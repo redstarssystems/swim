@@ -369,6 +369,7 @@
              )
 
            (probe [^NodeObject this host port]
+
              )
 
            (stop [^NodeObject this]
@@ -748,19 +749,19 @@
 
 ;;;;;;;;;;
 
-(defn build-anti-entropy-data
-  "Build anti-entropy data – subset of known nodes from neighbours map.
-  This data is propagated from node to node and thus nodes can get knowledge about unknown hosts.
-  To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
-  if node has older data.
-  Returns vector of known neighbors size of `num`."
-  [^NodeObject this & {:keys [num] :or {num 2}}]
-  (->>
-    (.neighbours this)
-    vals
-    shuffle
-    (take num)
-    vec))
+(defn send-event-only
+  "Send one event to neighbour"
+  [^NodeObject this e neighbour-host neighbour-port]
+  (let [data ^bytes (e/encrypt-data (-> this .cluster :secret-key) (serialize [e]))]
+    (udp/send-packet data neighbour-host neighbour-port)))
+
+
+(defn send-event-with-anti-entropy
+  "Send one event + anti entropy data to neighbour"
+  [^NodeObject this e neighbour-host neighbour-port]
+  (let [data ^bytes (e/encrypt-data (-> this .cluster :secret-key) (serialize [e (new-anti-entropy this)]))]
+    (udp/send-packet data neighbour-host neighbour-port)))
+
 
 
 (defmulti process-incoming-event (fn [this e] (type e)))
@@ -790,13 +791,43 @@
 (defmethod process-incoming-event PingEvent
   [^NodeObject this ^PingEvent e]
 
-  #_(cond
-      (not (suitable-restart-counter? this e)) ())
-  ;; проверить restart counter у соседа и если он меньше чем нам известно, то ответить что узел нуждается в перезагрузке
-  ;; прекратить дальнейшую обработку
-  ;; проверить, знаем ли мы такого соседа. Если нет, то внести в таблицу соседей.
-  ;; проверить, что tx из event у neighbour больше или равен чем известный нам в таблице соседей.
-  ;; если меньше, то это событие из прошлого и надо игнорировать
+  ;; add new neighbour if it not exists in neighbours map
+  ;; TODO  переделать на проверку статуса dead т.к. это нарушает стейт-машину (нарисовать!)
+  (when (not (.neighbour this (.-id e)))
+    (let [new-neighbour (new-neighbour-node {:id              (.-id e)
+                                             :host            (.-host e)
+                                             :port            (.-port e)
+                                             :status          :alive
+                                             :access          :direct
+                                             :restart-counter (.-restart_counter e)
+                                             :tx              (.-tx e)
+                                             :payload         {}
+                                             :updated-at      (System/currentTimeMillis)})]
+
+      (d> :process-incoming-event-ping-add-new-neighbour (.id this) new-neighbour)
+      (upsert-neighbour this new-neighbour)))
+
+  (cond
+
+    (not (suitable-restart-counter? this e))
+    (let [dead-event (new-dead this e)]
+      (.inc_tx this)                                        ;; every event on node increments tx
+      (d> :process-incoming-event-ping-dead-event (.id this) dead-event)
+      (send-event-only this dead-event (.-host e) (.-port e)))
+
+    (not (suitable-tx? this e)) :do-nothing
+
+    :else
+    (let [ack-event         (new-ack this e)
+          anti-entropy-data :todo]
+      (.inc_tx this)                                        ;; every event on node increments tx
+      (d> :process-incoming-event-ping-ack-event (.id this) ack-event)
+      (send-event-with-anti-entropy this ack-event (.-host e) (.-port e))))
+
+
+  ;; добавить новое событие probe
+  ;; не добавлять узел при обработке пинг, т.к. узлы должны заходить через событие join
+  ;; проверить, что узел не имел предыдущий статус dead
   ;; обновить tx у neighbour в таблице соседей значением из пришедшего события.
   ;; сформировать вектор из [ack event + все текущие исходящие события + антиэнтропия] но не более событий чем может принять udp пакет.
   ;; отправить ack event немедленно.
