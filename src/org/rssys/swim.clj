@@ -178,21 +178,21 @@
   "Returns new NeighbourNode instance."
 
   (^NeighbourNode [neighbour-map]
-    (if-not (s/valid? ::neighbour-node neighbour-map)
-      (throw (ex-info "Invalid neighbour data" (->> neighbour-map (s/explain-data ::neighbour-node) spec-problems)))
-      (map->NeighbourNode neighbour-map)))
+   (if-not (s/valid? ::neighbour-node neighbour-map)
+     (throw (ex-info "Invalid neighbour data" (->> neighbour-map (s/explain-data ::neighbour-node) spec-problems)))
+     (map->NeighbourNode neighbour-map)))
 
 
   (^NeighbourNode [^UUID id ^String host ^long port]
-    (new-neighbour-node {:id              id
-                         :host            host
-                         :port            port
-                         :status          :unknown
-                         :access          :direct
-                         :restart-counter 0
-                         :tx              0
-                         :payload         {}
-                         :updated-at      (System/currentTimeMillis)})))
+   (new-neighbour-node {:id              id
+                        :host            host
+                        :port            port
+                        :status          :unknown
+                        :access          :direct
+                        :restart-counter 0
+                        :tx              0
+                        :payload         {}
+                        :updated-at      (System/currentTimeMillis)})))
 
 
 
@@ -387,26 +387,26 @@
   "Returns new NodeObject instance."
 
   (^NodeObject [node-data]
-    (when-not (s/valid? ::node node-data)
-      (throw (ex-info "Invalid node data" (spec-problems (s/explain-data ::node node-data)))))
-    (d> :new-node-object (:id node-data) {:node-data (select-keys node-data [:host :port :status :restart-counter :tx])})
-    (map->NodeObject {:*node (atom node-data)}))
+   (when-not (s/valid? ::node node-data)
+     (throw (ex-info "Invalid node data" (spec-problems (s/explain-data ::node node-data)))))
+   (d> :new-node-object (:id node-data) {:node-data (select-keys node-data [:host :port :status :restart-counter :tx])})
+   (map->NodeObject {:*node (atom node-data)}))
 
   (^NodeObject [{:keys [^UUID id ^String host ^long port ^long restart-counter]} ^Cluster cluster]
-    (new-node-object {:id                (or id (random-uuid))
-                      :host              host
-                      :port              port
-                      :cluster           cluster
-                      :status            :stop
-                      :neighbours        {}
-                      :restart-counter   (or restart-counter 0)
-                      :tx                0
-                      :ping-events       {}                  ;; active pings on the fly. we wait ack for them. key ::neighbour-id
-                      :event-queue       []                  ;; outgoing events that we'll send to random logN neighbours next time
-                      :ping-round-buffer []                  ;; we take logN neighbour ids to send events from event queue
-                      :payload           {}                  ;; data that this node claims in cluster about itself
-                      :scheduler-pool    (scheduler/mk-pool)
-                      :*udp-server       nil})))
+   (new-node-object {:id                (or id (random-uuid))
+                     :host              host
+                     :port              port
+                     :cluster           cluster
+                     :status            :stop
+                     :neighbours        {}
+                     :restart-counter   (or restart-counter 0)
+                     :tx                0
+                     :ping-events       {}                  ;; active pings on the fly. we wait ack for them. key ::neighbour-id
+                     :event-queue       []                  ;; outgoing events that we'll send to random logN neighbours next time
+                     :ping-round-buffer []                  ;; we take logN neighbour ids to send events from event queue
+                     :payload           {}                  ;; data that this node claims in cluster about itself
+                     :scheduler-pool    (scheduler/mk-pool)
+                     :*udp-server       nil})))
 
 
 ;;;;;;;;;;
@@ -600,15 +600,17 @@
   This data is propagated from node to node and thus nodes can get knowledge about unknown hosts.
   To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
   if node has older data.
-  Returns vector of known neighbors size of `num`."
+  Returns vector of known neighbors size of `num` if any or empty vector."
   [^NodeObject this & {:keys [num] :or {num 2}}]
-  (->>
-    (.neighbours this)
-    vals
-    shuffle
-    (take num)
-    (map #(into {} %))
-    vec))
+  (or
+    (some->>
+     (.neighbours this)
+     vals
+     shuffle
+     (take num)
+     (map #(into {} %))
+     vec)
+    []))
 
 
 (defrecord AntiEntropy [cmd-type anti-entropy-data]

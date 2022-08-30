@@ -3,7 +3,6 @@
     [clojure.spec.alpha :as s]
     [clojure.test :refer [deftest is testing]]
     [matcho.core :refer [match]]
-    [org.rssys.encrypt :as e]
     [org.rssys.swim :as sut])
   (:import
     (org.rssys.scheduler
@@ -342,12 +341,12 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                       [-110 -93 126 35 39 -52 -128]
-                       [-110 -93 126 35 39 -91 104 101 108 108 111]
-                       [-110 -93 126 35 39 -64]
-                       [-110 -93 126 35 39 -93 126 58 107]
-                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                       [-110, -50, 73, -106, 2, -46, 1]))
+                      [-110 -93 126 35 39 -52 -128]
+                      [-110 -93 126 35 39 -91 104 101 108 108 111]
+                      [-110 -93 126 35 39 -64]
+                      [-110 -93 126 35 39 -93 126 58 107]
+                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                      [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
       (match dvalues values))))
 
@@ -591,62 +590,6 @@
 
 ;;;;;;;;;;
 
-(def node-object1 (sut/new-node-object node-data1 cluster))
-(def node-object2 (sut/new-node-object node-data2 cluster))
-(def node-object3 (sut/new-node-object node-data3 cluster))
-
-(def ping1 (sut/new-ping node-object1 (.id node-object2) 1))
-
-
-(comment
-  (.start node-object1 sut/node-process-fn sut/udp-dispatcher-fn)
-  (.stop ^NodeObject node-object1)
-
-
-  (let [ping1 (sut/new-ping node-object1 (.id node-object2) 1)
-        {:keys [host port]} (.value node-object1)]
-    (org.rssys.udp/send-packet
-      (e/encrypt-data
-        (-> node-object1 .cluster :secret-key)
-        (sut/serialize [(.prepare ping1)]))
-      host port))
-  )
-
-
-
-;;
-;;(deftest node-start-test
-;;  (testing "Node start is successful"
-;;    (let [node-object (sut/new-node node1-data)]
-;;      (sut/node-start node-object (fn [data] (prn "received: " (String. ^bytes data))))
-;;      (is (s/valid? ::sut/*udp-server @(:*udp-server @(:*node node-object))) "Node should have valid UDP server structure")
-;;      (is (#{:leave} (:status (sut/node-value node-object))) "Node should have valid status")
-;;      (sut/node-stop node-object))))
-;;
-;;
-;;(deftest node-stop-test
-;;  (testing "Node stop is successful"
-;;    (let [node-object    (sut/new-node node1-data)
-;;          scheduler-pool (:scheduler-pool (sut/node-value node-object))]
-;;      (sut/node-start node-object (fn [data] (prn "received: " (String. ^bytes data))))
-;;      (sut/node-stop node-object)
-;;
-;;      (let [scheduler-pool-new (:scheduler-pool (sut/node-value node-object))
-;;            stopped-udp-server @(:*udp-server (sut/node-value node-object))]
-;;
-;;        (is (= scheduler-pool scheduler-pool-new)
-;;          "Scheduler pool should be the same object")
-;;
-;;        (is (= @(:pool-atom scheduler-pool) @(:pool-atom scheduler-pool-new))
-;;          "Value of scheduler pool contains new pool after reset")
-;;
-;;        (is (s/valid? ::sut/*udp-server stopped-udp-server)
-;;          "Stopped UDP server should have valid structure")
-;;
-;;        (is (#{:stopped} (:status (sut/node-value node-object))) "Node should have stopped status")))))
-;;
-
-
 
 (deftest suitable-restart-counter?-test
   (let [node1 (sut/new-node-object node-data1 cluster)
@@ -786,8 +729,6 @@
   (is (= 1/2 (sut/safe (/ 1 2)))) "Any normal expression should be succeed")
 
 
-;;(deftest udp-dispatcher-fn-test)
-
 
 ;;;;;;;;;;
 
@@ -874,9 +815,7 @@
 
 
 (deftest build-anti-entropy-data-test
-  (let [node1 (sut/new-node-object node-data1 cluster)
-        node2 (sut/new-node-object node-data2 cluster)
-        node3 (sut/new-node-object node-data3 cluster)]
+  (let [node1 (sut/new-node-object node-data1 cluster)]
 
     (testing "Anti entropy is build successfully"
       ;; add new normal neighbour in map
@@ -919,32 +858,35 @@
 
       (is (= 2 (count (sut/build-anti-entropy-data node1))) "Default size of vector as expected")
       (is (= 4 (count (sut/build-anti-entropy-data node1 :num 4))) "Size of vector as requested")
-      (is (every? #(instance? NeighbourNode (sut/new-neighbour-node %)) (sut/build-anti-entropy-data node1)) "Every value in vector is NeighbourNode"))))
+      (is (= [] (sut/build-anti-entropy-data (sut/new-node-object node-data2 cluster)))
+        "Empty neighbours map should produce empty anti-entropy vector")
+      (is (every? #(instance? NeighbourNode (sut/new-neighbour-node %)) (sut/build-anti-entropy-data node1))
+        "Every value in vector is NeighbourNode"))))
 
 
 
 (deftest map->AntiEntropy-test
   (testing "AntiEntropy"
-    (let [node1  (sut/new-node-object node-data1 cluster)
-          nb-map {:id              #uuid "00000000-0000-0000-0000-000000000002"
-                  :host            "127.0.0.1"
-                  :port            5432
-                  :status          :alive
-                  :access          :direct
-                  :restart-counter 2
-                  :tx              2
-                  :payload         {}
-                  :updated-at      1661799880969}
-          _      (.upsert_neighbour node1 (sut/new-neighbour-node nb-map))
-          ae-event  (sut/new-anti-entropy node1)
-          result (.prepare ae-event)]
+    (let [node1    (sut/new-node-object node-data1 cluster)
+          nb-map   {:id              #uuid "00000000-0000-0000-0000-000000000002"
+                    :host            "127.0.0.1"
+                    :port            5432
+                    :status          :alive
+                    :access          :direct
+                    :restart-counter 2
+                    :tx              2
+                    :payload         {}
+                    :updated-at      1661799880969}
+          _        (.upsert_neighbour node1 (sut/new-neighbour-node nb-map))
+          ae-event (sut/new-anti-entropy node1)
+          result   (.prepare ae-event)]
 
       (testing "Prepare AntiEntropy to vector"
         (match result [(:anti-entropy sut/event-code) (.-anti_entropy_data ae-event)]))
 
       (testing "Restore AntiEntropy from vector"
 
-        (let [v            [8 [nb-map]]
+        (let [v         [8 [nb-map]]
               result-ae (.restore (sut/empty-anti-entropy) v)]
 
           (is (= AntiEntropy (type result-ae)) "Should be AntiEntropy type")
