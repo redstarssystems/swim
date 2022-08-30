@@ -15,6 +15,7 @@
       NeighbourNode
       NodeObject
       PingEvent
+      ProbeAckEvent
       ProbeEvent)))
 
 
@@ -341,12 +342,12 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                      [-110 -93 126 35 39 -52 -128]
-                      [-110 -93 126 35 39 -91 104 101 108 108 111]
-                      [-110 -93 126 35 39 -64]
-                      [-110 -93 126 35 39 -93 126 58 107]
-                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                      [-110, -50, 73, -106, 2, -46, 1]))
+                       [-110 -93 126 35 39 -52 -128]
+                       [-110 -93 126 35 39 -91 104 101 108 108 111]
+                       [-110 -93 126 35 39 -64]
+                       [-110 -93 126 35 39 -93 126 58 107]
+                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                       [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
       (match dvalues values))))
 
@@ -911,3 +912,102 @@
                                                         :tx              2
                                                         :payload         {}
                                                         :updated-at      (System/currentTimeMillis)}]])))))))))
+
+
+
+
+;;;;;;;;;;
+
+
+(deftest new-probe-ack-test
+  (testing "ProbeAckEvent creation"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          probe-event     (sut/new-probe node1 (.host node2) (.port node2))
+          probe-ack-event (sut/new-probe-ack node2 probe-event)]
+
+      (is (= ProbeAckEvent (type probe-ack-event)) "ProbeAckEvent has correct type")
+
+      (is (= #{:cmd-type :id :restart-counter :tx :neighbour-id :neighbour-tx}
+            (into #{} (keys probe-ack-event))) "ProbeAckEvent has expected keys")
+
+      (testing "ProbeAckEvent has correct structure and values"
+        (match probe-ack-event {:cmd-type        (:probe-ack sut/event-code)
+                                :id              (.id node2)
+                                :restart-counter (.restart_counter node2)
+                                :tx              (.tx node2)
+                                :neighbour-id    (.id node1)
+                                :neighbour-tx    (.tx node1)})))))
+
+
+(deftest empty-probe-ack-test
+
+  (testing "Empty ProbeAckEvent has correct structure"
+    (let [result (sut/empty-probe-ack)]
+
+      (is (= ProbeAckEvent (type result)) "ProbeAckEvent has correct type")
+
+      (match result {:cmd-type        (:probe-ack sut/event-code)
+                     :id              #uuid"00000000-0000-0000-0000-000000000000"
+                     :restart-counter 0
+                     :tx              0
+                     :neighbour-id    #uuid"00000000-0000-0000-0000-000000000000"
+                     :neighbour-tx    0}))))
+
+
+(deftest map->ProbeAckEvent-test
+
+  (testing "ProbeAckEvent"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          probe-event     (sut/new-probe node1 (.host node2) (.port node2))
+          probe-ack-event (sut/new-probe-ack node2 probe-event)
+          result          (.prepare probe-ack-event)]
+
+      (testing "Prepare ProbeAckEvent to vector"
+        (match result [(:probe-ack sut/event-code) (.id node2) (.restart_counter node2) (.tx node2) (.id node1) (.tx node1)]))
+
+      (testing "Restore ProbeAckEvent from vector"
+
+        (let [v                [10
+                                #uuid "00000000-0000-0000-0000-000000000002"
+                                5
+                                0
+                                #uuid "00000000-0000-0000-0000-000000000001"
+                                0]
+              result-probe-ack (.restore (sut/empty-probe-ack) v)]
+
+          (is (= ProbeAckEvent (type result-probe-ack)) "Should be ProbeAckEvent type")
+
+          (is (= result-probe-ack probe-ack-event) "Restored ProbeAckEvent should be equals to original event")
+
+          (is (thrown-with-msg? Exception #"ProbeAckEvent vector has invalid structure"
+                (.restore (sut/empty-probe-ack) [])))
+
+          (testing "Wrong command type code"
+            (is (thrown-with-msg? Exception #"ProbeAckEvent vector has invalid structure"
+                  (.restore (sut/empty-probe-ack) [999
+                                                   #uuid "00000000-0000-0000-0000-000000000002"
+                                                   5
+                                                   0
+                                                   #uuid "00000000-0000-0000-0000-000000000001"
+                                                   1])))))))))
+
+
+;;;;;;
+
+
+
+(deftest send-event-only-test
+  (let [node1 (sut/new-node-object node-data1 cluster)
+        node2 (sut/new-node-object node-data2 cluster)]
+    (try
+      (.start node1 sut/node-process-fn sut/udp-dispatcher-fn)
+      (.start node2 sut/node-process-fn sut/udp-dispatcher-fn)
+
+      (.probe node1 (.host node2) (.port node2))
+
+      (catch Exception e)
+      (finally
+        (.stop node1)
+        (.stop node2)))))
