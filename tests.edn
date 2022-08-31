@@ -17,7 +17,7 @@
                                           :kaocha.plugin/filter
                                           :kaocha.plugin/capture-output
                                           :kaocha.plugin/profiling
-                                          ;;:kaocha.plugin/cloverage
+                                          :kaocha.plugin/cloverage
                                           :kaocha.plugin/print-invocations
                                           :kaocha.plugin/hooks
                                           ;;:kaocha.plugin/notifier
