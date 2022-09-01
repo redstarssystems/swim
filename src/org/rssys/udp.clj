@@ -1,7 +1,7 @@
 (ns org.rssys.udp
   "UDP server functions"
   (:require
-    [org.rssys.common :refer [vfuture]])
+    [org.rssys.vthread :refer [vfuture]])
   (:import
     (java.net
       DatagramPacket
