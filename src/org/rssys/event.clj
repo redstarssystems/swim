@@ -1,6 +1,8 @@
 (ns org.rssys.event
   "SWIM protocol events"
-  (:import (java.util UUID)))
+  (:import
+    (java.util
+      UUID)))
 
 
 (def code
@@ -50,6 +52,7 @@
                    :neighbour-id    (UUID. 0 0)
                    :attempt-number  1}))
 
+
 ;;;;
 
 (defrecord AckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx]
@@ -78,7 +81,9 @@
                   :neighbour-id    (UUID. 0 0)
                   :neighbour-tx    0}))
 
+
 ;;;;
+
 
 (defrecord DeadEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx]
 
@@ -95,7 +100,20 @@
                (apply ->DeadEvent v)
                (throw (ex-info "DeadEvent vector has invalid structure" {:dead-vec v})))))
 
+
+(defn empty-dead
+  "Returns empty dead event"
+  ^DeadEvent []
+  (map->DeadEvent {:cmd-type        (:dead code)
+                   :id              (UUID. 0 0)
+                   :restart-counter 0
+                   :tx              0
+                   :neighbour-id    (UUID. 0 0)
+                   :neighbour-tx    0}))
+
+
 ;;;;
+
 
 (defrecord ProbeEvent [cmd-type id host port restart-counter tx neighbour-host neighbour-port]
 
@@ -111,6 +129,20 @@
                    (every? true? (map #(%1 %2) [#(= % (:probe code)) uuid? string? pos-int? nat-int? nat-int? string? pos-int?] v)))
                (apply ->ProbeEvent v)
                (throw (ex-info "ProbeEvent vector has invalid structure" {:probe-vec v})))))
+
+
+
+(defn empty-probe
+  "Returns empty probe event"
+  ^ProbeEvent []
+  (map->ProbeEvent {:cmd-type        (:probe code)
+                    :id              (UUID. 0 0)
+                    :host            "localhost"
+                    :port            0
+                    :restart-counter 0
+                    :tx              0
+                    :neighbour-host  "localhost"
+                    :neighbour-port  0}))
 
 
 ;;;;
@@ -131,7 +163,20 @@
                (throw (ex-info "ProbeAckEvent vector has invalid structure" {:probe-ack-vec v})))))
 
 
+
+(defn empty-probe-ack
+  "Returns empty probe ack event"
+  ^ProbeAckEvent []
+  (map->ProbeAckEvent {:cmd-type        (:probe-ack code)
+                       :id              (UUID. 0 0)
+                       :restart-counter 0
+                       :tx              0
+                       :neighbour-id    (UUID. 0 0)
+                       :neighbour-tx    0}))
+
+
 ;;;;
+
 
 (defrecord AntiEntropy [cmd-type anti-entropy-data]
            ISwimEvent
@@ -146,6 +191,14 @@
                    (every? true? (map #(%1 %2) [#(= % (:anti-entropy code)) vector?] v)))
                (apply ->AntiEntropy v)
                (throw (ex-info "AntiEntropy vector has invalid structure" {:anti-entropy-vec v})))))
+
+
+(defn empty-anti-entropy
+  "Returns empty anti-entropy event"
+  ^AntiEntropy []
+  (map->AntiEntropy {:cmd-type          (:anti-entropy code)
+                     :anti-entropy-data []}))
+
 
 ;;;;
 
