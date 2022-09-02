@@ -1,13 +1,8 @@
 (ns org.rssys.domain
-  (:require [clojure.spec.alpha :as s]
-            [org.rssys.spec :as spec]
-            [org.rssys.encrypt :as e]
-            [org.rssys.scheduler :as scheduler])
-  (:import (java.io Writer)
-           (java.util UUID)))
+  (:import
+    (java.io
+      Writer)))
 
-
-;;;;
 
 (defn cluster-str
   "Returns String representation of Cluster"
@@ -27,6 +22,7 @@
 
 (defmethod print-dup Cluster [cluster ^Writer writer]
   (.write writer (cluster-str cluster)))
+
 
 ;;;;;
 
