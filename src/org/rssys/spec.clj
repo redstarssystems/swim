@@ -1,6 +1,8 @@
 (ns org.rssys.spec
   "SWIM spec"
-  (:require [clojure.spec.alpha :as s]))
+  (:require
+    [clojure.spec.alpha :as s]))
+
 
 (s/def ::id uuid?)
 (s/def ::neighbour-id ::id)
@@ -37,6 +39,7 @@
 (s/def ::ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 (s/def ::probe-ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 
+
 ;; ::neighbour-id - dead node
 (s/def ::dead-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 
@@ -46,10 +49,12 @@
 (s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
 
+
 ;; buffer for outgoing events which we propagate with ping and ack events
 (s/def ::outgoing-event-queue vector?)
 
 (s/def ::ping-round-buffer (s/coll-of ::neighbour-id))
+
 
 (s/def ::node
   (s/keys :req-un [::id ::host ::port ::cluster ::status ::neighbours ::restart-counter
