@@ -28,14 +28,34 @@
       AckEvent
       AntiEntropy
       DeadEvent
+      ISwimEvent
       PingEvent
       ProbeAckEvent
       ProbeEvent)))
 
 
+;;;;
+;; Common functions and constants
+;;;;
+
 (def ^:dynamic *enable-diag-tap?*
   "Put diagnostic data to tap>"
   true)
+
+
+(def ^:dynamic *max-udp-size*
+  "Max size of UDP packet in bytes"
+  1450)
+
+
+(def ^:dynamic *max-payload-size*
+  "Max payload size in bytes"
+  256)
+
+
+(def ^:dynamic *max-anti-entropy-items*
+  "Max items number in anti-entropy"
+  2)
 
 
 (defn d>
@@ -81,8 +101,10 @@
       (transit/read reader))))
 
 
+;;;;;;;;;;;;;;;;;;;;
+
 ;;;;
-;; Domain entities
+;; Domain entity builders
 ;;;;
 
 (defn new-cluster
@@ -147,8 +169,10 @@
                       :*udp-server          nil})))
 
 
+;;;;;;;;;;;;;;;;;;;;
+
 ;;;;
-;; Getters
+;; NodeObject Getters
 ;;;;
 
 (defn get-value
@@ -250,8 +274,10 @@
   (get (get-ping-events this) neighbour-id))
 
 
+;;;;;;;;;;;;;;;;;;;;
+
 ;;;;
-;; Setters
+;; NodeObject Setters
 ;;;;
 
 (defn set-cluster
@@ -291,9 +317,12 @@
 
 
 (defn set-payload
-  "Set new payload for this node"
+  "Set new payload for this node.
+  Max size of payload is limited by `*max-payload-size*`."
   [^NodeObject this payload]
   ;;TODO: send event to cluster about new payload
+  (when (> (alength (serialize payload)) *max-payload-size*)
+    (throw (ex-info "Size of payload is too big" {:max-allowed *max-payload-size*})))
   (d> :set-payload (get-id this) {:payload payload})
   (swap! (:*node this) assoc :payload payload))
 
@@ -345,19 +374,19 @@
 
 
 (defn put-event
-  "Put prepared outgoing event to queue (FIFO)"
-  [^NodeObject this prepared-event]
-  (when-not (vector? prepared-event)
-    (throw (ex-info "Event should be a vector (prepared event)" {:prepared-event prepared-event})))
-  (d> :put-event (get-id this) {:prepared-event prepared-event :tx (get-tx this)})
+  "Put event to outgoing queue (FIFO)"
+  [^NodeObject this ^ISwimEvent event]
+  (when-not (instance? ISwimEvent event)
+    (throw (ex-info "Event should be instance of ISwimEvent" {:event event})))
+  (d> :put-event (get-id this) {:event event :tx (get-tx this)})
   (swap! (:*node this) assoc :outgoing-event-queue
-    (conj (get-outgoing-event-queue this) prepared-event) :tx (get-tx this)))
+    (conj (get-outgoing-event-queue this) event) :tx (get-tx this)))
 
 
 (defn take-event
-  "Take one prepared outgoing event from queue (FIFO).
+  "Take one event from outgoing queue (FIFO). Returns it.
   Taken event will be removed from queue."
-  [^NodeObject this]
+  ^ISwimEvent [^NodeObject this]
   (let [event (first (get-outgoing-event-queue this))]
     (swap! (:*node this) assoc :outgoing-event-queue (->> this get-outgoing-event-queue rest vec))
     event))
@@ -365,7 +394,7 @@
 
 ;; NB ;; the group-by [:id :restart-counter :tx] and send the latest events only
 (defn take-events
-  "Take `n` prepared outgoing events from queue (FIFO).
+  "Take `n`  events from outgoing queue (FIFO). Returns them.
   Taken events will be removed from queue."
   [^NodeObject this ^long n]
   (let [events (->> this get-outgoing-event-queue (take n) vec)]
@@ -389,21 +418,23 @@
   (swap! (:*node this) assoc :ping-events (dissoc (get-ping-events this) neighbour-id)))
 
 
+;;;;;;;;;;;;;;;;;;;;
+
 ;;;;
-;; Node Operations
+;; NodeObject Operations
 ;;;;
 
-
-;; NB: `node-process-fn` is a fn with one arg - [this], `udp-dispatcher-fn` is fn with two args: [this, udp-received-data]
-;; `node-process-fn` looks for :continue? flag in UDP server. If it's false then `node-process-fn` terminates.
 (defn start
-  "Start node and use `node-process-fn` as main node process and `udp-dispatcher-fn` to process incoming UDP packets."
-  [^NodeObject this node-process-fn udp-dispatcher-fn]
+  "Start the node and run `node-process-fn` in a separate virtual thread.
+   Params:
+    * `node-process-fn` - fn with one arg `this` for main node process. It may look for :continue? flag in UDP server.
+    * `incoming-data-processor-fn` fn to process incoming UDP packets with two args: `this` and `encrypted-data`"
+  [^NodeObject this node-process-fn incoming-data-processor-fn]
   (when (= (get-status this) :stop)
     (set-status this :left)
     (set-restart-counter this (inc (get-restart-counter this)))
     (let [{:keys [host port]} (get-value this)]
-      (swap! (:*node this) assoc :*udp-server (udp/start host port (partial udp-dispatcher-fn this))))
+      (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
     (when-not (s/valid? ::spec/node (get-value this))
       (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
     (vthread/vfuture (node-process-fn this))
@@ -475,6 +506,8 @@
       (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this)))))))
   (d> :stop (get-id this) {}))
 
+
+;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
 ;; Event builders
@@ -572,7 +605,7 @@
   To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
   if node has older data.
   Returns vector of known neighbors size of `num` if any or empty vector."
-  [^NodeObject this & {:keys [num] :or {num 2}}]
+  [^NodeObject this & {:keys [num] :or {num *max-anti-entropy-items*}}]
   (or
     (some->>
       (get-neighbours this)
@@ -595,35 +628,55 @@
       ae-event)))
 
 
-
-
-;;;;;
-
-
-(defn node-process-fn
-  [^NodeObject this]
-  (let [*idx (atom 0)
-        rot  ["\\" "|" "/" "—"]]
-    (Thread/sleep 100)
-    (while (-> this get-value :*udp-server deref :continue?)
-      (print (format "\rNode is active: %s  " (nth rot (rem @*idx (count rot)))))
-      (Thread/sleep 200)
-      (swap! *idx inc)
-      (flush)))
-  (println "Node is stopped."))
-
+;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
-
-(defmulti restore-event (fn [x] (.get ^PersistentVector x 0)))
-
-(defmethod restore-event 0 ^PingEvent [e] (.restore (event/empty-ping) e))
-(defmethod restore-event 1 ^AckEvent [e] (.restore (event/empty-dead) e))
-(defmethod restore-event 8 ^AntiEntropy [e] (.restore (event/empty-anti-entropy) e))
-(defmethod restore-event 9 ^ProbeEvent [e] (.restore (event/empty-probe) e))
-
-
+;; Functions for processing events
 ;;;;
+
+
+(defn send-event-only
+  "Send one event to a neighbour.
+  Event will be prepared, serialized and encrypted."
+  ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
+    (let [secret-key     (-> this get-cluster :secret-key)
+          prepared-event (.prepare event)
+          data           ^bytes (e/encrypt-data secret-key (serialize [prepared-event]))]
+      (when (> (alength data) *max-udp-size*)
+        (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
+      (udp/send-packet data neighbour-host neighbour-port)))
+  ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
+    (if-let [nb (get-neighbour this neighbour-id)]
+      (let [nb-host (.-host nb)
+            nb-port (.-port nb)]
+        (send-event-only this event nb-host nb-port))
+      (do
+        (d> :send-event-only-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+        (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
+
+
+(defn send-event-with-anti-entropy
+  "Send one event with attached anti-entropy event to a neighbour.
+  Events will be prepared, serialized and encrypted."
+  [^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
+  (let [secret-key (-> this get-cluster :secret-key)
+        prepared-event (.prepare event)
+        anti-entropy-event (.prepare (new-anti-entropy-event this))
+        data ^bytes (e/encrypt-data secret-key (serialize [prepared-event anti-entropy-event]))]
+    (udp/send-packet data neighbour-host neighbour-port)))
+
+
+(defn send-events-with-anti-entropy
+  "Send vector of events from outgoing queue with attached anti-entropy event.
+   Events will be prepared, serialized and encrypted."
+  [^NodeObject this neighbour-host neighbour-port]
+  (let [secret-key (-> this get-cluster :secret-key)
+        events-vector (get-outgoing-event-queue this)
+        prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
+        anti-entropy-event (.prepare (new-anti-entropy-event this))
+        events (conj prepared-events-vector anti-entropy-event)
+        data ^bytes (e/encrypt-data secret-key (serialize events))]
+    (udp/send-packet data neighbour-host neighbour-port)))
 
 
 (defn suitable-restart-counter?
@@ -651,22 +704,17 @@
   (= [true true] [(suitable-restart-counter? this e) (suitable-tx? this e)]))
 
 
-;;;;;;;;;;
+;;;;
 
-(defn send-event-only
-  "Send one event to neighbour"
-  [^NodeObject this e neighbour-host neighbour-port]
-  (let [data ^bytes (e/encrypt-data (-> this get-cluster :secret-key) (serialize [e]))]
-    (udp/send-packet data neighbour-host neighbour-port)))
+(defmulti restore-event (fn [x] (.get ^PersistentVector x 0)))
 
-
-(defn send-event-with-anti-entropy
-  "Send one event + anti entropy data to neighbour"
-  [^NodeObject this e neighbour-host neighbour-port]
-  (let [data ^bytes (e/encrypt-data (-> this get-cluster :secret-key) (serialize [e (new-anti-entropy-event this)]))]
-    (udp/send-packet data neighbour-host neighbour-port)))
+(defmethod restore-event 0 ^PingEvent [e] (.restore (event/empty-ping) e))
+(defmethod restore-event 1 ^AckEvent [e] (.restore (event/empty-dead) e))
+(defmethod restore-event 8 ^AntiEntropy [e] (.restore (event/empty-anti-entropy) e))
+(defmethod restore-event 9 ^ProbeEvent [e] (.restore (event/empty-probe) e))
 
 
+;;;;
 
 (defmulti process-incoming-event (fn [this e] (type e)))
 
@@ -758,6 +806,7 @@
   (println (get-tx this)))
 
 
+
 (defmethod process-incoming-event :default
   [^NodeObject this e]
   (d> :process-incoming-event-default (get-id this) {:msg "Unknown event type" :event e}))
@@ -765,10 +814,10 @@
 
 ;;;;
 
-(defn udp-dispatcher-fn
-  [^NodeObject this ^bytes udp-data]
+(defn incoming-data-processor-fn
+  [^NodeObject this ^bytes encrypted-data]
   (let [secret-key     (-> this get-cluster :secret-key)
-        decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes udp-data)) ;; Ignore bad messages
+        decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes encrypted-data)) ;; Ignore bad messages
         events-vector  (deserialize ^bytes decrypted-data)]
     (if (vector? events-vector)
       (doseq [serialized-event events-vector]
@@ -776,8 +825,23 @@
           (inc-tx this)                                     ;; Every incoming event must increment tx
           (d> :process-incoming-event (get-id this) {:event event})
           (process-incoming-event this event)))
-      (d> :udp-dispatcher-fn (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
+      (d> :event-dispatcher-fn (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
 
 
 
 
+
+(defn node-process-fn
+  [^NodeObject this]
+  (let [*idx (atom 0)
+        rot  ["\\" "|" "/" "—"]]
+    (Thread/sleep 100)
+    (while (-> this get-value :*udp-server deref :continue?)
+      (print (format "\rNode is active: %s  " (nth rot (rem @*idx (count rot)))))
+      (Thread/sleep 200)
+      (swap! *idx inc)
+      (flush)))
+  (println "Node is stopped."))
+
+
+;;;;
