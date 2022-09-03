@@ -46,7 +46,7 @@
   (map->PingEvent {:cmd-type        (:ping code)
                    :id              (UUID. 0 0)
                    :host            "localhost"
-                   :port            0
+                   :port            1
                    :restart-counter 0
                    :tx              0
                    :neighbour-id    (UUID. 0 0)

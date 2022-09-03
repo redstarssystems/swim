@@ -1,5 +1,5 @@
 (ns org.rssys.swim
-  "SWIM functions, specs and domain entities"
+  "SWIM functions"
   (:require
     [clojure.spec.alpha :as s]
     [cognitect.transit :as transit]
@@ -53,7 +53,7 @@
   [& body]
   `(try
      ~@body
-     (catch Exception e#)))
+     (catch Exception _#)))
 
 
 (defn calc-n
@@ -81,9 +81,9 @@
       (transit/read reader))))
 
 
-;;;;;;;;;;;;;;;;;;;
+;;;;
 ;; Domain entities
-;;;;;;;;;;;;;;;;;;;
+;;;;
 
 (defn new-cluster
   "Returns new Cluster instance."
@@ -147,12 +147,11 @@
                       :*udp-server          nil})))
 
 
-;; TODO:
-;; How to clean neighbour table from old nodes?
-;;
+;;;;
+;; Getters
+;;;;
 
-
-(defn value
+(defn get-value
   "Get node value"
   ^Node
   [^NodeObject this]
@@ -163,93 +162,97 @@
   "Get node id"
   ^UUID
   [^NodeObject this]
-  (.-id (value this)))
+  (.-id (get-value this)))
 
 
-(defn host
+(defn get-host
   "Get node host"
   ^String
   [^NodeObject this]
-  (.-host (value this)))
+  (.-host (get-value this)))
 
 
-(defn port
+(defn get-port
   "Get node port"
   ^long
   [^NodeObject this]
-  (.-port (value this)))
+  (.-port (get-value this)))
 
 
-(defn restart-counter
+(defn get-restart-counter
   "Get node restart counter"
   ^long
   [^NodeObject this]
-  (.-restart_counter (value this)))
+  (.-restart_counter (get-value this)))
 
 
-(defn tx
+(defn get-tx
   "Get node tx"
   ^long [^NodeObject this]
-  (.-tx (value this)))
+  (.-tx (get-value this)))
 
 
-(defn cluster
+(defn get-cluster
   "Get cluster value"
   ^Cluster
   [^NodeObject this]
-  (.-cluster (value this)))
+  (.-cluster (get-value this)))
 
 
-(defn cluster-size
+(defn get-cluster-size
   "Get cluster size"
   ^long [^NodeObject this]
-  (.-cluster_size (cluster this)))
+  (.-cluster_size (get-cluster this)))
 
 
-(defn payload
+(defn get-payload
   "Get node payload"
   [^NodeObject this]
-  (:payload (value this)))
+  (:payload (get-value this)))
 
 
-(defn neighbour
+(defn get-neighbour
   "Get neighbour by id"
   ^NeighbourNode
   [^NodeObject this ^UUID id]
-  (get (.-neighbours (value this)) id))
+  (get (.-neighbours (get-value this)) id))
 
 
-(defn neighbours
+(defn get-neighbours
   "Get all node neighbours"
   [^NodeObject this]
-  (.-neighbours (value this)))
+  (.-neighbours (get-value this)))
 
 
-(defn status
+(defn get-status
   "Get current node status"
   ^Keyword
   [^NodeObject this]
-  (.-status (value this)))
+  (.-status (get-value this)))
 
 
-(defn outgoing-event-queue
+(defn get-outgoing-event-queue
   "Get vector of prepared outgoing events"
   [^NodeObject this]
-  (.-outgoing_event_queue (value this)))
+  (.-outgoing_event_queue (get-value this)))
 
 
-(defn ping-events
+(defn get-ping-events
   "Get map of active ping events which we sent to neighbours"
   [^NodeObject this]
-  (.-ping_events (value this)))
+  (.-ping_events (get-value this)))
 
 
-(defn ping-event
+(defn get-ping-event
   "Get active ping event by neighbour id if exist"
   ^PingEvent
   [^NodeObject this neighbour-id]
-  (get (ping-events this) neighbour-id))
+  (get (get-ping-events this) neighbour-id))
 
+
+;;;;
+;; Setters
+;;;;
 
 (defn set-cluster
   "Set new cluster for this node"
@@ -258,8 +261,8 @@
     (not (s/valid? ::spec/cluster cluster))
     (throw (ex-info "Invalid cluster data" (->> cluster (s/explain-data ::spec/cluster) spec/problems)))
 
-    (not= :stop (status this))
-    (throw (ex-info "Node is not stopped. Can't set new cluster value." {:current-status (status this)}))
+    (not= :stop (get-status this))
+    (throw (ex-info "Node is not stopped. Can't set new cluster value." {:current-status (get-status this)}))
 
     :else
     (do
@@ -275,7 +278,7 @@
     (throw (ex-info "Invalid cluster size"
              (->> new-cluster-size (s/explain-data ::spec/cluster-size) spec/problems))))
   (d> :set-cluster-size (get-id this) {:new-cluster-size new-cluster-size})
-  (swap! (:*node this) assoc :cluster (assoc (cluster this) :cluster-size new-cluster-size)))
+  (swap! (:*node this) assoc :cluster (assoc (get-cluster this) :cluster-size new-cluster-size)))
 
 
 (defn set-status
@@ -308,7 +311,7 @@
 (defn inc-tx
   "Increment node tx"
   [^NodeObject this]
-  (swap! (:*node this) assoc :tx (inc (tx this))))
+  (swap! (:*node this) assoc :tx (inc (get-tx this))))
 
 
 (defn upsert-neighbour
@@ -319,7 +322,7 @@
              (->> neighbour-node (s/explain-data ::spec/neighbour-node) spec/problems))))
   (d> :upsert-neighbour (get-id this) {:neighbour-node neighbour-node})
   (swap! (:*node this) assoc :neighbours (assoc
-                                           (neighbours this)
+                                           (get-neighbours this)
                                            (.-id neighbour-node)
                                            (assoc neighbour-node :updated-at (System/currentTimeMillis)))))
 
@@ -328,7 +331,7 @@
   "Delete neighbour from neighbours map"
   [^NodeObject this ^UUID neighbour-id]
   (d> :delete-neighbour (get-id this) {:neighbour-id neighbour-id})
-  (swap! (:*node this) assoc :neighbours (dissoc (neighbours this) neighbour-id)))
+  (swap! (:*node this) assoc :neighbours (dissoc (get-neighbours this) neighbour-id)))
 
 
 (defn set-outgoing-event-queue
@@ -346,17 +349,17 @@
   [^NodeObject this prepared-event]
   (when-not (vector? prepared-event)
     (throw (ex-info "Event should be a vector (prepared event)" {:prepared-event prepared-event})))
-  (d> :put-event (get-id this) {:prepared-event prepared-event :tx (tx this)})
+  (d> :put-event (get-id this) {:prepared-event prepared-event :tx (get-tx this)})
   (swap! (:*node this) assoc :outgoing-event-queue
-    (conj (outgoing-event-queue this) prepared-event) :tx (tx this)))
+    (conj (get-outgoing-event-queue this) prepared-event) :tx (get-tx this)))
 
 
 (defn take-event
   "Take one prepared outgoing event from queue (FIFO).
   Taken event will be removed from queue."
   [^NodeObject this]
-  (let [event (first (outgoing-event-queue this))]
-    (swap! (:*node this) assoc :outgoing-event-queue (->> this outgoing-event-queue rest vec))
+  (let [event (first (get-outgoing-event-queue this))]
+    (swap! (:*node this) assoc :outgoing-event-queue (->> this get-outgoing-event-queue rest vec))
     event))
 
 
@@ -365,8 +368,8 @@
   "Take `n` prepared outgoing events from queue (FIFO).
   Taken events will be removed from queue."
   [^NodeObject this ^long n]
-  (let [events (->> this outgoing-event-queue (take n) vec)]
-    (swap! (:*node this) assoc :outgoing-event-queue (->> this outgoing-event-queue (drop n) vec))
+  (let [events (->> this get-outgoing-event-queue (take n) vec)]
+    (swap! (:*node this) assoc :outgoing-event-queue (->> this get-outgoing-event-queue (drop n) vec))
     events))
 
 
@@ -376,14 +379,19 @@
   (when-not (s/valid? ::spec/ping-event ping-event)
     (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::spec/ping-event) spec/problems))))
   (d> :upsert-ping (get-id this) {:ping-event ping-event})
-  (swap! (:*node this) assoc :ping-events (assoc (ping-events this) (:neighbour-id ping-event) ping-event)))
+  (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) (:neighbour-id ping-event) ping-event)))
 
 
 (defn delete-ping
   "Delete active ping event from map"
   [^NodeObject this ^UUID neighbour-id]
   (d> :delete-ping (get-id this) {:neighbour-id neighbour-id})
-  (swap! (:*node this) assoc :ping-events (dissoc (ping-events this) neighbour-id)))
+  (swap! (:*node this) assoc :ping-events (dissoc (get-ping-events this) neighbour-id)))
+
+
+;;;;
+;; Node Operations
+;;;;
 
 
 ;; NB: `node-process-fn` is a fn with one arg - [this], `udp-dispatcher-fn` is fn with two args: [this, udp-received-data]
@@ -391,12 +399,12 @@
 (defn start
   "Start node and use `node-process-fn` as main node process and `udp-dispatcher-fn` to process incoming UDP packets."
   [^NodeObject this node-process-fn udp-dispatcher-fn]
-  (when (= (status this) :stop)
+  (when (= (get-status this) :stop)
     (set-status this :left)
-    (set-restart-counter this (inc (restart-counter this)))
-    (let [{:keys [host port]} (value this)]
+    (set-restart-counter this (inc (get-restart-counter this)))
+    (let [{:keys [host port]} (get-value this)]
       (swap! (:*node this) assoc :*udp-server (udp/start host port (partial udp-dispatcher-fn this))))
-    (when-not (s/valid? ::spec/node (value this))
+    (when-not (s/valid? ::spec/node (get-value this))
       (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
     (vthread/vfuture (node-process-fn this))
     (d> :start (get-id this) {})))
@@ -407,6 +415,11 @@
   [^NodeObject this]
   ;;TODO
   )
+
+
+;; TODO:
+;; How to clean neighbour table from old nodes?
+;;
 
 
 (defn join
@@ -448,7 +461,7 @@
 (defn stop
   "Stop the node and leave the cluster"
   [^NodeObject this]
-  (let [{:keys [*udp-server scheduler-pool]} (value this)]
+  (let [{:keys [*udp-server scheduler-pool]} (get-value this)]
     (leave this)
     (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
     (swap! (:*node this) assoc
@@ -458,24 +471,24 @@
       :ping-round-buffer []
       :tx 0)
     (set-status this :stop)
-    (when-not (s/valid? ::spec/node (value this))
+    (when-not (s/valid? ::spec/node (get-value this))
       (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this)))))))
   (d> :stop (get-id this) {}))
 
 
-;;;;;;;;;;
+;;;;
 ;; Event builders
-;;;;;;;;;;
+;;;;
 
-(defn ping-event
+(defn new-ping-event
   "Returns new ping event"
   ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number]
   (let [ping-event (event/map->PingEvent {:cmd-type        (:ping event/code)
                                           :id              (get-id this)
-                                          :host            (host this)
-                                          :port            (port this)
-                                          :restart-counter (restart-counter this)
-                                          :tx              (tx this)
+                                          :host            (get-host this)
+                                          :port            (get-port this)
+                                          :restart-counter (get-restart-counter this)
+                                          :tx              (get-tx this)
                                           :neighbour-id    neighbour-id
                                           :attempt-number  attempt-number})]
     (if-not (s/valid? ::spec/ping-event ping-event)
@@ -485,13 +498,13 @@
 
 ;;;;
 
-(defn ack-event
+(defn new-ack-event
   "Returns new Ack event"
   ^AckEvent [^NodeObject this ^PingEvent e]
   (let [ack-event (event/map->AckEvent {:cmd-type        (:ack event/code)
                                         :id              (get-id this)
-                                        :restart-counter (restart-counter this)
-                                        :tx              (tx this)
+                                        :restart-counter (get-restart-counter this)
+                                        :tx              (get-tx this)
                                         :neighbour-id    (.-id e)
                                         :neighbour-tx    (.-tx e)})]
     (if-not (s/valid? ::spec/ack-event ack-event)
@@ -501,13 +514,13 @@
 
 ;;;;;
 
-(defn dead-event
+(defn new-dead-event
   "Returns new dead event"
   ^DeadEvent [^NodeObject this ^PingEvent e]
   (let [dead-event (event/map->DeadEvent {:cmd-type        (:dead event/code)
                                           :id              (get-id this)
-                                          :restart-counter (restart-counter this)
-                                          :tx              (tx this)
+                                          :restart-counter (get-restart-counter this)
+                                          :tx              (get-tx this)
                                           :neighbour-id    (.-id e)
                                           :neighbour-tx    (.-tx e)})]
     (if-not (s/valid? ::spec/dead-event dead-event)
@@ -517,15 +530,15 @@
 
 ;;;;
 
-(defn probe-event
+(defn new-probe-event
   "Returns new probe event"
   ^ProbeEvent [^NodeObject this ^String neighbour-host ^long neighbour-port]
   (let [probe-event (event/map->ProbeEvent {:cmd-type        (:probe event/code)
                                             :id              (get-id this)
-                                            :host            (host this)
-                                            :port            (port this)
-                                            :restart-counter (restart-counter this)
-                                            :tx              (tx this)
+                                            :host            (get-host this)
+                                            :port            (get-port this)
+                                            :restart-counter (get-restart-counter this)
+                                            :tx              (get-tx this)
                                             :neighbour-host  neighbour-host
                                             :neighbour-port  neighbour-port})]
     (if-not (s/valid? ::spec/probe-event probe-event)
@@ -537,13 +550,13 @@
 
 
 
-(defn probe-ack-event
+(defn new-probe-ack-event
   "Returns new probe ack event"
   ^ProbeAckEvent [^NodeObject this ^ProbeEvent e]
   (let [ack-event (event/map->ProbeAckEvent {:cmd-type        (:probe-ack event/code)
                                              :id              (get-id this)
-                                             :restart-counter (restart-counter this)
-                                             :tx              (tx this)
+                                             :restart-counter (get-restart-counter this)
+                                             :tx              (get-tx this)
                                              :neighbour-id    (.-id e)
                                              :neighbour-tx    (.-tx e)})]
     (if-not (s/valid? ::spec/probe-ack-event ack-event)
@@ -562,7 +575,7 @@
   [^NodeObject this & {:keys [num] :or {num 2}}]
   (or
     (some->>
-      (neighbours this)
+      (get-neighbours this)
       vals
       shuffle
       (take num)
@@ -571,7 +584,7 @@
     []))
 
 
-(defn anti-entropy-event
+(defn new-anti-entropy-event
   "Returns anti-entropy event"
   ^AntiEntropy [^NodeObject this]
   (let [anti-entropy-data (build-anti-entropy-data this)
@@ -582,11 +595,6 @@
       ae-event)))
 
 
-(defn empty-anti-entropy
-  "Returns empty anti-entropy event"
-  ^AntiEntropy []
-  (event/map->AntiEntropy {:cmd-type          (:anti-entropy event/code)
-                           :anti-entropy-data []}))
 
 
 ;;;;;
@@ -597,7 +605,7 @@
   (let [*idx (atom 0)
         rot  ["\\" "|" "/" "—"]]
     (Thread/sleep 100)
-    (while (-> this value :*udp-server deref :continue?)
+    (while (-> this get-value :*udp-server deref :continue?)
       (print (format "\rNode is active: %s  " (nth rot (rem @*idx (count rot)))))
       (Thread/sleep 200)
       (swap! *idx inc)
@@ -623,7 +631,7 @@
   Returns true, if suitable and false/nil if not."
   [^NodeObject this e]
   (let [neighbour-id (:id e)]
-    (when-let [nb ^NeighbourNode (neighbour this neighbour-id)]
+    (when-let [nb ^NeighbourNode (get-neighbour this neighbour-id)]
       (<= (.-restart_counter nb) (:restart-counter e)))))
 
 
@@ -632,7 +640,7 @@
   Returns true, if suitable and false/nil if not."
   [^NodeObject this e]
   (let [neighbour-id (:id e)]
-    (when-let [nb ^NeighbourNode (neighbour this neighbour-id)]
+    (when-let [nb ^NeighbourNode (get-neighbour this neighbour-id)]
       (<= (.-tx nb) (:tx e)))))
 
 
@@ -648,14 +656,14 @@
 (defn send-event-only
   "Send one event to neighbour"
   [^NodeObject this e neighbour-host neighbour-port]
-  (let [data ^bytes (e/encrypt-data (-> this cluster :secret-key) (serialize [e]))]
+  (let [data ^bytes (e/encrypt-data (-> this get-cluster :secret-key) (serialize [e]))]
     (udp/send-packet data neighbour-host neighbour-port)))
 
 
 (defn send-event-with-anti-entropy
   "Send one event + anti entropy data to neighbour"
   [^NodeObject this e neighbour-host neighbour-port]
-  (let [data ^bytes (e/encrypt-data (-> this cluster :secret-key) (serialize [e (anti-entropy-event this)]))]
+  (let [data ^bytes (e/encrypt-data (-> this get-cluster :secret-key) (serialize [e (new-anti-entropy-event this)]))]
     (udp/send-packet data neighbour-host neighbour-port)))
 
 
@@ -666,7 +674,7 @@
 (defmethod process-incoming-event ProbeEvent
   [^NodeObject this ^ProbeEvent e]
 
-  (when (not (neighbour this (.-id e)))
+  (when (not (get-neighbour this (.-id e)))
     (let [new-neighbour (new-neighbour-node {:id              (.-id e)
                                              :host            (.-host e)
                                              :port            (.-port e)
@@ -681,7 +689,7 @@
       (upsert-neighbour this new-neighbour)))
 
   (inc-tx this)                                             ;; every event on node increments tx
-  (send-event-with-anti-entropy this (probe-ack-event this e) (.-host e) (.-port e)))
+  (send-event-with-anti-entropy this (new-probe-ack-event this e) (.-host e) (.-port e)))
 
 
 (defmethod process-incoming-event PingEvent
@@ -689,7 +697,7 @@
 
   ;; add new neighbour if it not exists in neighbours map
   ;; TODO  переделать на проверку статуса dead т.к. это нарушает стейт-машину (нарисовать!)
-  (when (not (neighbour this (.-id e)))
+  (when (not (get-neighbour this (.-id e)))
     (let [new-neighbour (new-neighbour-node {:id              (.-id e)
                                              :host            (.-host e)
                                              :port            (.-port e)
@@ -706,7 +714,7 @@
   (cond
 
     (not (suitable-restart-counter? this e))
-    (let [dead-event (dead-event this e)]
+    (let [dead-event (new-dead-event this e)]
       (inc-tx this)                                         ;; every event on node increments tx
       (d> :process-incoming-event-ping-dead-event (get-id this) dead-event)
       (send-event-only this dead-event (.-host e) (.-port e)))
@@ -714,7 +722,7 @@
     (not (suitable-tx? this e)) :do-nothing
 
     :else
-    (let [ack-event         (ack-event this e)
+    (let [ack-event         (new-ack-event this e)
           anti-entropy-data :todo]
       (inc-tx this)                                         ;; every event on node increments tx
       (d> :process-incoming-event-ping-ack-event (get-id this) ack-event)
@@ -746,8 +754,8 @@
   #_(let [neighbour-id (.-id e)                             ;; от кого получили пинг
 
           ])
-  (neighbours this)
-  (println (tx this)))
+  (get-neighbours this)
+  (println (get-tx this)))
 
 
 (defmethod process-incoming-event :default
@@ -759,7 +767,7 @@
 
 (defn udp-dispatcher-fn
   [^NodeObject this ^bytes udp-data]
-  (let [secret-key     (-> this cluster :secret-key)
+  (let [secret-key     (-> this get-cluster :secret-key)
         decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes udp-data)) ;; Ignore bad messages
         events-vector  (deserialize ^bytes decrypted-data)]
     (if (vector? events-vector)
