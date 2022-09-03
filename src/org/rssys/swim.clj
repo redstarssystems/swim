@@ -321,7 +321,7 @@
   Max size of payload is limited by `*max-payload-size*`."
   [^NodeObject this payload]
   ;;TODO: send event to cluster about new payload
-  (when (> (alength (serialize payload)) *max-payload-size*)
+  (when (> (alength ^bytes (serialize payload)) *max-payload-size*)
     (throw (ex-info "Size of payload is too big" {:max-allowed *max-payload-size*})))
   (d> :set-payload (get-id this) {:payload payload})
   (swap! (:*node this) assoc :payload payload))
@@ -394,12 +394,14 @@
 
 ;; NB ;; the group-by [:id :restart-counter :tx] and send the latest events only
 (defn take-events
-  "Take `n`  events from outgoing queue (FIFO). Returns them.
+  "Take `n`  events from outgoing queue (FIFO). Returns them. If `n` is omitted then take all events.
   Taken events will be removed from queue."
-  [^NodeObject this ^long n]
-  (let [events (->> this get-outgoing-event-queue (take n) vec)]
-    (swap! (:*node this) assoc :outgoing-event-queue (->> this get-outgoing-event-queue (drop n) vec))
-    events))
+  ([^NodeObject this ^long n]
+    (let [events (->> this get-outgoing-event-queue (take n) vec)]
+      (swap! (:*node this) assoc :outgoing-event-queue (->> this get-outgoing-event-queue (drop n) vec))
+      events))
+  ([^NodeObject this]
+    (take-events this (count (get-outgoing-event-queue this)))))
 
 
 (defn upsert-ping
@@ -635,7 +637,7 @@
 ;;;;
 
 
-(defn send-event-only
+(defn send-event
   "Send one event to a neighbour.
   Event will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
@@ -643,40 +645,64 @@
           prepared-event (.prepare event)
           data           ^bytes (e/encrypt-data secret-key (serialize [prepared-event]))]
       (when (> (alength data) *max-udp-size*)
+        (d> :send-event-too-big-udp-error (get-id this) {:udp-size (alength data)})
         (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
       (udp/send-packet data neighbour-host neighbour-port)))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
       (let [nb-host (.-host nb)
             nb-port (.-port nb)]
-        (send-event-only this event nb-host nb-port))
+        (send-event this event nb-host nb-port))
       (do
-        (d> :send-event-only-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+        (d> :send-event-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
-(defn send-event-with-anti-entropy
+(defn send-event-ae
   "Send one event with attached anti-entropy event to a neighbour.
   Events will be prepared, serialized and encrypted."
-  [^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-  (let [secret-key (-> this get-cluster :secret-key)
-        prepared-event (.prepare event)
-        anti-entropy-event (.prepare (new-anti-entropy-event this))
-        data ^bytes (e/encrypt-data secret-key (serialize [prepared-event anti-entropy-event]))]
-    (udp/send-packet data neighbour-host neighbour-port)))
+  ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
+    (let [secret-key         (-> this get-cluster :secret-key)
+          prepared-event     (.prepare event)
+          anti-entropy-event (.prepare (new-anti-entropy-event this))
+          data               ^bytes (e/encrypt-data secret-key (serialize [prepared-event anti-entropy-event]))]
+      (when (> (alength data) *max-udp-size*)
+        (d> :send-event-ae-too-big-udp-error (get-id this) {:udp-size (alength data)})
+        (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
+      (udp/send-packet data neighbour-host neighbour-port)))
+  ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
+    (if-let [nb (get-neighbour this neighbour-id)]
+      (let [nb-host (.-host nb)
+            nb-port (.-port nb)]
+        (send-event-ae this event nb-host nb-port))
+      (do
+        (d> :send-event-ae-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+        (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
-(defn send-events-with-anti-entropy
-  "Send vector of events from outgoing queue with attached anti-entropy event.
+(defn send-queue-events
+  "Send all events from outgoing queue with attached anti-entropy event.
    Events will be prepared, serialized and encrypted."
-  [^NodeObject this neighbour-host neighbour-port]
-  (let [secret-key (-> this get-cluster :secret-key)
-        events-vector (get-outgoing-event-queue this)
-        prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
-        anti-entropy-event (.prepare (new-anti-entropy-event this))
-        events (conj prepared-events-vector anti-entropy-event)
-        data ^bytes (e/encrypt-data secret-key (serialize events))]
-    (udp/send-packet data neighbour-host neighbour-port)))
+  ([^NodeObject this neighbour-host neighbour-port]
+    (let [secret-key             (-> this get-cluster :secret-key)
+          events-vector          (take-events this)
+          prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
+          anti-entropy-event     (.prepare (new-anti-entropy-event this))
+          events                 (conj prepared-events-vector anti-entropy-event)
+          data                   ^bytes (e/encrypt-data secret-key (serialize events))]
+      (when (> (alength data) *max-udp-size*)
+        (d> :send-queue-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
+        (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
+      (d> :send-queue-events-udp-size (get-id this) {:udp-size (alength data)})
+      (udp/send-packet data neighbour-host neighbour-port)))
+  ([^NodeObject this  ^UUID neighbour-id]
+    (if-let [nb (get-neighbour this neighbour-id)]
+      (let [nb-host (.-host nb)
+            nb-port (.-port nb)]
+        (send-queue-events this nb-host nb-port))
+      (do
+        (d> :send-queue-events-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+        (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
 (defn suitable-restart-counter?
@@ -737,7 +763,7 @@
       (upsert-neighbour this new-neighbour)))
 
   (inc-tx this)                                             ;; every event on node increments tx
-  (send-event-with-anti-entropy this (new-probe-ack-event this e) (.-host e) (.-port e)))
+  (send-event-ae this (new-probe-ack-event this e) (.-host e) (.-port e)))
 
 
 (defmethod process-incoming-event PingEvent
@@ -765,7 +791,7 @@
     (let [dead-event (new-dead-event this e)]
       (inc-tx this)                                         ;; every event on node increments tx
       (d> :process-incoming-event-ping-dead-event (get-id this) dead-event)
-      (send-event-only this dead-event (.-host e) (.-port e)))
+      (send-event this dead-event (.-host e) (.-port e)))
 
     (not (suitable-tx? this e)) :do-nothing
 
@@ -774,7 +800,7 @@
           anti-entropy-data :todo]
       (inc-tx this)                                         ;; every event on node increments tx
       (d> :process-incoming-event-ping-ack-event (get-id this) ack-event)
-      (send-event-with-anti-entropy this ack-event (.-host e) (.-port e))))
+      (send-event-ae this ack-event (.-host e) (.-port e))))
 
 
   ;; добавить новое событие probe

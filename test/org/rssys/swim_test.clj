@@ -400,6 +400,14 @@
       (sut/put-event this (event/empty-ack))
       (match (count (sut/get-outgoing-event-queue this)) 2)
       (match (sut/take-events this 2) [(event/empty-ping) (event/empty-ack)])
+      (match (count (sut/get-outgoing-event-queue this)) 0)))
+  (testing "take all events"
+    (let [this (sut/new-node-object node-data1 cluster)]
+      (match (sut/get-outgoing-event-queue this) empty?)
+      (sut/put-event this (event/empty-ping))
+      (sut/put-event this (event/empty-ack))
+      (match (count (sut/get-outgoing-event-queue this)) 2)
+      (match (sut/take-events this) [(event/empty-ping) (event/empty-ack)])
       (match (count (sut/get-outgoing-event-queue this)) 0))))
 
 
@@ -624,7 +632,7 @@
     (sut/set-payload this events-vector)))
 
 
-(deftest send-event-only-test
+(deftest send-event-test
   (testing "node1 can send event to node2"
     (let [this        (sut/new-node-object node-data1 cluster)
           node2       (sut/new-node-object node-data2 cluster)
@@ -634,26 +642,26 @@
         (sut/start this empty-node-process-fn #(do [%1 %2]))
 
         (testing "send event using host and port"
-          (sut/send-event-only this probe-event (sut/get-host node2) (sut/get-port node2))
+          (sut/send-event this probe-event (sut/get-host node2) (sut/get-port node2))
           (Thread/sleep 20)
           (match (sut/get-payload node2) [(.prepare probe-event)]))
 
         (testing "send event using neighbour id"
           (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-          (sut/send-event-only this (event/empty-ack) (sut/get-id node2))
+          (sut/send-event this (event/empty-ack) (sut/get-id node2))
           (Thread/sleep 20)
           (match (sut/get-payload node2) [(.prepare (event/empty-ack))]))
 
         (testing "Wrong neighbour id is prohibited"
           (is (thrown-with-msg? Exception #"Unknown neighbour id"
-                (sut/send-event-only this (event/empty-ack) (random-uuid)))))
+                (sut/send-event this (event/empty-ack) (random-uuid)))))
 
         (testing "Too big UDP packet is prohibited"
           (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
             (is (thrown-with-msg? Exception #"UDP packet is too big"
                   (dotimes [n 100]                           ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-                  (sut/send-event-only this (sut/new-anti-entropy-event this) (sut/get-id node2))))))
+                  (sut/send-event this (sut/new-anti-entropy-event this) (sut/get-id node2))))))
 
 
         (catch Exception e
@@ -663,9 +671,8 @@
           (sut/stop node2))))))
 
 
-
-(deftest send-event-with-anti-entropy-test
-  (testing "node1 can send event to node2 with anti-entropy data"
+(deftest send-event-ae-test
+  (testing "node1 can send event to node2"
     (let [this        (sut/new-node-object node-data1 cluster)
           node2       (sut/new-node-object node-data2 cluster)
           probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
@@ -673,11 +680,27 @@
         (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
         (sut/start this empty-node-process-fn #(do [%1 %2]))
 
+        (testing "send event using host and port"
+          (sut/send-event-ae this probe-event (sut/get-host node2) (sut/get-port node2))
+          (Thread/sleep 20)
+          (match (sut/get-payload node2) [(.prepare probe-event) (.prepare (event/empty-anti-entropy))]))
 
+        (testing "send event using neighbour id"
+          (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+          (sut/send-event-ae this (event/empty-ack) (sut/get-id node2))
+          (Thread/sleep 20)
+          (match (sut/get-payload node2) [(.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))]))
 
-        (sut/send-event-with-anti-entropy this probe-event (sut/get-host node2) (sut/get-port node2))
-        (Thread/sleep 30)
-        (match (sut/get-payload node2) [(.prepare probe-event) (.prepare (event/empty-anti-entropy))])
+        (testing "Wrong neighbour id is prohibited"
+          (is (thrown-with-msg? Exception #"Unknown neighbour id"
+                (sut/send-event-ae this (event/empty-ack) (random-uuid)))))
+
+        (testing "Too big UDP packet is prohibited"
+          (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
+            (is (thrown-with-msg? Exception #"UDP packet is too big"
+                  (dotimes [n 100]                           ;; fill too many neighbours
+                    (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
+                  (sut/send-event-ae this (sut/new-anti-entropy-event this) (sut/get-id node2))))))
 
         (catch Exception e
           (println (.getMessage e)))
@@ -686,24 +709,51 @@
           (sut/stop node2))))))
 
 
-(deftest send-events-with-anti-entropy-test
-  (testing "node1 can send several events to node2 with anti-entropy data"
+(deftest send-queue-events-test
+  (testing "node1 can send all events to node2 with anti-entropy data"
     (let [this        (sut/new-node-object node-data1 cluster)
           node2       (sut/new-node-object node-data2 cluster)
           probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
-      (sut/put-event this probe-event)
-      (sut/put-event this (event/empty-ack))
+
       (try
         (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
         (sut/start this empty-node-process-fn #(do [%1 %2]))
 
-        (sut/send-events-with-anti-entropy this (sut/get-host node2) (sut/get-port node2))
-        (Thread/sleep 30)
-        (match (sut/get-payload node2)
-          [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
+        (testing "send all events using host and port"
+          (sut/put-event this probe-event)
+          (sut/put-event this (event/empty-ack))
+          (sut/send-queue-events this (sut/get-host node2) (sut/get-port node2))
+          (Thread/sleep 20)
+          (match (sut/get-payload node2)
+            [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
+          (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty"))
+
+        (testing "send all events using neighbour id"
+          (sut/put-event this probe-event)
+          (sut/put-event this (event/empty-ack))
+          (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+          (sut/send-queue-events this (sut/get-id node2))
+          (Thread/sleep 20)
+          (match (sut/get-payload node2)
+            [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
+          (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty"))
+
+        (testing "Wrong neighbour id is prohibited"
+          (is (thrown-with-msg? Exception #"Unknown neighbour id"
+                (sut/put-event this probe-event)
+                (sut/send-queue-events this  (random-uuid)))))
+
+        (testing "Too big UDP packet is prohibited"
+          (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
+            (is (thrown-with-msg? Exception #"UDP packet is too big"
+                  (dotimes [n 100]                           ;; fill too many neighbours
+                    (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
+                  (sut/send-queue-events this (sut/get-id node2))))))
 
         (catch Exception e
           (println (.getMessage e)))
         (finally
           (sut/stop this)
           (sut/stop node2))))))
+
+
