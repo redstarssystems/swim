@@ -49,34 +49,37 @@
   * `*server-ready-promise` - if promise is present then deliver *server when server is ready to accept UDP."
   [host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
                               :or   {timeout 0 max-packet-size 1024}}]
-  (let [*server   (atom
-                    {:host                host
-                     :port                port
-                     :start-time          (Instant/now)
-                     :max-packet-size     max-packet-size
-                     :server-state        :running
-                     :continue?           true
-                     :server-packet-count 0})
-        server-socket (DatagramSocket. port (InetAddress/getByName host))]
-    (.setSoTimeout server-socket timeout)
-    (vfuture
-      (when *server-ready-promise (deliver *server-ready-promise *server))
-      (while (-> @*server :continue?)
-        (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
-              packet (DatagramPacket. buffer (alength buffer))]
-          (try
-            (.receive server-socket packet)
-            (swap! *server update :server-packet-count inc)
-            (if (pos? (.getLength packet))
-              (vfuture (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
-              :nothing)                                      ;; do not process empty packets
-            (catch SocketTimeoutException _)
-            (catch Exception e
-              (.close server-socket)
-              (throw e)))))
-      (.close server-socket)
-      (swap! *server assoc :server-state :stopped))
-    *server))
+  (try
+    (let [*server       (atom
+                          {:host                host
+                           :port                port
+                           :start-time          (Instant/now)
+                           :max-packet-size     max-packet-size
+                           :server-state        :running
+                           :continue?           true
+                           :server-packet-count 0})
+          server-socket (DatagramSocket. port (InetAddress/getByName host))]
+      (.setSoTimeout server-socket timeout)
+      (vfuture
+        (when *server-ready-promise (deliver *server-ready-promise *server))
+        (while (-> @*server :continue?)
+          (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
+                packet (DatagramPacket. buffer (alength buffer))]
+            (try
+              (.receive server-socket packet)
+              (swap! *server update :server-packet-count inc)
+              (if (pos? (.getLength packet))
+                (vfuture (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
+                :nothing)                                    ;; do not process empty packets
+              (catch SocketTimeoutException _)
+              (catch Exception e
+                (.close server-socket)
+                (throw e)))))
+        (.close server-socket)
+        (swap! *server assoc :server-state :stopped))
+      *server)
+    (catch Exception e
+      (throw (ex-info "Can't start node" {:host host :port port} e)))))
 
 
 (defn server-value
