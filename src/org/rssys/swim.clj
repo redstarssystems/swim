@@ -420,96 +420,7 @@
   (swap! (:*node this) assoc :ping-events (dissoc (get-ping-events this) neighbour-id)))
 
 
-;;;;;;;;;;;;;;;;;;;;
-
-;;;;
-;; NodeObject Operations
-;;;;
-
-(defn start
-  "Start the node and run `node-process-fn` in a separate virtual thread.
-   Params:
-    * `node-process-fn` - fn with one arg `this` for main node process. It may look for :continue? flag in UDP server.
-    * `incoming-data-processor-fn` fn to process incoming UDP packets with two args: `this` and `encrypted-data`"
-  [^NodeObject this node-process-fn incoming-data-processor-fn]
-  (when (= (get-status this) :stop)
-    (set-status this :left)
-    (set-restart-counter this (inc (get-restart-counter this)))
-    (let [{:keys [host port]} (get-value this)]
-      (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
-    (when-not (s/valid? ::spec/node (get-value this))
-      (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
-    (vthread/vfuture (node-process-fn this))
-    (d> :start (get-id this) {})))
-
-
-(defn leave
-  "Leave the cluster"
-  [^NodeObject this]
-  ;;TODO
-  )
-
-
-;; TODO:
-;; How to clean neighbour table from old nodes?
-;;
-
-
-(defn join
-  "Join this node to the cluster"
-  [^NodeObject this]
-  ;;TODO
-  )
-
-
-(defn probe
-  "Probe other node and if its alive then put it to a neighbours table"
-  [^NodeObject this ^String host ^long port]
-  ;;TODO
-  )
-
-
-;; NB: if in Ack id is different, then send event and change id in a neighbours table
-(defn ping
-  "Send Ping event to neighbour node"
-  [^NodeObject this neighbour-id]
-  ;;TODO
-  )
-
-
-(defn ack
-  "Send Ack event to neighbour node"
-  [^NodeObject this ^PingEvent ping-event]
-  ;;TODO
-  )
-
-
-(defn probe-ack
-  "Send Ack event to neighbour node"
-  [^NodeObject this ^ProbeAckEvent probe-ack-event]
-  ;;TODO
-  )
-
-
-(defn stop
-  "Stop the node and leave the cluster"
-  [^NodeObject this]
-  (let [{:keys [*udp-server scheduler-pool]} (get-value this)]
-    (leave this)
-    (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
-    (swap! (:*node this) assoc
-      :*udp-server (udp/stop *udp-server)
-      :ping-events {}
-      :outgoing-event-queue []
-      :ping-round-buffer []
-      :tx 0)
-    (set-status this :stop)
-    (when-not (s/valid? ::spec/node (get-value this))
-      (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this)))))))
-  (d> :stop (get-id this) {}))
-
-
-;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;
 
 ;;;;
 ;; Event builders
@@ -590,6 +501,9 @@
   ^ProbeAckEvent [^NodeObject this ^ProbeEvent e]
   (let [ack-event (event/map->ProbeAckEvent {:cmd-type        (:probe-ack event/code)
                                              :id              (get-id this)
+                                             :host            (get-host this)
+                                             :port            (get-port this)
+                                             :status          (get-status this)
                                              :restart-counter (get-restart-counter this)
                                              :tx              (get-tx this)
                                              :neighbour-id    (.-id e)
@@ -695,7 +609,7 @@
         (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
       (d> :send-queue-events-udp-size (get-id this) {:udp-size (alength data)})
       (udp/send-packet data neighbour-host neighbour-port)))
-  ([^NodeObject this  ^UUID neighbour-id]
+  ([^NodeObject this ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
       (let [nb-host (.-host nb)
             nb-port (.-port nb)]
@@ -730,6 +644,12 @@
   (= [true true] [(suitable-restart-counter? this e) (suitable-tx? this e)]))
 
 
+(defn nodes-in-cluster
+  "Return number of nodes in cluster (neighbours + this). "
+  [^NodeObject this]
+  (inc (count (get-neighbours this))))
+
+
 ;;;;
 
 (defmulti restore-event (fn [x] (.get ^PersistentVector x 0)))
@@ -738,32 +658,41 @@
 (defmethod restore-event 1 ^AckEvent [e] (.restore (event/empty-dead) e))
 (defmethod restore-event 8 ^AntiEntropy [e] (.restore (event/empty-anti-entropy) e))
 (defmethod restore-event 9 ^ProbeEvent [e] (.restore (event/empty-probe) e))
+(defmethod restore-event 10 ^ProbeAckEvent [e] (.restore (event/empty-probe-ack) e))
 
 
-;;;;
 
 (defmulti process-incoming-event (fn [this e] (type e)))
 
 
 (defmethod process-incoming-event ProbeEvent
   [^NodeObject this ^ProbeEvent e]
+  (let [probe-ack-event (new-probe-ack-event this e)]
+    (inc-tx this)                                           ;; every new event on node increments tx
+    (d> :probe-ack-event (get-id this) probe-ack-event)
+    (send-event this probe-ack-event (.-host e) (.-port e))))
 
-  (when (not (get-neighbour this (.-id e)))
-    (let [new-neighbour (new-neighbour-node {:id              (.-id e)
-                                             :host            (.-host e)
-                                             :port            (.-port e)
-                                             :status          :left
-                                             :access          :direct
-                                             :restart-counter (.-restart_counter e)
-                                             :tx              (.-tx e)
-                                             :payload         {}
-                                             :updated-at      (System/currentTimeMillis)})]
 
-      (d> :process-incoming-event-probe-add-new-neighbour (get-id this) new-neighbour)
-      (upsert-neighbour this new-neighbour)))
-
-  (inc-tx this)                                             ;; every event on node increments tx
-  (send-event-ae this (new-probe-ack-event this e) (.-host e) (.-port e)))
+(defmethod process-incoming-event ProbeAckEvent
+  [^NodeObject this ^ProbeAckEvent e]
+  (let [node-number  (nodes-in-cluster this)
+        cluster-size (get-cluster-size this)]
+    (if (>= node-number cluster-size)
+      (do
+        (d> :probe-ack-event-cluster-size-exceed-error (get-id this)
+          {:node-number  node-number
+           :cluster-size cluster-size}))
+      (let [nb (new-neighbour-node {:id              (.-id e)
+                                    :host            (.-host e)
+                                    :port            (.-port e)
+                                    :status          (.-status e)
+                                    :access          :direct
+                                    :restart-counter (.-restart_counter e)
+                                    :tx              (.-tx e)
+                                    :payload         {}
+                                    :updated-at      (System/currentTimeMillis)})]
+        (d> :probe-ack-event-upsert-neighbour (get-id this) nb)
+        (upsert-neighbour this nb)))))
 
 
 (defmethod process-incoming-event PingEvent
@@ -840,6 +769,7 @@
 
 ;;;;
 
+
 (defn incoming-data-processor-fn
   [^NodeObject this ^bytes encrypted-data]
   (let [secret-key     (-> this get-cluster :secret-key)
@@ -848,13 +778,10 @@
     (if (vector? events-vector)
       (doseq [serialized-event events-vector]
         (let [event (restore-event serialized-event)]
-          (inc-tx this)                                     ;; Every incoming event must increment tx
+          (inc-tx this)                                     ;; Every incoming event must increment tx on this node
           (d> :process-incoming-event (get-id this) {:event event})
           (process-incoming-event this event)))
       (d> :event-dispatcher-fn (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
-
-
-
 
 
 (defn node-process-fn
@@ -871,3 +798,98 @@
 
 
 ;;;;
+
+;;;;;;;;;;;;;;;;;;;;
+
+;;;;
+;; NodeObject Operations
+;;;;
+
+(defn start
+  "Start the node and run `node-process-fn` in a separate virtual thread.
+   Params:
+    * `node-process-fn` - fn with one arg `this` for main node process. It may look for :continue? flag in UDP server.
+    * `incoming-data-processor-fn` fn to process incoming UDP packets with two args: `this` and `encrypted-data`"
+  [^NodeObject this node-process-fn incoming-data-processor-fn]
+  (when (= (get-status this) :stop)
+    (set-status this :left)
+    (set-restart-counter this (inc (get-restart-counter this)))
+    (let [{:keys [host port]} (get-value this)]
+      (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
+    (when-not (s/valid? ::spec/node (get-value this))
+      (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
+    (vthread/vfuture (node-process-fn this))
+    (d> :start (get-id this) {})))
+
+
+(defn leave
+  "Leave the cluster"
+  [^NodeObject this]
+  ;;TODO
+  )
+
+
+;; TODO:
+;; How to clean neighbour table from old nodes?
+;;
+
+
+(defn join
+  "Join this node to the cluster"
+  [^NodeObject this]
+  ;;TODO
+  )
+
+
+(defn probe
+  "Probe other node.
+  If is responds then put other node to a neighbours table if cluster size is not exceeded."
+  [^NodeObject this ^String neighbour-host ^long neighbour-port]
+  ;;TODO
+  (let [probe-event (new-probe-event this neighbour-host neighbour-port)]
+    (inc-tx this)                                           ;; every new event should increase tx
+    (d> :probe (get-id this) probe-event)
+    (send-event this probe-event neighbour-host neighbour-port)))
+
+
+;; NB: if in Ack id is different, then send event and change id in a neighbours table
+(defn ping
+  "Send Ping event to neighbour node"
+  [^NodeObject this neighbour-id]
+  ;;TODO
+  )
+
+
+(defn ack
+  "Send Ack event to neighbour node"
+  [^NodeObject this ^PingEvent ping-event]
+  ;;TODO
+  )
+
+
+(defn probe-ack
+  "Send Ack event to neighbour node"
+  [^NodeObject this ^ProbeAckEvent probe-ack-event]
+  ;;TODO
+  )
+
+
+(defn stop
+  "Stop the node and leave the cluster"
+  [^NodeObject this]
+  (let [{:keys [*udp-server scheduler-pool]} (get-value this)]
+    (leave this)
+    (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
+    (swap! (:*node this) assoc
+      :*udp-server (udp/stop *udp-server)
+      :ping-events {}
+      :outgoing-event-queue []
+      :ping-round-buffer []
+      :tx 0)
+    (set-status this :stop)
+    (when-not (s/valid? ::spec/node (get-value this))
+      (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this)))))))
+  (d> :stop (get-id this) {}))
+
+
+;;;;;;;;;;;;;;;;;;;;

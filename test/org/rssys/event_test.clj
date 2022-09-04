@@ -260,6 +260,9 @@
   (testing "ProbeAckEvent"
     (let [probe-ack-event (sut/map->ProbeAckEvent {:cmd-type        10
                                                    :id              #uuid "00000000-0000-0000-0000-000000000002"
+                                                   :host            "127.0.0.1"
+                                                   :port            5377
+                                                   :status          :left
                                                    :restart-counter 5
                                                    :tx              0
                                                    :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
@@ -269,6 +272,9 @@
         (let [prepared-event (.prepare probe-ack-event)]
           (match prepared-event [(:probe-ack sut/code)
                                  (.-id probe-ack-event)
+                                 (.-host probe-ack-event)
+                                 (.-port probe-ack-event)
+                                 (.-status probe-ack-event)
                                  (.-restart_counter probe-ack-event)
                                  (.-tx probe-ack-event)
                                  (.-neighbour_id probe-ack-event)
@@ -277,6 +283,9 @@
       (testing "Restore ProbeAckEvent from vector"
         (let [v              [10
                               #uuid "00000000-0000-0000-0000-000000000002"
+                              "127.0.0.1"
+                              5377
+                              :left
                               5
                               0
                               #uuid "00000000-0000-0000-0000-000000000001"
@@ -302,6 +311,9 @@
 (deftest empty-probe-ack-test
   (match (sut/empty-probe-ack) {:cmd-type        10
                                 :id              #uuid "00000000-0000-0000-0000-000000000000"
+                                :host            "127.0.0.1"
+                                :port            0
+                                :status          :unknown
                                 :restart-counter 0
                                 :tx              0
                                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000000"
@@ -371,7 +383,7 @@
 
 
 (deftest empty-anti-entropy-test
-  (match (sut/empty-anti-entropy) {:cmd-type 8
+  (match (sut/empty-anti-entropy) {:cmd-type          8
                                    :anti-entropy-data []}))
 
 

@@ -147,18 +147,21 @@
 
 ;;;;
 
-(defrecord ProbeAckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx]
+(defrecord ProbeAckEvent [cmd-type id host port status restart-counter tx neighbour-id neighbour-tx]
 
            ISwimEvent
 
            (prepare [^ProbeAckEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e) (.-neighbour_tx e)])
+             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-status e) (.-restart_counter e)
+              (.tx e) (.-neighbour_id e) (.-neighbour_tx e)])
 
            (restore [^ProbeAckEvent _ v]
              (if (and
                    (vector? v)
-                   (= 6 (count v))
-                   (every? true? (map #(%1 %2) [#(= % (:probe-ack code)) uuid? nat-int? nat-int? uuid? nat-int?] v)))
+                   (= 9 (count v))
+                   (every? true? (map #(%1 %2)
+                                   [#(= % (:probe-ack code)) uuid? string? nat-int? keyword?
+                                    nat-int? nat-int? uuid? nat-int?] v)))
                (apply ->ProbeAckEvent v)
                (throw (ex-info "ProbeAckEvent vector has invalid structure" {:probe-ack-vec v})))))
 
@@ -169,6 +172,9 @@
   ^ProbeAckEvent []
   (map->ProbeAckEvent {:cmd-type        (:probe-ack code)
                        :id              (UUID. 0 0)
+                       :host            "127.0.0.1"
+                       :port            0
+                       :status          :unknown
                        :restart-counter 0
                        :tx              0
                        :neighbour-id    (UUID. 0 0)

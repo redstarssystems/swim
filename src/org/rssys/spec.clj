@@ -37,7 +37,7 @@
 
 (s/def ::neighbour-tx ::tx)
 (s/def ::ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
-(s/def ::probe-ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
+(s/def ::probe-ack-event (s/keys :req-un [::cmd-type ::id ::host ::port ::status ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 
 
 ;; ::neighbour-id - dead node

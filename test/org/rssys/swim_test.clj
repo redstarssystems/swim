@@ -260,6 +260,16 @@
          :attempt-number  1}))))
 
 
+(deftest nodes-in-cluster-test
+  (let [this (sut/new-node-object node-data1 cluster)
+        nb   (sut/new-neighbour-node neighbour-data1)]
+    (testing "In cluster only this node"
+      (is (= 1 (sut/nodes-in-cluster this)) "Should be cluster with one node"))
+    (testing "In cluster this node and one neighbour"
+      (sut/upsert-neighbour this nb)
+      (is (= 2 (sut/nodes-in-cluster this)) "Should be cluster with two nodes"))))
+
+
 (deftest set-cluster-test
   (testing "set cluster"
     (let [new-cluster (sut/new-cluster (assoc cluster-data :id (random-uuid) :name "cluster2"))
@@ -659,7 +669,7 @@
         (testing "Too big UDP packet is prohibited"
           (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
             (is (thrown-with-msg? Exception #"UDP packet is too big"
-                  (dotimes [n 100]                           ;; fill too many neighbours
+                  (dotimes [n 100]                          ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
                   (sut/send-event this (sut/new-anti-entropy-event this) (sut/get-id node2))))))
 
@@ -698,7 +708,7 @@
         (testing "Too big UDP packet is prohibited"
           (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
             (is (thrown-with-msg? Exception #"UDP packet is too big"
-                  (dotimes [n 100]                           ;; fill too many neighbours
+                  (dotimes [n 100]                          ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
                   (sut/send-event-ae this (sut/new-anti-entropy-event this) (sut/get-id node2))))))
 
@@ -741,12 +751,12 @@
         (testing "Wrong neighbour id is prohibited"
           (is (thrown-with-msg? Exception #"Unknown neighbour id"
                 (sut/put-event this probe-event)
-                (sut/send-queue-events this  (random-uuid)))))
+                (sut/send-queue-events this (random-uuid)))))
 
         (testing "Too big UDP packet is prohibited"
           (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
             (is (thrown-with-msg? Exception #"UDP packet is too big"
-                  (dotimes [n 100]                           ;; fill too many neighbours
+                  (dotimes [n 100]                          ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
                   (sut/send-queue-events this (sut/get-id node2))))))
 
@@ -755,5 +765,52 @@
         (finally
           (sut/stop this)
           (sut/stop node2))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;
+;; Business logic tests
+;;;;
+
+(deftest probe-probe-ack-test
+  (testing "Probe -> ProbeAck logic"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
+      (try
+        (sut/start node1 empty-node-process-fn sut/incoming-data-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-data-processor-fn)
+
+        (testing "After probe neighbour will not be added cause cluster size limit reached"
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+          (Thread/sleep 50)
+          (match (sut/nodes-in-cluster node1) 1))
+
+        (testing "After probe neighbour will be added cause cluster size limit is not reached"
+          (sut/set-cluster-size node1 3)                    ;; increase cluster size
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+          (Thread/sleep 20)
+          (match (sut/nodes-in-cluster node1) 2)
+          (match (:id (sut/get-neighbour node1 (sut/get-id node2))) (:id node-data2)))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2))))))
+
+
+
+(comment
+  (def node1 (sut/new-node-object node-data1 cluster))
+  (def node2 (sut/new-node-object node-data2 cluster))
+  (sut/start node1 sut/node-process-fn sut/incoming-data-processor-fn)
+  (sut/start node2 sut/node-process-fn sut/incoming-data-processor-fn)
+  (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+  (sut/get-neighbours node1)
+  (sut/set-cluster-size node1 3)
+  (sut/stop node1)
+  (sut/stop node2)
+  )
 
 
