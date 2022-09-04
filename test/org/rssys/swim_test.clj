@@ -15,6 +15,7 @@
       NodeObject)
     (org.rssys.event
       AckEvent
+      AliveEvent
       AntiEntropy
       DeadEvent
       PingEvent
@@ -883,6 +884,7 @@
 
 
 (deftest ack-event-test
+
   (testing "Don't process event from unknown neighbour"
     (let [node1              (sut/new-node-object node-data1 cluster)
           node2              (sut/new-node-object node-data2 cluster)
@@ -982,7 +984,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (Thread/sleep 25)
+        (Thread/sleep 35)
         (match (-> *latest-node-error deref :org.rssys.swim/cmd) :ack-event-not-alive-neighbour-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1012,6 +1014,63 @@
         ;; wait for event processing and error-catcher-fn
         (Thread/sleep 25)
         (match (-> *latest-node-error deref :org.rssys.swim/cmd) :ack-event-no-active-ping-error)
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Process normal ack"
+    (let [node1              (sut/new-node-object node-data1 cluster)
+          node2              (sut/new-node-object node-data2 cluster)
+          *latest-node-error (atom [])
+          error-catcher-fn   (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (string/ends-with? (str cmd) "ack-event")
+                                   (swap! *latest-node-error conj cmd))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+
+        (sut/upsert-ping node1 (sut/new-ping-event node1 (sut/get-id node2) 1))
+        ;; sending normal ack event to node 1
+        (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (Thread/sleep 25)
+        (match (-> *latest-node-error deref) [:ack-event])
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Process normal ack from suspect node"
+    (let [node1              (sut/new-node-object node-data1 cluster)
+          node2              (sut/new-node-object node-data2 cluster)
+          *latest-node-error (atom [])
+          error-catcher-fn   (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (string/ends-with? (str cmd) "event")
+                                   (swap! *latest-node-error conj cmd))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :suspect)))
+
+        (sut/upsert-ping node1 (sut/new-ping-event node1 (sut/get-id node2) 1))
+        ;; sending normal ack event to node 1 from suspect node
+        (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (Thread/sleep 25)
+        (match (-> *latest-node-error deref) [:put-event :alive-event :ack-event])
+        (match (-> node1 sut/get-outgoing-event-queue first type) AliveEvent)
         (catch Exception e
           (println (ex-message e)))
         (finally
