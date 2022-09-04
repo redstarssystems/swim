@@ -1022,15 +1022,15 @@
           (sut/stop node2)))))
 
   (testing "Process normal ack"
-    (let [node1              (sut/new-node-object node-data1 cluster)
-          node2              (sut/new-node-object node-data2 cluster)
-          *latest-node-error (atom [])
-          error-catcher-fn   (fn [v]
-                               (when-let [cmd (:org.rssys.swim/cmd v)]
-                                 (when (string/ends-with? (str cmd) "ack-event")
-                                   (swap! *latest-node-error conj cmd))))]
+    (let [node1               (sut/new-node-object node-data1 cluster)
+          node2               (sut/new-node-object node-data2 cluster)
+          *latest-node-events (atom [])
+          event-catcher-fn    (fn [v]
+                                (when-let [cmd (:org.rssys.swim/cmd v)]
+                                  (when (string/ends-with? (str cmd) "ack-event")
+                                    (swap! *latest-node-events conj cmd))))]
       (try
-        (add-tap error-catcher-fn)                          ;; register error catcher
+        (add-tap event-catcher-fn)                          ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
@@ -1039,26 +1039,26 @@
         ;; sending normal ack event to node 1
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
-        ;; wait for event processing and error-catcher-fn
+        ;; wait for event processing and event-catcher-fn
         (Thread/sleep 25)
-        (match (-> *latest-node-error deref) [:ack-event])
+        (match (-> *latest-node-events deref) [:ack-event])
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (remove-tap event-catcher-fn)                     ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
   (testing "Process normal ack from suspect node"
-    (let [node1              (sut/new-node-object node-data1 cluster)
-          node2              (sut/new-node-object node-data2 cluster)
-          *latest-node-error (atom [])
-          error-catcher-fn   (fn [v]
-                               (when-let [cmd (:org.rssys.swim/cmd v)]
-                                 (when (string/ends-with? (str cmd) "event")
-                                   (swap! *latest-node-error conj cmd))))]
+    (let [node1               (sut/new-node-object node-data1 cluster)
+          node2               (sut/new-node-object node-data2 cluster)
+          *latest-node-events (atom [])
+          event-catcher-fn    (fn [v]
+                                (when-let [cmd (:org.rssys.swim/cmd v)]
+                                  (when (string/ends-with? (str cmd) "event")
+                                    (swap! *latest-node-events conj cmd))))]
       (try
-        (add-tap error-catcher-fn)                          ;; register error catcher
+        (add-tap event-catcher-fn)                          ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :suspect)))
@@ -1067,15 +1067,15 @@
         ;; sending normal ack event to node 1 from suspect node
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
-        ;; wait for event processing and error-catcher-fn
+        ;; wait for event processing and event-catcher-fn
         (Thread/sleep 25)
-        (match (-> *latest-node-error deref) [:put-event :alive-event :ack-event])
+        (match (-> *latest-node-events deref) [:put-event :alive-event :ack-event])
         (match (-> node1 sut/get-outgoing-event-queue first type) AliveEvent) ;; we send new alive event
         (match (count (sut/get-alive-neighbours node1)) 1)  ;; we set new :alive status
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (remove-tap event-catcher-fn)                     ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2))))))
 
