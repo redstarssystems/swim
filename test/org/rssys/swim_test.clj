@@ -1,6 +1,7 @@
 (ns org.rssys.swim-test
   (:require
     [clojure.spec.alpha :as s]
+    [clojure.string :as string]
     [clojure.test :refer [deftest is testing]]
     [matcho.core :refer [match]]
     [org.rssys.encrypt :as e]
@@ -779,7 +780,7 @@
         nb7  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
         nb8  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
         nb9  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
-        nb10  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))]
+        nb10 (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))]
     (sut/upsert-neighbour this nb0)
     (sut/upsert-neighbour this nb1)
     (sut/upsert-neighbour this nb2)
@@ -844,15 +845,13 @@
 
 (deftest probe-probe-ack-test
   (testing "Probe -> ProbeAck logic"
-    (let [node1    (sut/new-node-object node-data1 cluster)
-          node2    (sut/new-node-object node-data2 cluster)
-          init-tx1 (sut/get-tx node1)
-          init-tx2 (sut/get-tx node2)]
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
       (try
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
 
-        (testing "After probe neighbour will not be added cause cluster size limit reached"
+        (testing "After probe neighbour will not be added to neighbours map cause cluster size limit reached"
           (let [before-tx1 (sut/get-tx node1)
                 before-tx2 (sut/get-tx node2)]
             (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
@@ -863,7 +862,7 @@
             (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
               (match (sut/get-tx node2) (+ 2 before-tx2)))))
 
-        (testing "After probe neighbour will be added cause cluster size limit is not reached"
+        (testing "After probe neighbour will be added to neighbours map cause cluster size limit is not reached"
           (let [before-tx1 (sut/get-tx node1)
                 before-tx2 (sut/get-tx node2)]
             (sut/set-cluster-size node1 3)                  ;; increase cluster size
@@ -882,6 +881,143 @@
           (sut/stop node1)
           (sut/stop node2))))))
 
+
+(deftest ack-event-test
+  (testing "Don't process event from unknown neighbour"
+    (let [node1              (sut/new-node-object node-data1 cluster)
+          node2              (sut/new-node-object node-data2 cluster)
+          *latest-node-error (atom nil)
+          error-catcher-fn   (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (string/ends-with? (str cmd) "error")
+                                   (reset! *latest-node-error v))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        ;; sending ack event to node 1 from unknown neighbour
+        (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (Thread/sleep 25)
+        (match (-> *latest-node-error deref :org.rssys.swim/cmd) :ack-event-unknown-neighbour-error)
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Don't process event with outdated restart counter"
+    (let [node1              (sut/new-node-object node-data1 cluster)
+          node2              (sut/new-node-object node-data2 cluster)
+          *latest-node-error (atom nil)
+          error-catcher-fn   (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (string/ends-with? (str cmd) "error")
+                                   (reset! *latest-node-error v))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :restart-counter 999)))
+
+        ;; sending ack event to node 1 from with outdated restart counter
+        (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (Thread/sleep 25)
+        (match (-> *latest-node-error deref :org.rssys.swim/cmd) :ack-event-bad-restart-counter-error)
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+
+  (testing "Don't process event with outdated tx"
+    (let [node1              (sut/new-node-object node-data1 cluster)
+          node2              (sut/new-node-object node-data2 cluster)
+          *latest-node-error (atom nil)
+          error-catcher-fn   (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (string/ends-with? (str cmd) "error")
+                                   (reset! *latest-node-error v))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :tx 999)))
+
+        ;; sending ack event to node 1 from with outdated tx
+        (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (Thread/sleep 25)
+        (match (-> *latest-node-error deref :org.rssys.swim/cmd) :ack-event-bad-tx-error)
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+
+  (testing "Don't process event from not alive nodes"
+    (let [node1              (sut/new-node-object node-data1 cluster)
+          node2              (sut/new-node-object node-data2 cluster)
+          *latest-node-error (atom nil)
+          error-catcher-fn   (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (string/ends-with? (str cmd) "error")
+                                   (reset! *latest-node-error v))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :dead)))
+
+        ;; sending ack event to node 1 from dead neighbour
+        (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (Thread/sleep 25)
+        (match (-> *latest-node-error deref :org.rssys.swim/cmd) :ack-event-not-alive-neighbour-error)
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+
+  (testing "Don't process event if ack is not requested"
+    (let [node1              (sut/new-node-object node-data1 cluster)
+          node2              (sut/new-node-object node-data2 cluster)
+          *latest-node-error (atom nil)
+          error-catcher-fn   (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (string/ends-with? (str cmd) "error")
+                                   (reset! *latest-node-error v))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+
+        ;; sending ack event to node 1 without ping
+        (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (Thread/sleep 25)
+        (match (-> *latest-node-error deref :org.rssys.swim/cmd) :ack-event-no-active-ping-error)
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2))))))
 
 
 (comment

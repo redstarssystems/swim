@@ -448,13 +448,13 @@
 
 (defn new-ack-event
   "Returns new Ack event"
-  ^AckEvent [^NodeObject this ^PingEvent e]
+  ^AckEvent [^NodeObject this ^ISwimEvent e]
   (let [ack-event (event/map->AckEvent {:cmd-type        (:ack event/code)
                                         :id              (get-id this)
                                         :restart-counter (get-restart-counter this)
                                         :tx              (get-tx this)
-                                        :neighbour-id    (.-id e)
-                                        :neighbour-tx    (.-tx e)})]
+                                        :neighbour-id    (:id e)
+                                        :neighbour-tx    (:tx e)})]
     (if-not (s/valid? ::spec/ack-event ack-event)
       (throw (ex-info "Invalid ack event" (spec/problems (s/explain-data ::spec/ack-event ack-event))))
       ack-event)))
@@ -721,7 +721,7 @@
 (defmulti restore-event (fn [x] (.get ^PersistentVector x 0)))
 
 (defmethod restore-event 0 ^PingEvent [e] (.restore (event/empty-ping) e))
-(defmethod restore-event 1 ^AckEvent [e] (.restore (event/empty-dead) e))
+(defmethod restore-event 1 ^AckEvent [e] (.restore (event/empty-ack) e))
 (defmethod restore-event 8 ^AntiEntropy [e] (.restore (event/empty-anti-entropy) e))
 (defmethod restore-event 9 ^ProbeEvent [e] (.restore (event/empty-probe) e))
 (defmethod restore-event 10 ^ProbeAckEvent [e] (.restore (event/empty-probe-ack) e))
@@ -763,29 +763,30 @@
 
 (defmethod process-incoming-event AckEvent
   [^NodeObject this ^AckEvent e]
-  (let [neighbour-id (get-ping-event this (.-id e))
+  (let [neighbour-id (:id e)
         nb           (get-neighbour this neighbour-id)]
     (cond
 
       (nil? nb)
-      (d> :ack-event-unknown-neighbour-error (get-id this) {:neighbour-id neighbour-id}) ;; do nothing if ack from unknown node
+      (d> :ack-event-unknown-neighbour-error (get-id this) e) ;; do nothing if event from unknown node
 
       (not (suitable-restart-counter? this e))
-      (d> :ack-event-bad-restart-counter-error (get-id this) e) ;; do nothing if ack from the past
+      (d> :ack-event-bad-restart-counter-error (get-id this) e) ;; do nothing if event with outdated restart counter
 
       (not (suitable-tx? this e))
-      (d> :ack-event-bad-tx-error (get-id this) e)          ;; do nothing if ack from the past
+      (d> :ack-event-bad-tx-error (get-id this) e)          ;; do nothing if event with outdated tx
 
-      (nil? neighbour-id)
+      (not (#{:alive :suspect} (:status nb)))               ;; do not process events from not alive nodes
+      (d> :ack-event-not-alive-neighbour-error (get-id this) e)
+
+      (nil? (get-ping-event this (:id e)))
       (d> :ack-event-no-active-ping-error (get-id this) e)  ;; do nothing if ack is not requested
 
-      (not (#{:alive :suspect} (:status nb)))
-      (d> :ack-event-not-alive-neighbour-error (get-id this) {:neighbour-id neighbour-id})
 
       :else (do                                             ;; here we work only with alive and suspect nodes
               (delete-ping this neighbour-id)               ;; delete ping event from active pings map
-              (upsert-neighbour this (assoc nb :status :alive)) ;; overwrite :updated-at, :status = :alive
-              (when (= :suspect (:status nb))
+              (upsert-neighbour this (assoc nb :status :alive)) ;; overwrite :updated-at, :status is always :alive
+              (when (= :suspect (:status nb))               ;; if status was :suspect then inform other nodes about new status
                 (put-event this (new-alive-event this e))
                 (inc-tx this)                               ;; every event on node increments tx
                 (d> :alive-event (get-id this) {:neighbour-id neighbour-id}))
@@ -881,7 +882,7 @@
           (inc-tx this)                                     ;; Every incoming event must increment tx on this node
           (d> :incoming-udp-processor (get-id this) {:event event})
           (process-incoming-event this event)))
-      (d> :incoming-udp-processor (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
+      (d> :incoming-udp-processor-error (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
 
 
 (defn node-process-fn
