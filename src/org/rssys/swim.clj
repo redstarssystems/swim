@@ -13,6 +13,7 @@
   (:import
     (clojure.lang
       Keyword
+      PersistentHashSet
       PersistentVector)
     (java.io
       ByteArrayInputStream
@@ -236,14 +237,14 @@
 
 
 (defn get-neighbour
-  "Get neighbour by id"
+  "Get NeighbourNode by id if exists or nil if absent."
   ^NeighbourNode
   [^NodeObject this ^UUID id]
   (get (.-neighbours (get-value this)) id))
 
 
 (defn get-neighbours
-  "Get all node neighbours"
+  "Get all node neighbours. Returns map of {:id :neighbour-node}."
   [^NodeObject this]
   (.-neighbours (get-value this)))
 
@@ -645,9 +646,47 @@
 
 
 (defn nodes-in-cluster
-  "Return number of nodes in cluster (neighbours + this). "
+  "Returns number of nodes in cluster (neighbours + this). "
   [^NodeObject this]
-  (inc (count (get-neighbours this))))
+  (-> this get-neighbours count inc))
+
+
+(defn get-neighbours-with-status
+  "Returns vector of neighbours with desired statuses.
+  Params:
+    * `status-set`- set of desired statuses. e.g #{:left :alive}"
+  [^NodeObject this ^PersistentHashSet status-set]
+  (->> this get-neighbours vals (filterv #(status-set (:status %)))))
+
+
+(defn get-alive-neighbours
+  "Returns vector of alive neighbours."
+  [^NodeObject this]
+  (get-neighbours-with-status this #{:alive}))
+
+
+(defn get-stopped-neighbours
+  "Returns vector of stopped neighbours."
+  [^NodeObject this]
+  (get-neighbours-with-status this #{:stop}))
+
+
+(defn get-left-neighbours
+  "Returns vector of left neighbours."
+  [^NodeObject this]
+  (get-neighbours-with-status this #{:left}))
+
+
+(defn get-dead-neighbours
+  "Returns vector of left neighbours."
+  [^NodeObject this]
+  (get-neighbours-with-status this #{:dead}))
+
+
+(defn get-suspect-neighbours
+  "Returns vector of suspect neighbours."
+  [^NodeObject this]
+  (get-neighbours-with-status this #{:suspect}))
 
 
 ;;;;

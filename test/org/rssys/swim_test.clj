@@ -49,12 +49,12 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                       [-110 -93 126 35 39 -52 -128]
-                       [-110 -93 126 35 39 -91 104 101 108 108 111]
-                       [-110 -93 126 35 39 -64]
-                       [-110 -93 126 35 39 -93 126 58 107]
-                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                       [-110, -50, 73, -106, 2, -46, 1]))
+                      [-110 -93 126 35 39 -52 -128]
+                      [-110 -93 126 35 39 -91 104 101 108 108 111]
+                      [-110 -93 126 35 39 -64]
+                      [-110 -93 126 35 39 -93 126 58 107]
+                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                      [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
       (match dvalues values))))
 
@@ -767,6 +767,56 @@
           (sut/stop node2))))))
 
 
+(deftest get-neighbours-with-status-test
+  (let [this (sut/new-node-object node-data1 cluster)
+        nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :left))
+        nb1  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :stop))
+        nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :alive))
+        nb3  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :alive))
+        nb4  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :dead))
+        nb5  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :dead))
+        nb6  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :dead))
+        nb7  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
+        nb8  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
+        nb9  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
+        nb10  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))]
+    (sut/upsert-neighbour this nb0)
+    (sut/upsert-neighbour this nb1)
+    (sut/upsert-neighbour this nb2)
+    (sut/upsert-neighbour this nb3)
+    (sut/upsert-neighbour this nb4)
+    (sut/upsert-neighbour this nb5)
+    (sut/upsert-neighbour this nb6)
+    (sut/upsert-neighbour this nb7)
+    (sut/upsert-neighbour this nb8)
+    (sut/upsert-neighbour this nb9)
+    (sut/upsert-neighbour this nb10)
+
+    (testing "Get all alive and left neighbours"
+      (let [result (sut/get-neighbours-with-status this #{:alive :left})]
+        (match (count result) 3)))
+
+    (testing "Get all alive neighbours"
+      (let [result (sut/get-alive-neighbours this)]
+        (match (count result) 2)))
+
+    (testing "Get all stopped neighbours"
+      (let [result (sut/get-stopped-neighbours this)]
+        (match (count result) 1)))
+
+    (testing "Get all dead neighbours"
+      (let [result (sut/get-dead-neighbours this)]
+        (match (count result) 3)))
+
+    (testing "Get all left neighbours"
+      (let [result (sut/get-left-neighbours this)]
+        (match (count result) 1)))
+
+    (testing "Get all suspect neighbours"
+      (let [result (sut/get-suspect-neighbours this)]
+        (match (count result) 4)))))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -775,23 +825,39 @@
 
 (deftest probe-probe-ack-test
   (testing "Probe -> ProbeAck logic"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1    (sut/new-node-object node-data1 cluster)
+          node2    (sut/new-node-object node-data2 cluster)
+          init-tx1 (sut/get-tx node1)
+          init-tx2 (sut/get-tx node2)]
       (try
         (sut/start node1 empty-node-process-fn sut/incoming-data-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-data-processor-fn)
 
         (testing "After probe neighbour will not be added cause cluster size limit reached"
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-          (Thread/sleep 50)
-          (match (sut/nodes-in-cluster node1) 1))
+          (let [before-tx1 (sut/get-tx node1)
+                before-tx2 (sut/get-tx node2)]
+            (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+            (Thread/sleep 50)
+            (match (sut/nodes-in-cluster node1) 1)
+            (testing "tx on node 1 is incremented correctly"
+              (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
+            (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
+              (match (sut/get-tx node2) (+ 2 before-tx2)))))
 
         (testing "After probe neighbour will be added cause cluster size limit is not reached"
-          (sut/set-cluster-size node1 3)                    ;; increase cluster size
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-          (Thread/sleep 20)
-          (match (sut/nodes-in-cluster node1) 2)
-          (match (:id (sut/get-neighbour node1 (sut/get-id node2))) (:id node-data2)))
+          (let [before-tx1 (sut/get-tx node1)
+                before-tx2 (sut/get-tx node2)]
+            (sut/set-cluster-size node1 3)                  ;; increase cluster size
+            (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+            (Thread/sleep 20)
+            (match (sut/nodes-in-cluster node1) 2)
+            (match (:id (sut/get-neighbour node1 (sut/get-id node2))) (:id node-data2))
+            (testing "tx on node 1 is incremented correctly"
+              (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
+            (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
+              (match (sut/get-tx node2) (+ 2 before-tx2)))))
+
+
 
         (catch Exception e
           (println (ex-message e)))
@@ -812,5 +878,7 @@
   (sut/stop node1)
   (sut/stop node2)
   )
+
+
 
 
