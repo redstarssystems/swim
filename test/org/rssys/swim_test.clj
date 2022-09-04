@@ -1070,7 +1070,8 @@
         ;; wait for event processing and error-catcher-fn
         (Thread/sleep 25)
         (match (-> *latest-node-error deref) [:put-event :alive-event :ack-event])
-        (match (-> node1 sut/get-outgoing-event-queue first type) AliveEvent)
+        (match (-> node1 sut/get-outgoing-event-queue first type) AliveEvent) ;; we send new alive event
+        (match (count (sut/get-alive-neighbours node1)) 1)  ;; we set new :alive status
         (catch Exception e
           (println (ex-message e)))
         (finally
