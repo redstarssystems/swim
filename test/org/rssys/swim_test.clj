@@ -849,8 +849,8 @@
           init-tx1 (sut/get-tx node1)
           init-tx2 (sut/get-tx node2)]
       (try
-        (sut/start node1 empty-node-process-fn sut/incoming-data-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-data-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
 
         (testing "After probe neighbour will not be added cause cluster size limit reached"
           (let [before-tx1 (sut/get-tx node1)
@@ -876,8 +876,6 @@
             (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
               (match (sut/get-tx node2) (+ 2 before-tx2)))))
 
-
-
         (catch Exception e
           (println (ex-message e)))
         (finally
@@ -886,14 +884,11 @@
 
 
 
-
-
-
 (comment
   (def node1 (sut/new-node-object node-data1 cluster))
   (def node2 (sut/new-node-object node-data2 cluster))
-  (sut/start node1 sut/node-process-fn sut/incoming-data-processor-fn)
-  (sut/start node2 sut/node-process-fn sut/incoming-data-processor-fn)
+  (sut/start node1 sut/node-process-fn sut/incoming-udp-processor-fn)
+  (sut/start node2 sut/node-process-fn sut/incoming-udp-processor-fn)
   (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
   (sut/get-neighbours node1)
   (sut/set-cluster-size node1 3)

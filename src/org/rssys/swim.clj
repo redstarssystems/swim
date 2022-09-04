@@ -818,7 +818,10 @@
 ;;;;
 
 
-(defn incoming-data-processor-fn
+(defn incoming-udp-processor-fn
+  "Main function to process all incoming UDP packets. UDP packets will be decrypted, serialized to events.
+  Events will be processed one by one and dispatched to corresponding event handler.
+  Returns void."
   [^NodeObject this ^bytes encrypted-data]
   (let [secret-key     (-> this get-cluster :secret-key)
         decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes encrypted-data)) ;; Ignore bad messages
@@ -827,9 +830,9 @@
       (doseq [serialized-event events-vector]
         (let [event (restore-event serialized-event)]
           (inc-tx this)                                     ;; Every incoming event must increment tx on this node
-          (d> :process-incoming-event (get-id this) {:event event})
+          (d> :incoming-udp-processor (get-id this) {:event event})
           (process-incoming-event this event)))
-      (d> :event-dispatcher-fn (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
+      (d> :incoming-udp-processor (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
 
 
 (defn node-process-fn
