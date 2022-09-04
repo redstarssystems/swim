@@ -6,6 +6,7 @@
   (:import
     (org.rssys.event
       AckEvent
+      AliveEvent
       AntiEntropy
       DeadEvent
       PingEvent
@@ -274,7 +275,7 @@
                                  (.-id probe-ack-event)
                                  (.-host probe-ack-event)
                                  (.-port probe-ack-event)
-                                 (.-status probe-ack-event)
+                                 ((.-status probe-ack-event) sut/code)
                                  (.-restart_counter probe-ack-event)
                                  (.-tx probe-ack-event)
                                  (.-neighbour_id probe-ack-event)
@@ -285,7 +286,7 @@
                               #uuid "00000000-0000-0000-0000-000000000002"
                               "127.0.0.1"
                               5377
-                              :left
+                              5
                               5
                               0
                               #uuid "00000000-0000-0000-0000-000000000001"
@@ -388,3 +389,54 @@
 
 
 ;;;;
+
+(deftest map->AliveEvent-test
+  (testing "AliveEvent"
+    (let [alive-event (sut/map->AliveEvent {:cmd-type        3
+                                            :id              #uuid "00000000-0000-0000-0000-000000000002"
+                                            :restart-counter 5
+                                            :tx              0
+                                            :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
+                                            :neighbour-tx    42})]
+
+      (testing "Prepare AliveEvent to vector"
+        (let [prepared-event (.prepare alive-event)]
+          (match prepared-event [(:alive sut/code)
+                                 (.id alive-event)
+                                 (.restart_counter alive-event)
+                                 (.tx alive-event)
+                                 #uuid "00000000-0000-0000-0000-000000000001"
+                                 42])))
+
+      (testing "Restore AliveEvent from vector"
+        (let [v          [3
+                          #uuid "00000000-0000-0000-0000-000000000002"
+                          5
+                          0
+                          #uuid "00000000-0000-0000-0000-000000000001"
+                          42]
+              result-alive (.restore (sut/empty-alive) v)]
+
+          (is (= AliveEvent (type result-alive)) "Should be AliveEvent type")
+          (is (= result-alive alive-event) "Restored AliveEvent should be equals to original event")
+
+
+          (testing "Wrong event structure is prohibited"
+            (is (thrown-with-msg? Exception #"AliveEvent vector has invalid structure"
+                  (.restore (sut/empty-alive) [])))
+            (is (thrown-with-msg? Exception #"AliveEvent vector has invalid structure"
+                  (.restore (sut/empty-alive) [999
+                                               #uuid "00000000-0000-0000-0000-000000000002"
+                                               5
+                                               0
+                                               #uuid "00000000-0000-0000-0000-000000000001"
+                                               42])))))))))
+
+
+(deftest empty-alive-test
+  (match (sut/empty-alive) {:cmd-type        (:alive sut/code)
+                            :id              uuid?
+                            :restart-counter nat-int?
+                            :tx              nat-int?
+                            :neighbour-id    uuid?
+                            :neighbour-tx    nat-int?}))

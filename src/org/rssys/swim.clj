@@ -27,6 +27,7 @@
       NodeObject)
     (org.rssys.event
       AckEvent
+      AliveEvent
       AntiEntropy
       DeadEvent
       ISwimEvent
@@ -545,6 +546,23 @@
       ae-event)))
 
 
+;;;;
+
+(defn new-alive-event
+  "Returns new Alive event"
+  ^AliveEvent [^NodeObject this ^ISwimEvent e]
+  (let [alive-event (event/map->AliveEvent {:cmd-type        (:alive event/code)
+                                            :id              (get-id this)
+                                            :restart-counter (get-restart-counter this)
+                                            :tx              (get-tx this)
+                                            :neighbour-id    (:id e)
+                                            :neighbour-tx    (:tx e)})]
+    (if-not (s/valid? ::spec/alive-event alive-event)
+      (throw (ex-info "Invalid alive event" (spec/problems (s/explain-data ::spec/alive-event alive-event))))
+      alive-event)))
+
+
+
 ;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -739,8 +757,39 @@
                                     :tx              (.-tx e)
                                     :payload         {}
                                     :updated-at      (System/currentTimeMillis)})]
-        (d> :probe-ack-event-upsert-neighbour (get-id this) nb)
+        (d> :probe-ack-event (get-id this) nb)
         (upsert-neighbour this nb)))))
+
+
+(defmethod process-incoming-event AckEvent
+  [^NodeObject this ^AckEvent e]
+  (let [neighbour-id (get-ping-event this (.-id e))
+        nb           (get-neighbour this neighbour-id)]
+    (cond
+
+      (nil? nb)
+      (d> :ack-event-unknown-neighbour-error (get-id this) {:neighbour-id neighbour-id}) ;; do nothing if ack from unknown node
+
+      (not (suitable-restart-counter? this e))
+      (d> :ack-event-bad-restart-counter-error (get-id this) e) ;; do nothing if ack from the past
+
+      (not (suitable-tx? this e))
+      (d> :ack-event-bad-tx-error (get-id this) e)          ;; do nothing if ack from the past
+
+      (nil? neighbour-id)
+      (d> :ack-event-no-active-ping-error (get-id this) e)  ;; do nothing if ack is not requested
+
+      (not (#{:alive :suspect} (:status nb)))
+      (d> :ack-event-not-alive-neighbour-error (get-id this) {:neighbour-id neighbour-id})
+
+      :else (do                                             ;; here we work only with alive and suspect nodes
+              (delete-ping this neighbour-id)               ;; delete ping event from active pings map
+              (upsert-neighbour this (assoc nb :status :alive)) ;; overwrite :updated-at, :status = :alive
+              (when (= :suspect (:status nb))
+                (put-event this (new-alive-event this e))
+                (inc-tx this)                               ;; every event on node increments tx
+                (d> :alive-event (get-id this) {:neighbour-id neighbour-id}))
+              (d> :ack-event (get-id this) e)))))
 
 
 (defmethod process-incoming-event PingEvent
@@ -896,7 +945,6 @@
   "Probe other node.
   If is responds then put other node to a neighbours table if cluster size is not exceeded."
   [^NodeObject this ^String neighbour-host ^long neighbour-port]
-  ;;TODO
   (let [probe-event (new-probe-event this neighbour-host neighbour-port)]
     (inc-tx this)                                           ;; every new event should increase tx
     (d> :probe (get-id this) probe-event)

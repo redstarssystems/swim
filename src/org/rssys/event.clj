@@ -1,5 +1,7 @@
 (ns org.rssys.event
   "SWIM protocol events"
+  (:require
+    [clojure.set])
   (:import
     (java.util
       UUID)))
@@ -16,7 +18,9 @@
    :payload      7
    :anti-entropy 8
    :probe        9
-   :probe-ack    10})
+   :probe-ack    10
+   :stop         11
+   :unknown      12})
 
 
 (defprotocol ISwimEvent
@@ -152,7 +156,7 @@
            ISwimEvent
 
            (prepare [^ProbeAckEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-status e) (.-restart_counter e)
+             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) ((.-status e) code) (.-restart_counter e)
               (.tx e) (.-neighbour_id e) (.-neighbour_tx e)])
 
            (restore [^ProbeAckEvent _ v]
@@ -160,9 +164,9 @@
                    (vector? v)
                    (= 9 (count v))
                    (every? true? (map #(%1 %2)
-                                   [#(= % (:probe-ack code)) uuid? string? nat-int? keyword?
+                                   [#(= % (:probe-ack code)) uuid? string? nat-int? nat-int?
                                     nat-int? nat-int? uuid? nat-int?] v)))
-               (apply ->ProbeAckEvent v)
+               (apply ->ProbeAckEvent (assoc v 4 (get (clojure.set/map-invert code) (nth v 4))))
                (throw (ex-info "ProbeAckEvent vector has invalid structure" {:probe-ack-vec v})))))
 
 
@@ -207,4 +211,32 @@
 
 
 ;;;;
+
+
+(defrecord AliveEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx]
+
+           ISwimEvent
+
+           (prepare [^AliveEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e) (.-neighbour_tx e)])
+
+           (restore [^AliveEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 6 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:alive code)) uuid? nat-int? nat-int? uuid? nat-int?] v)))
+               (apply ->AliveEvent v)
+               (throw (ex-info "AliveEvent vector has invalid structure" {:alive-vec v})))))
+
+
+(defn empty-alive
+  "Returns empty alive event"
+  ^AliveEvent []
+  (map->AliveEvent {:cmd-type        (:alive code)
+                    :id              (UUID. 0 0)
+                    :restart-counter 0
+                    :tx              0
+                    :neighbour-id    (UUID. 0 0)
+                    :neighbour-tx    0}))
+
 
