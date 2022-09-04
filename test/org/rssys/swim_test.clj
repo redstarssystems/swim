@@ -49,12 +49,12 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                      [-110 -93 126 35 39 -52 -128]
-                      [-110 -93 126 35 39 -91 104 101 108 108 111]
-                      [-110 -93 126 35 39 -64]
-                      [-110 -93 126 35 39 -93 126 58 107]
-                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                      [-110, -50, 73, -106, 2, -46, 1]))
+                       [-110 -93 126 35 39 -52 -128]
+                       [-110 -93 126 35 39 -91 104 101 108 108 111]
+                       [-110 -93 126 35 39 -64]
+                       [-110 -93 126 35 39 -93 126 58 107]
+                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                       [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
       (match dvalues values))))
 
@@ -817,10 +817,29 @@
         (match (count result) 4)))))
 
 
+(deftest get-oldest-neighbour-test
+  (let [this (sut/new-node-object node-data1 cluster)
+        nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000000"))
+        nb1  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000001"))
+        nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000002"))
+        nb3  (sut/new-neighbour-node (assoc neighbour-data2 :status :left :id #uuid"00000000-0000-0000-0000-000000000003"))]
+    (sut/upsert-neighbour this nb0)
+    (Thread/sleep 1)
+    (sut/upsert-neighbour this nb1)
+    (Thread/sleep 1)
+    (sut/upsert-neighbour this nb2)
+    (Thread/sleep 1)
+    (sut/upsert-neighbour this nb3)
+    (match (dissoc nb0 :updated-at) (dissoc (sut/get-oldest-neighbour this) :updated-at))
+    (sut/delete-neighbour this (:id nb0))
+    (match (dissoc nb1 :updated-at) (dissoc (sut/get-oldest-neighbour this) :updated-at))
+    (match (dissoc nb3 :updated-at) (dissoc (sut/get-oldest-neighbour this #{:left}) :updated-at))))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
-;; Business logic tests
+;; SWIM business logic tests
 ;;;;
 
 (deftest probe-probe-ack-test
@@ -867,6 +886,9 @@
 
 
 
+
+
+
 (comment
   (def node1 (sut/new-node-object node-data1 cluster))
   (def node2 (sut/new-node-object node-data2 cluster))
@@ -878,6 +900,8 @@
   (sut/stop node1)
   (sut/stop node2)
   )
+
+
 
 
 

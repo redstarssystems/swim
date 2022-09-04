@@ -12,7 +12,8 @@
 (s/def ::neighbour-port ::port)
 (s/def ::name string?)
 (s/def ::desc string?)
-(s/def ::status #{:stop :join :alive :suspect :left :dead :unknown})
+(def status-set #{:stop :join :alive :suspect :left :dead :unknown})
+(s/def ::status status-set)
 (s/def ::access #{:direct :indirect})
 (s/def ::object any?)
 (s/def ::tags set?)                                         ;; #{"dc1" "test"}

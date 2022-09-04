@@ -689,6 +689,15 @@
   (get-neighbours-with-status this #{:suspect}))
 
 
+(defn get-oldest-neighbour
+  "Returns the oldest neighbour. If `status-set` is omitted then use all statuses"
+  ([^NodeObject this]
+    (get-oldest-neighbour this spec/status-set))
+  ([^NodeObject this ^PersistentHashSet status-set]
+    (let [desired-nb (get-neighbours-with-status this status-set)]
+      (->> desired-nb (sort-by :updated-at) first))))
+
+
 ;;;;
 
 (defmulti restore-event (fn [x] (.get ^PersistentVector x 0)))
