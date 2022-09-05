@@ -25,6 +25,10 @@
       MutablePool)))
 
 
+(def ^:dynamic *max-test-timeout*
+  "Max promise timeout ms in tests"
+  1000)
+
 
 (deftest safe-test
   (is (= nil (sut/safe (/ 1 0))) "Any Exceptions should be prevented")
@@ -901,7 +905,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error 1000 :timeout)
+        (deref *expecting-error *max-test-timeout* :timeout)
         (match @*expecting-error :ack-event-unknown-neighbour-error)
         (catch Exception e
           (println (ex-message e)))
@@ -928,7 +932,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error 1000 :timeout)
+        (deref *expecting-error *max-test-timeout* :timeout)
         (match @*expecting-error :ack-event-bad-restart-counter-error)
         (catch Exception e
           (println (ex-message e)))
@@ -956,7 +960,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error 1000 :timeout)
+        (deref *expecting-error *max-test-timeout* :timeout)
         (match @*expecting-error :ack-event-bad-tx-error)
         (catch Exception e
           (println (ex-message e)))
@@ -984,7 +988,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error 1000 :timeout)
+        (deref *expecting-error *max-test-timeout* :timeout)
         (match @*expecting-error :ack-event-not-alive-neighbour-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1012,7 +1016,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error 1000 :timeout)
+        (deref *expecting-error *max-test-timeout* :timeout)
         (match @*expecting-error :ack-event-no-active-ping-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1040,7 +1044,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and event-catcher-fn
-        (deref *expecting-event 1000 :timeout)
+        (deref *expecting-event *max-test-timeout* :timeout)
         (match @*expecting-event :ack-event)
         (catch Exception e
           (println (ex-message e)))
@@ -1074,9 +1078,9 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and event-catcher-fn
-        (deref *expecting-event 1000 :timeout)
-        (deref *expecting-event2 1000 :timeout)
-        (deref *expecting-event3 1000 :timeout)
+        (deref *expecting-event *max-test-timeout* :timeout)
+        (deref *expecting-event2 *max-test-timeout* :timeout)
+        (deref *expecting-event3 *max-test-timeout* :timeout)
         (match
           [@*expecting-event @*expecting-event2 @*expecting-event3]
           [:put-event :alive-event :ack-event])
