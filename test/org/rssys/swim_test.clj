@@ -3,7 +3,7 @@
     [clojure.spec.alpha :as s]
     [clojure.string :as string]
     [clojure.test :refer [deftest is testing]]
-    [matcho.core :refer [match]]
+    [matcho.core :refer [match not-match]]
     [org.rssys.encrypt :as e]
     [org.rssys.event :as event]
     [org.rssys.spec :as spec]
@@ -658,15 +658,26 @@
         (sut/start this empty-node-process-fn #(do [%1 %2]))
 
         (testing "send event using host and port"
-          (sut/send-event this probe-event (sut/get-host node2) (sut/get-port node2))
-          (Thread/sleep 20)
-          (match (sut/get-payload node2) [(.prepare probe-event)]))
+          (let [*expecting-event (promise)]
+            (add-watch (:*node node2) :event-detect
+              (fn [_ _ _ new-val]
+                (when-not (empty? (:payload new-val))
+                  (deliver *expecting-event (:payload new-val)))))
+            (sut/send-event this probe-event (sut/get-host node2) (sut/get-port node2))
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+            (match (sut/get-payload node2) [(.prepare probe-event)])
+            (remove-watch (:*node node2) :event-detect)))
 
         (testing "send event using neighbour id"
-          (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-          (sut/send-event this (event/empty-ack) (sut/get-id node2))
-          (Thread/sleep 20)
-          (match (sut/get-payload node2) [(.prepare (event/empty-ack))]))
+          (let [*expecting-event (promise)]
+            (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+            (add-watch (:*node node2) :event-detect
+              (fn [_ _ _ new-val]
+                (when-not (empty? (:payload new-val))
+                  (deliver *expecting-event (:payload new-val)))))
+            (sut/send-event this (event/empty-ack) (sut/get-id node2))
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+            (match (sut/get-payload node2) [(.prepare (event/empty-ack))])))
 
         (testing "Wrong neighbour id is prohibited"
           (is (thrown-with-msg? Exception #"Unknown neighbour id"
@@ -697,15 +708,25 @@
         (sut/start this empty-node-process-fn #(do [%1 %2]))
 
         (testing "send event using host and port"
-          (sut/send-event-ae this probe-event (sut/get-host node2) (sut/get-port node2))
-          (Thread/sleep 20)
-          (match (sut/get-payload node2) [(.prepare probe-event) (.prepare (event/empty-anti-entropy))]))
+          (let [*expecting-event (promise)]
+            (add-watch (:*node node2) :event-detect
+              (fn [_ _ _ new-val]
+                (when-not (empty? (:payload new-val))
+                  (deliver *expecting-event (:payload new-val)))))
+            (sut/send-event-ae this probe-event (sut/get-host node2) (sut/get-port node2))
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+            (match (sut/get-payload node2) [(.prepare probe-event) (.prepare (event/empty-anti-entropy))])))
 
         (testing "send event using neighbour id"
-          (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-          (sut/send-event-ae this (event/empty-ack) (sut/get-id node2))
-          (Thread/sleep 20)
-          (match (sut/get-payload node2) [(.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))]))
+          (let [*expecting-event (promise)]
+            (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+            (add-watch (:*node node2) :event-detect
+              (fn [_ _ _ new-val]
+                (when-not (empty? (:payload new-val))
+                  (deliver *expecting-event (:payload new-val)))))
+            (sut/send-event-ae this (event/empty-ack) (sut/get-id node2))
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+            (match (sut/get-payload node2) [(.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])))
 
         (testing "Wrong neighbour id is prohibited"
           (is (thrown-with-msg? Exception #"Unknown neighbour id"
@@ -736,23 +757,33 @@
         (sut/start this empty-node-process-fn #(do [%1 %2]))
 
         (testing "send all events using host and port"
-          (sut/put-event this probe-event)
-          (sut/put-event this (event/empty-ack))
-          (sut/send-queue-events this (sut/get-host node2) (sut/get-port node2))
-          (Thread/sleep 20)
-          (match (sut/get-payload node2)
-            [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
-          (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty"))
+          (let [*expecting-event (promise)]
+            (sut/put-event this probe-event)
+            (sut/put-event this (event/empty-ack))
+            (add-watch (:*node node2) :event-detect
+              (fn [_ _ _ new-val]
+                (when-not (empty? (:payload new-val))
+                  (deliver *expecting-event (:payload new-val)))))
+            (sut/send-queue-events this (sut/get-host node2) (sut/get-port node2))
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+            (match (sut/get-payload node2)
+              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
+            (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
 
         (testing "send all events using neighbour id"
-          (sut/put-event this probe-event)
-          (sut/put-event this (event/empty-ack))
-          (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-          (sut/send-queue-events this (sut/get-id node2))
-          (Thread/sleep 20)
-          (match (sut/get-payload node2)
-            [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
-          (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty"))
+          (let [*expecting-event (promise)]
+            (sut/put-event this probe-event)
+            (sut/put-event this (event/empty-ack))
+            (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+            (add-watch (:*node node2) :event-detect
+              (fn [_ _ _ new-val]
+                (when-not (empty? (:payload new-val))
+                  (deliver *expecting-event (:payload new-val)))))
+            (sut/send-queue-events this (sut/get-id node2))
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+            (match (sut/get-payload node2)
+              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
+            (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
 
         (testing "Wrong neighbour id is prohibited"
           (is (thrown-with-msg? Exception #"Unknown neighbour id"
@@ -858,9 +889,14 @@
 
         (testing "After probe neighbour will not be added to neighbours map cause cluster size limit reached"
           (let [before-tx1 (sut/get-tx node1)
-                before-tx2 (sut/get-tx node2)]
+                before-tx2 (sut/get-tx node2)
+                *expecting-event (promise)]
+            (add-watch (:*node node1) :event-detect
+              (fn [_ _ _ new-val]
+                (when (= 2 (:tx new-val)) ;; wait for ack-probe from node2
+                  (deliver *expecting-event (:payload new-val)))))
             (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-            (Thread/sleep 50)
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/nodes-in-cluster node1) 1)
             (testing "tx on node 1 is incremented correctly"
               (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
@@ -869,10 +905,15 @@
 
         (testing "After probe neighbour will be added to neighbours map cause cluster size limit is not reached"
           (let [before-tx1 (sut/get-tx node1)
-                before-tx2 (sut/get-tx node2)]
+                before-tx2 (sut/get-tx node2)
+                *expecting-event (promise)]
             (sut/set-cluster-size node1 3)                  ;; increase cluster size
+            (add-watch (:*node node1) :event-detect
+              (fn [_ _ _ new-val]
+                (when-not (empty? (:neighbours new-val))
+                  (deliver *expecting-event 1))))
             (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-            (Thread/sleep 20)
+            (deref *expecting-event *max-test-timeout* :timeout)
             (match (sut/nodes-in-cluster node1) 2)
             (match (:id (sut/get-neighbour node1 (sut/get-id node2))) (:id node-data2))
             (testing "tx on node 1 is incremented correctly"
