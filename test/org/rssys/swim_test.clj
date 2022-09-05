@@ -702,11 +702,13 @@
                 (sut/send-event this (event/empty-ack) (random-uuid)))))
 
         (testing "Too big UDP packet is prohibited"
-          (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
+          (let [config @sut/*config]
+            (swap! sut/*config assoc :max-anti-entropy-items 100)
             (is (thrown-with-msg? Exception #"UDP packet is too big"
                   (dotimes [n 100]                          ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-                  (sut/send-event this (sut/new-anti-entropy-event this) (sut/get-id node2))))))
+                  (sut/send-event this (sut/new-anti-entropy-event this) (sut/get-id node2))))
+            (reset! sut/*config config)))
 
 
         (catch Exception e
@@ -751,11 +753,13 @@
                 (sut/send-event-ae this (event/empty-ack) (random-uuid)))))
 
         (testing "Too big UDP packet is prohibited"
-          (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
+          (let [config @sut/*config]
+            (swap! sut/*config assoc :max-anti-entropy-items 100)
             (is (thrown-with-msg? Exception #"UDP packet is too big"
                   (dotimes [n 100]                          ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-                  (sut/send-event-ae this (sut/new-anti-entropy-event this) (sut/get-id node2))))))
+                  (sut/send-event-ae this (sut/new-anti-entropy-event this) (sut/get-id node2))))
+            (reset! sut/*config config)))
 
         (catch Exception e
           (println (.getMessage e)))
@@ -809,11 +813,13 @@
                 (sut/send-queue-events this (random-uuid)))))
 
         (testing "Too big UDP packet is prohibited"
-          (binding [sut/*max-anti-entropy-items* 100]       ;; increase from 2 to 100
+          (let [config @sut/*config]       ;; increase from 2 to 100
+            (swap! sut/*config assoc :max-anti-entropy-items 100)
             (is (thrown-with-msg? Exception #"UDP packet is too big"
                   (dotimes [n 100]                          ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-                  (sut/send-queue-events this (sut/get-id node2))))))
+                  (sut/send-queue-events this (sut/get-id node2))))
+            (reset! sut/*config config)))
 
         (catch Exception e
           (println (.getMessage e)))

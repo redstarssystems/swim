@@ -41,24 +41,13 @@
 ;; Common functions and constants
 ;;;;
 
-(def ^:dynamic *enable-diag-tap?*
-  "Put diagnostic data to tap>"
-  true)
+(def *config
+  (atom {:enable-diag-tap?       true            ;; Put diagnostic data to tap>
+         :max-udp-size           1450            ;; Max size of UDP packet in bytes
+         :max-payload-size       256             ;; Max payload size in bytes
+         :max-anti-entropy-items 2               ;; Max items number in anti-entropy
+         }))
 
-
-(def ^:dynamic *max-udp-size*
-  "Max size of UDP packet in bytes"
-  1450)
-
-
-(def ^:dynamic *max-payload-size*
-  "Max payload size in bytes"
-  256)
-
-
-(def ^:dynamic *max-anti-entropy-items*
-  "Max items number in anti-entropy"
-  2)
 
 
 (defn d>
@@ -66,7 +55,7 @@
    Returns true if there was room in the tap> queue, false if not (dropped),
    nil if `*enable-diag-tap?*` disabled."
   [cmd-kw node-id data]
-  (when *enable-diag-tap?*
+  (when (:enable-diag-tap? @*config)
     (tap> {::cmd    cmd-kw
            :node-id node-id
            :data    data})))
@@ -324,8 +313,8 @@
   Max size of payload is limited by `*max-payload-size*`."
   [^NodeObject this payload]
   ;;TODO: send event to cluster about new payload
-  (when (> (alength ^bytes (serialize payload)) *max-payload-size*)
-    (throw (ex-info "Size of payload is too big" {:max-allowed *max-payload-size*})))
+  (when (> (alength ^bytes (serialize payload)) (:max-payload-size @*config))
+    (throw (ex-info "Size of payload is too big" {:max-allowed (:max-payload-size @*config)})))
   (d> :set-payload (get-id this) {:payload payload})
   (swap! (:*node this) assoc :payload payload))
 
@@ -556,7 +545,7 @@
   To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
   if node has older data.
   Returns vector of known neighbors size of `num` if any or empty vector."
-  [^NodeObject this & {:keys [num] :or {num *max-anti-entropy-items*}}]
+  [^NodeObject this & {:keys [num] :or {num (:max-anti-entropy-items @*config)}}]
   (or
     (some->>
       (get-neighbours this)
@@ -610,9 +599,9 @@
     (let [secret-key     (-> this get-cluster :secret-key)
           prepared-event (.prepare event)
           data           ^bytes (e/encrypt-data secret-key (serialize [prepared-event]))]
-      (when (> (alength data) *max-udp-size*)
+      (when (> (alength data) (:max-udp-size @*config))
         (d> :send-event-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
+        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)})))
       (udp/send-packet data neighbour-host neighbour-port)))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
@@ -632,9 +621,9 @@
           prepared-event     (.prepare event)
           anti-entropy-event (.prepare (new-anti-entropy-event this))
           data               ^bytes (e/encrypt-data secret-key (serialize [prepared-event anti-entropy-event]))]
-      (when (> (alength data) *max-udp-size*)
+      (when (> (alength data) (:max-udp-size @*config))
         (d> :send-event-ae-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
+        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)})))
       (udp/send-packet data neighbour-host neighbour-port)))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
@@ -656,9 +645,9 @@
           anti-entropy-event     (.prepare (new-anti-entropy-event this))
           events                 (conj prepared-events-vector anti-entropy-event)
           data                   ^bytes (e/encrypt-data secret-key (serialize events))]
-      (when (> (alength data) *max-udp-size*)
+      (when (> (alength data) (:max-udp-size @*config))
         (d> :send-queue-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (throw (ex-info "UDP packet is too big" {:max-allowed *max-udp-size*})))
+        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)})))
       (d> :send-queue-events-udp-size (get-id this) {:udp-size (alength data)})
       (udp/send-packet data neighbour-host neighbour-port)))
   ([^NodeObject this ^UUID neighbour-id]
