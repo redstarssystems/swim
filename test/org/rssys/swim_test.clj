@@ -1021,7 +1021,7 @@
           (sut/stop node1)
           (sut/stop node2)))))
 
-  (testing "Process normal ack"
+  (testing "Process normal ack from alive node"
     (let [node1               (sut/new-node-object node-data1 cluster)
           node2               (sut/new-node-object node-data2 cluster)
           *latest-node-events (atom [])
