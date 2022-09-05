@@ -579,6 +579,27 @@
 ;;;;
 
 
+(deftest neighbour->vec-test
+  (let [nb (sut/new-neighbour-node neighbour-data1)]
+    (match (sut/neighbour->vec nb)
+      [#uuid "00000000-0000-0000-0000-000000000002"
+       "127.0.0.1"
+       5377                                                 ;; port
+       3                                                    ;; :alive = 3
+       0                                                    ;; 0 - direct, 1 - indirect
+       3                                                    ;; restart-counter
+       0                                                    ;; tx
+       {:tcp-port 4567}])))
+
+
+(deftest vec->neighbour-test
+  (testing "Converting NeighbourNode to vector and restore from vector to NeighbourNode is successful"
+    (let [nb          (sut/new-neighbour-node neighbour-data1)
+          nbv         (sut/neighbour->vec nb)
+          restored-nb (sut/vec->neighbour nbv)]
+      (match (dissoc restored-nb :updated-at) (dissoc nb :updated-at)))))
+
+
 (deftest build-anti-entropy-data-test
   (let [node1 (sut/new-node-object node-data1 cluster)]
 
@@ -602,31 +623,28 @@
                                                            :tx              3
                                                            :payload         {}
                                                            :updated-at      (System/currentTimeMillis)}))
-      (sut/upsert-neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000004"
-                                                           :host            "127.0.0.1"
-                                                           :port            5434
-                                                           :status          :alive
-                                                           :access          :direct
-                                                           :restart-counter 4
-                                                           :tx              4
-                                                           :payload         {}
-                                                           :updated-at      (System/currentTimeMillis)}))
-      (sut/upsert-neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000005"
-                                                           :host            "127.0.0.1"
-                                                           :port            5434
-                                                           :status          :alive
-                                                           :access          :direct
-                                                           :restart-counter 5
-                                                           :tx              5
-                                                           :payload         {}
-                                                           :updated-at      (System/currentTimeMillis)}))
 
       (is (= 2 (count (sut/build-anti-entropy-data node1))) "Default size of vector as expected")
-      (is (= 4 (count (sut/build-anti-entropy-data node1 :num 4))) "Size of vector as requested")
+      (is (= 1 (count (sut/build-anti-entropy-data node1 :num 1))) "Size of vector as requested")
       (is (= [] (sut/build-anti-entropy-data (sut/new-node-object node-data2 cluster)))
         "Empty neighbours map should produce empty anti-entropy vector")
-      (is (every? #(instance? NeighbourNode (sut/new-neighbour-node %)) (sut/build-anti-entropy-data node1))
-        "Every value in vector is NeighbourNode"))))
+      (match (sort (sut/build-anti-entropy-data node1))
+        [[#uuid "00000000-0000-0000-0000-000000000002"
+          "127.0.0.1"
+          5432
+          3
+          0
+          2
+          2
+          {}]
+         [#uuid "00000000-0000-0000-0000-000000000003"
+          "127.0.0.1"
+          5433
+          3
+          0
+          3
+          3
+          {}]]))))
 
 
 ;;;;
@@ -888,12 +906,12 @@
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
 
         (testing "After probe neighbour will not be added to neighbours map cause cluster size limit reached"
-          (let [before-tx1 (sut/get-tx node1)
-                before-tx2 (sut/get-tx node2)
+          (let [before-tx1       (sut/get-tx node1)
+                before-tx2       (sut/get-tx node2)
                 *expecting-event (promise)]
             (add-watch (:*node node1) :event-detect
               (fn [_ _ _ new-val]
-                (when (= 2 (:tx new-val)) ;; wait for ack-probe from node2
+                (when (= 2 (:tx new-val))                   ;; wait for ack-probe from node2
                   (deliver *expecting-event (:payload new-val)))))
             (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
@@ -904,8 +922,8 @@
               (match (sut/get-tx node2) (+ 2 before-tx2)))))
 
         (testing "After probe neighbour will be added to neighbours map cause cluster size limit is not reached"
-          (let [before-tx1 (sut/get-tx node1)
-                before-tx2 (sut/get-tx node2)
+          (let [before-tx1       (sut/get-tx node1)
+                before-tx2       (sut/get-tx node2)
                 *expecting-event (promise)]
             (sut/set-cluster-size node1 3)                  ;; increase cluster size
             (add-watch (:*node node1) :event-detect
@@ -1146,6 +1164,8 @@
   (sut/stop node1)
   (sut/stop node2)
   )
+
+
 
 
 

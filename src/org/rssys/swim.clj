@@ -1,6 +1,7 @@
 (ns org.rssys.swim
   "SWIM functions"
   (:require
+    [clojure.set]
     [clojure.spec.alpha :as s]
     [cognitect.transit :as transit]
     [org.rssys.domain :as domain]
@@ -517,6 +518,38 @@
 
 ;;;;
 
+(defn neighbour->vec
+  "Convert NeighbourNode to vector of values.
+  Field :updated-at is omitted.
+  Returns vector of values"
+  [^NeighbourNode nb]
+  [(:id nb)
+   (:host nb)
+   (:port nb)
+   ((:status nb) event/code)
+   (if (= :direct (:access nb)) 0 1)
+   (:restart-counter nb)
+   (:tx nb)
+   (:payload nb)])
+
+
+(defn vec->neighbour
+  "Convert vector of values to NeighbourNode.
+  Returns ^NeighbourNode."
+  ^NeighbourNode [v]
+  (if (= 8 (count v))
+    (new-neighbour-node {:id              (nth v 0)
+                         :host            (nth v 1)
+                         :port            (nth v 2)
+                         :status          (get (clojure.set/map-invert event/code) (nth v 3))
+                         :access          (if (zero? (nth v 4)) :direct :indirect)
+                         :restart-counter (nth v 5)
+                         :tx              (nth v 6)
+                         :payload         (nth v 7)
+                         :updated-at      0})
+    (throw (ex-info "Bad NeighbourNode vector" {:v v}))))
+
+
 (defn build-anti-entropy-data
   "Build anti-entropy data – subset of known nodes from neighbours map.
   This data is propagated from node to node and thus nodes can get knowledge about unknown nodes.
@@ -530,8 +563,7 @@
       vals
       shuffle
       (take num)
-      (map #(into {} %))
-      (map #(assoc % :updated-at 0))
+      (map neighbour->vec)
       vec)
     []))
 
@@ -792,6 +824,11 @@
                 (inc-tx this)                               ;; every event on node increments tx
                 (d> :alive-event (get-id this) {:neighbour-id neighbour-id :previous-status :suspect}))
               (d> :ack-event (get-id this) e)))))
+
+
+(defmethod process-incoming-event AntiEntropy
+  [^NodeObject this ^AntiEntropy e]
+  (let []))
 
 
 (defmethod process-incoming-event PingEvent

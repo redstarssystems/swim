@@ -14,7 +14,7 @@
 (s/def ::desc string?)
 (def status-set #{:stop :join :alive :suspect :left :dead :unknown})
 (s/def ::status status-set)
-(s/def ::access #{:direct :indirect})
+(s/def ::access #{:direct :indirect})                       ;; 0 - :direct, 1 - :indirect
 (s/def ::object any?)
 (s/def ::tags set?)                                         ;; #{"dc1" "test"}
 (s/def ::nspace (s/or :symbol symbol? :keyword keyword? :string string?)) ;; cluster namespace
@@ -30,7 +30,7 @@
 (s/def ::neighbour-node (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter ::tx ::payload ::updated-at]))
 (s/def ::neighbours (s/map-of ::neighbour-id ::neighbour-node))
 
-(s/def ::anti-entropy-data (s/coll-of ::neighbour-node))
+(s/def ::anti-entropy-data (s/coll-of vector?))
 
 (s/def ::attempt-number pos-int?)
 (s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-id ::attempt-number]))
