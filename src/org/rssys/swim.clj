@@ -531,6 +531,7 @@
       shuffle
       (take num)
       (map #(into {} %))
+      (map #(assoc % :updated-at 0))
       vec)
     []))
 
@@ -789,7 +790,7 @@
               (when (= :suspect (:status nb))               ;; if status was :suspect then inform other nodes about new status
                 (put-event this (new-alive-event this e))
                 (inc-tx this)                               ;; every event on node increments tx
-                (d> :alive-event (get-id this) {:neighbour-id neighbour-id}))
+                (d> :alive-event (get-id this) {:neighbour-id neighbour-id :previous-status :suspect}))
               (d> :ack-event (get-id this) e)))))
 
 
