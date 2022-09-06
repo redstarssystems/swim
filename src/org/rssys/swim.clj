@@ -44,6 +44,7 @@
 (def *config
   (atom {:enable-diag-tap?       true                       ;; Put diagnostic data to tap>
          :max-udp-size           1450                       ;; Max size of UDP packet in bytes
+         :ignore-max-udp-size?   false                      ;; by default we prevent sending UDP more than :max-udp-size
          :max-payload-size       256                        ;; Max payload size in bytes
          :max-anti-entropy-items 2                          ;; Max items number in anti-entropy
          }))
@@ -606,7 +607,8 @@
           data           ^bytes (e/encrypt-data secret-key (serialize [prepared-event]))]
       (when (> (alength data) (:max-udp-size @*config))
         (d> :send-event-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)})))
+        (when-not (:ignore-max-udp-size? @*config)
+          (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
       (udp/send-packet data neighbour-host neighbour-port)))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
@@ -628,7 +630,8 @@
           data               ^bytes (e/encrypt-data secret-key (serialize [prepared-event anti-entropy-event]))]
       (when (> (alength data) (:max-udp-size @*config))
         (d> :send-event-ae-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)})))
+        (when-not (:ignore-max-udp-size? @*config)
+          (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
       (udp/send-packet data neighbour-host neighbour-port)))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
@@ -640,7 +643,7 @@
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
-(defn send-queue-events
+(defn send-queue-events                                     ;; TODO put data or events from queue as param, preparing should be not here
   "Send all events from outgoing queue with attached anti-entropy event.
    Events will be prepared, serialized and encrypted."
   ([^NodeObject this neighbour-host neighbour-port]
@@ -652,7 +655,8 @@
           data                   ^bytes (e/encrypt-data secret-key (serialize events))]
       (when (> (alength data) (:max-udp-size @*config))
         (d> :send-queue-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)})))
+        (when-not (:ignore-max-udp-size? @*config)
+          (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
       (d> :send-queue-events-udp-size (get-id this) {:udp-size (alength data)})
       (udp/send-packet data neighbour-host neighbour-port)))
   ([^NodeObject this ^UUID neighbour-id]
@@ -1004,20 +1008,6 @@
 (defn ping
   "Send Ping event to neighbour node"
   [^NodeObject this neighbour-id]
-  ;;TODO
-  )
-
-
-(defn ack
-  "Send Ack event to neighbour node"
-  [^NodeObject this ^PingEvent ping-event]
-  ;;TODO
-  )
-
-
-(defn probe-ack
-  "Send Ack event to neighbour node"
-  [^NodeObject this ^ProbeAckEvent probe-ack-event]
   ;;TODO
   )
 
