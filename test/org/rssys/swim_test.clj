@@ -351,6 +351,12 @@
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
       (match (sut/get-neighbour this (:id neighbour-data1)) (dissoc neighbour-data1 :updated-at))
       (match (count (sut/get-neighbours this)) 2)
+
+      (testing "don't put to neighbours node with the same id as this have"
+        (match (count (sut/get-neighbours this)) 2)
+        (sut/upsert-neighbour this neighbour-data3)
+        (match (count (sut/get-neighbours this)) 2))
+
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid neighbour node data"
               (sut/upsert-neighbour this {:a :bad-value}))))
@@ -881,19 +887,19 @@
 (deftest get-oldest-neighbour-test
   (let [this (sut/new-node-object node-data1 cluster)
         nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000000"))
-        nb1  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000001"))
+        nb11  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000011"))
         nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000002"))
         nb3  (sut/new-neighbour-node (assoc neighbour-data2 :status :left :id #uuid"00000000-0000-0000-0000-000000000003"))]
     (sut/upsert-neighbour this nb0)
     (Thread/sleep 1)
-    (sut/upsert-neighbour this nb1)
+    (sut/upsert-neighbour this nb11)
     (Thread/sleep 1)
     (sut/upsert-neighbour this nb2)
     (Thread/sleep 1)
     (sut/upsert-neighbour this nb3)
     (match (dissoc nb0 :updated-at) (dissoc (sut/get-oldest-neighbour this) :updated-at))
     (sut/delete-neighbour this (:id nb0))
-    (match (dissoc nb1 :updated-at) (dissoc (sut/get-oldest-neighbour this) :updated-at))
+    (match (dissoc nb11 :updated-at) (dissoc (sut/get-oldest-neighbour this) :updated-at))
     (match (dissoc nb3 :updated-at) (dissoc (sut/get-oldest-neighbour this #{:left}) :updated-at))))
 
 
@@ -937,7 +943,7 @@
                 (when-not (empty? (:neighbours new-val))
                   (deliver *expecting-event 1))))
             (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-            (deref *expecting-event *max-test-timeout* :timeout)
+            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/nodes-in-cluster node1) 2)
             (match (:id (sut/get-neighbour node1 (sut/get-id node2))) (:id node-data2))
             (testing "tx on node 1 is incremented correctly"
@@ -970,7 +976,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error *max-test-timeout* :timeout)
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
         (match @*expecting-error :ack-event-unknown-neighbour-error)
         (catch Exception e
           (println (ex-message e)))
@@ -997,7 +1003,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error *max-test-timeout* :timeout)
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
         (match @*expecting-error :ack-event-bad-restart-counter-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1025,7 +1031,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error *max-test-timeout* :timeout)
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
         (match @*expecting-error :ack-event-bad-tx-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1053,7 +1059,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error *max-test-timeout* :timeout)
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
         (match @*expecting-error :ack-event-not-alive-neighbour-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1081,7 +1087,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (deref *expecting-error *max-test-timeout* :timeout)
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
         (match @*expecting-error :ack-event-no-active-ping-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1109,7 +1115,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and event-catcher-fn
-        (deref *expecting-event *max-test-timeout* :timeout)
+        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
         (match @*expecting-event :ack-event)
         (catch Exception e
           (println (ex-message e)))
@@ -1143,9 +1149,9 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and event-catcher-fn
-        (deref *expecting-event *max-test-timeout* :timeout)
-        (deref *expecting-event2 *max-test-timeout* :timeout)
-        (deref *expecting-event3 *max-test-timeout* :timeout)
+        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+        (not-match (deref *expecting-event2 *max-test-timeout* :timeout) :timeout)
+        (not-match (deref *expecting-event3 *max-test-timeout* :timeout) :timeout)
         (match
           [@*expecting-event @*expecting-event2 @*expecting-event3]
           [:put-event :alive-event :ack-event])
@@ -1159,14 +1165,107 @@
           (sut/stop node2))))))
 
 
+(deftest ^:logic anti-entropy-test
+
+  (testing "normal anti-entropy data from node1 is accepted on node2"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          *expecting-event (promise)]
+      (try
+
+        (add-watch (:*node node2) :event-detect
+          (fn [_ _ _ new-val]
+            (when (seq (:neighbours new-val))                   ;; wait for anti-entropy on node2
+              (deliver *expecting-event (:neighbours new-val)))))
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (match (sut/get-neighbours node2) empty?)
+        ;; sending normal anti-entropy event to node 2
+        (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
+        ;; wait for event processing and event-catcher-fn
+        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+        (match (count (sut/get-neighbours node2)) 1)
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "anti-entropy with actual incarnation is accepted on node2"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          *expecting-event (promise)]
+      (try
+        (add-watch (:*node node2) :event-detect
+          (fn [_ _ _ new-val]
+            (when (seq (:neighbours new-val))                   ;; wait for anti-entropy on node2
+              (deliver *expecting-event (:neighbours new-val)))))
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :payload {})))
+        ;; sending normal anti-entropy event to node 2
+        (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
+        ;; wait for event processing and event-catcher-fn
+        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+        (match (= (:payload neighbour-data2) (:payload (sut/get-neighbour node2 (:id neighbour-data2)))))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "anti-entropy with outdated incarnation is denied on node2"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          *expecting-event (promise)]
+      (try
+        (add-watch (:*node node2) :event-detect
+          (fn [_ _ _ new-val]
+            (when (seq (:neighbours new-val))                   ;; wait for anti-entropy on node2
+              (deliver *expecting-event (:neighbours new-val)))))
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :payload {} :restart-counter 999)))
+        ;; sending normal anti-entropy event to node 2
+        (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
+        ;; wait for event processing and event-catcher-fn
+        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+        (match (= {} (:payload (sut/get-neighbour node2 (:id neighbour-data2)))))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2))))))
+
+
 (comment
   (def node1 (sut/new-node-object node-data1 cluster))
   (def node2 (sut/new-node-object node-data2 cluster))
   (sut/start node1 sut/node-process-fn sut/incoming-udp-processor-fn)
   (sut/start node2 sut/node-process-fn sut/incoming-udp-processor-fn)
   (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+
+
+
   (sut/get-neighbours node1)
-  (sut/set-cluster-size node1 3)
+  (sut/get-neighbours node2)
+  (sut/delete-neighbour node2 (:id neighbour-data2))
+  (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+  (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+  (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :restart-counter 6)))
+  (sut/build-anti-entropy-data node1)
+  (def ae-event (sut/new-anti-entropy-event node1))
+  (alength (sut/serialize (.prepare ae-event)))
+
+  (sut/delete-neighbour node2 (sut/get-id node2))
+  (sut/send-event node1 ae-event (sut/get-id node2))
+
+
   (sut/stop node1)
   (sut/stop node2)
   )

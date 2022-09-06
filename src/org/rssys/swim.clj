@@ -341,11 +341,12 @@
   (when-not (s/valid? ::spec/neighbour-node neighbour-node)
     (throw (ex-info "Invalid neighbour node data"
              (->> neighbour-node (s/explain-data ::spec/neighbour-node) spec/problems))))
-  (d> :upsert-neighbour (get-id this) {:neighbour-node neighbour-node})
-  (swap! (:*node this) assoc :neighbours (assoc
-                                           (get-neighbours this)
-                                           (.-id neighbour-node)
-                                           (assoc neighbour-node :updated-at (System/currentTimeMillis)))))
+  (when-not (= (get-id this) (:id neighbour-node))
+    (d> :upsert-neighbour (get-id this) {:neighbour-node neighbour-node})
+    (swap! (:*node this) assoc :neighbours (assoc
+                                             (get-neighbours this)
+                                             (.-id neighbour-node)
+                                             (assoc neighbour-node :updated-at (System/currentTimeMillis))))))
 
 
 (defn delete-neighbour
@@ -547,7 +548,8 @@
   This data is propagated from node to node and thus nodes can get knowledge about unknown nodes.
   To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
   if node has older data.
-  Returns vector of known neighbors size of `num` if any or empty vector."
+  Returns vector of known neighbors size of `num` if any or empty vector.
+  Any item in returned vector is vectorized NeighbourNode."
   [^NodeObject this & {:keys [num] :or {num (:max-anti-entropy-items @*config)}}]
   (or
     (some->>
@@ -664,28 +666,30 @@
 
 
 (defn suitable-restart-counter?
-  "Check that restart counter from neighbours map is less or equal than from event.
+  "Check that restart counter from neighbours map is less or equal than from event or neighbour item.
   Returns true, if suitable and false/nil if not."
-  [^NodeObject this e]
-  (let [neighbour-id (:id e)]
+  [^NodeObject this event-or-neighbour]
+  (let [neighbour-id (:id event-or-neighbour)]
     (when-let [nb ^NeighbourNode (get-neighbour this neighbour-id)]
-      (<= (.-restart_counter nb) (:restart-counter e)))))
+      (<= (.-restart_counter nb) (:restart-counter event-or-neighbour)))))
 
 
 (defn suitable-tx?
-  "Check that tx from neighbours map is less or equal than from event.
+  "Check that tx from neighbours map is less or equal than from event or neighbour item.
   Returns true, if suitable and false/nil if not."
-  [^NodeObject this e]
-  (let [neighbour-id (:id e)]
+  [^NodeObject this event-or-neighbour]
+  (let [neighbour-id (:id event-or-neighbour)]
     (when-let [nb ^NeighbourNode (get-neighbour this neighbour-id)]
-      (<= (.-tx nb) (:tx e)))))
+      (<= (.-tx nb) (:tx event-or-neighbour)))))
 
 
 (defn suitable-incarnation?
-  "Check that incarnation, pair [restart-counter tx] from neighbours map is less or equal than from event.
+  "Check that incarnation, pair [restart-counter tx] from neighbours map is less or equal
+  than from event or neighbour item.
   Returns true, if suitable and false if not."
-  [^NodeObject this e]
-  (= [true true] [(suitable-restart-counter? this e) (suitable-tx? this e)]))
+  [^NodeObject this event-or-neighbour]
+  (= [true true] [(suitable-restart-counter? this event-or-neighbour)
+                  (suitable-tx? this event-or-neighbour)]))
 
 
 (defn nodes-in-cluster
@@ -792,35 +796,49 @@
         nb           (get-neighbour this neighbour-id)]
     (cond
 
+      ;; do nothing if event from unknown node
       (nil? nb)
-      (d> :ack-event-unknown-neighbour-error (get-id this) e) ;; do nothing if event from unknown node
+      (d> :ack-event-unknown-neighbour-error (get-id this) e)
 
+      ;; do nothing if event with outdated restart counter
       (not (suitable-restart-counter? this e))
-      (d> :ack-event-bad-restart-counter-error (get-id this) e) ;; do nothing if event with outdated restart counter
+      (d> :ack-event-bad-restart-counter-error (get-id this) e)
 
+      ;; do nothing if event with outdated tx
       (not (suitable-tx? this e))
-      (d> :ack-event-bad-tx-error (get-id this) e)          ;; do nothing if event with outdated tx
+      (d> :ack-event-bad-tx-error (get-id this) e)
 
-      (not (#{:alive :suspect} (:status nb)))               ;; do not process events from not alive nodes
+      ;; do not process events from not alive nodes
+      (not (#{:alive :suspect} (:status nb)))
       (d> :ack-event-not-alive-neighbour-error (get-id this) e)
 
+      ;; do nothing if ack is not requested
       (nil? (get-ping-event this (:id e)))
-      (d> :ack-event-no-active-ping-error (get-id this) e)  ;; do nothing if ack is not requested
+      (d> :ack-event-no-active-ping-error (get-id this) e)
 
 
-      :else (do                                             ;; here we work only with alive and suspect nodes
-              (delete-ping this neighbour-id)               ;; delete ping event from active pings map
-              (upsert-neighbour this (assoc nb :status :alive)) ;; overwrite :updated-at, :status is always :alive
-              (when (= :suspect (:status nb))               ;; if status was :suspect then inform other nodes about new status
+      :else (do
+              ;; here we work only with alive and suspect nodes
+              (delete-ping this neighbour-id)
+              (upsert-neighbour this (assoc nb :status :alive))
+              (when (= :suspect (:status nb))
                 (put-event this (new-alive-event this e))
-                (inc-tx this)                               ;; every event on node increments tx
+                (inc-tx this)
                 (d> :alive-event (get-id this) {:neighbour-id neighbour-id :previous-status :suspect}))
               (d> :ack-event (get-id this) e)))))
 
 
 (defmethod process-incoming-event AntiEntropy
   [^NodeObject this ^AntiEntropy e]
-  (let []))
+  (let [neighbour-vec (->> e (.-anti_entropy_data) (mapv vec->neighbour))]
+    (doseq [ae-neighbour neighbour-vec]
+      (if (get-neighbour this (:id ae-neighbour))
+        (when (suitable-incarnation? this ae-neighbour)
+          (d> :anti-entropy-event (get-id this) ae-neighbour)
+          (upsert-neighbour this ae-neighbour))
+        (when-not (= (get-id this) (:id ae-neighbour))      ;; we don't want to put itself to neighbour map
+          (d> :anti-entropy-event (get-id this) ae-neighbour)
+          (upsert-neighbour this ae-neighbour))))))
 
 
 (defmethod process-incoming-event PingEvent
