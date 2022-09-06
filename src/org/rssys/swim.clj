@@ -42,10 +42,10 @@
 ;;;;
 
 (def *config
-  (atom {:enable-diag-tap?       true            ;; Put diagnostic data to tap>
-         :max-udp-size           1450            ;; Max size of UDP packet in bytes
-         :max-payload-size       256             ;; Max payload size in bytes
-         :max-anti-entropy-items 2               ;; Max items number in anti-entropy
+  (atom {:enable-diag-tap?       true                       ;; Put diagnostic data to tap>
+         :max-udp-size           1450                       ;; Max size of UDP packet in bytes
+         :max-payload-size       256                        ;; Max payload size in bytes
+         :max-anti-entropy-items 2                          ;; Max items number in anti-entropy
          }))
 
 
@@ -419,8 +419,10 @@
 ;;;;
 
 (defn new-ping-event
-  "Returns new ping event"
-  ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number]
+  "Returns new ping event.
+  Params:
+  * `ptype` -  0 - direct ping, 1 - indirect ping for suspect neighbours"
+  ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number & {:keys [ptype] :or {ptype 0}}]
   (let [ping-event (event/map->PingEvent {:cmd-type        (:ping event/code)
                                           :id              (get-id this)
                                           :host            (get-host this)
@@ -428,7 +430,8 @@
                                           :restart-counter (get-restart-counter this)
                                           :tx              (get-tx this)
                                           :neighbour-id    neighbour-id
-                                          :attempt-number  attempt-number})]
+                                          :attempt-number  attempt-number
+                                          :ptype           ptype})]
     (if-not (s/valid? ::spec/ping-event ping-event)
       (throw (ex-info "Invalid ping event" (spec/problems (s/explain-data ::spec/ping-event ping-event))))
       ping-event)))

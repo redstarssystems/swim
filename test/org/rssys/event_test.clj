@@ -23,7 +23,8 @@
                                      :restart-counter 7
                                      :tx              0
                                      :neighbour-id    #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
-                                     :attempt-number  42})]
+                                     :attempt-number  42
+                                     :ptype           0})]
 
       (testing "Prepare PingEvent to vector"
         (let [prepared-event (.prepare ping1)]
@@ -34,7 +35,8 @@
                                  (.-restart_counter ping1)
                                  (.-tx ping1)
                                  (.-neighbour_id ping1)
-                                 (.-attempt_number ping1)])))
+                                 (.-attempt_number ping1)
+                                 (.-ptype ping1)])))
 
       (testing "Restore PingEvent from vector"
         (let [v           [0
@@ -44,7 +46,8 @@
                            7
                            0
                            #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
-                           42]
+                           42
+                           0]
               result-ping (.restore (sut/empty-ping) v)]
 
           (is (= PingEvent (type result-ping)) "Should be PingEvent type")
@@ -56,10 +59,13 @@
             (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
                   (.restore (sut/empty-ping) [999
                                               #uuid "00000000-0000-0000-0000-000000000001"
+                                              "127.0.0.1"
+                                              5376
                                               7
                                               0
-                                              #uuid "8b8d59ca-f1c5-4c9e-a4db-6d09bfb2751c"
-                                              1])))))))))
+                                              #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
+                                              42
+                                              0])))))))))
 
 
 (deftest empty-ping-test
@@ -69,7 +75,8 @@
                            :port           nat-int?
                            :tx             nat-int?
                            :neighbour-id   uuid?
-                           :attempt-number pos-int?}))
+                           :attempt-number pos-int?
+                           :ptype          nat-int?}))
 
 
 ;;;;

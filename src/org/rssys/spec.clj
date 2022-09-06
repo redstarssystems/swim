@@ -33,7 +33,12 @@
 (s/def ::anti-entropy-data (s/coll-of vector?))
 
 (s/def ::attempt-number pos-int?)
-(s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-id ::attempt-number]))
+(s/def ::ptype #{0 1})                                    ;; 0 - direct ping, 1 - indirect ping for suspect neighbours
+(s/def ::ping-event
+  (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter
+                   ::tx ::neighbour-id ::attempt-number ::ptype]))
+
+
 (s/def ::ping-events (s/map-of ::neighbour-id ::ping-event)) ;; buffer for whom we sent a ping and waiting for an ack
 
 (s/def ::neighbour-tx ::tx)

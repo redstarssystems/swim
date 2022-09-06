@@ -28,18 +28,20 @@
   (restore [this v] "Restore Event from vector of values"))
 
 
-(defrecord PingEvent [cmd-type id host port restart-counter tx neighbour-id attempt-number]
+(defrecord PingEvent [cmd-type id host port restart-counter tx neighbour-id attempt-number ptype]
 
            ISwimEvent
 
            (prepare [^PingEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e) (.-neighbour_id e) (.-attempt_number e)])
+             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
+              (.-neighbour_id e) (.-attempt_number e) (.-ptype e)])
 
            (restore [^PingEvent _ v]
              (if (and
                    (vector? v)
-                   (= 8 (count v))
-                   (every? true? (map #(%1 %2) [#(= % (:ping code)) uuid? string? pos-int? nat-int? nat-int? uuid? pos-int?] v)))
+                   (= 9 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:ping code)) uuid? string? pos-int? nat-int?
+                                                nat-int? uuid? pos-int? nat-int?] v)))
                (apply ->PingEvent v)
                (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec v})))))
 
@@ -54,7 +56,8 @@
                    :restart-counter 0
                    :tx              0
                    :neighbour-id    (UUID. 0 0)
-                   :attempt-number  1}))
+                   :attempt-number  1
+                   :ptype           0}))
 
 
 ;;;;
