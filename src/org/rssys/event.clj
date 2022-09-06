@@ -23,6 +23,9 @@
    :unknown      12})
 
 
+(def ping-types {:direct 0 :indirect 1})
+
+
 (defprotocol ISwimEvent
   (prepare [this] "Convert Event to vector of values for subsequent serialization")
   (restore [this v] "Restore Event from vector of values"))
@@ -34,7 +37,7 @@
 
            (prepare [^PingEvent e]
              [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
-              (.-neighbour_id e) (.-attempt_number e) (.-ptype e)])
+              (.-neighbour_id e) (.-attempt_number e) ((.-ptype e) ping-types)])
 
            (restore [^PingEvent _ v]
              (if (and
@@ -42,7 +45,7 @@
                    (= 9 (count v))
                    (every? true? (map #(%1 %2) [#(= % (:ping code)) uuid? string? pos-int? nat-int?
                                                 nat-int? uuid? pos-int? nat-int?] v)))
-               (apply ->PingEvent v)
+               (apply ->PingEvent (assoc v 8 (get (clojure.set/map-invert ping-types) (nth v 8))))
                (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec v})))))
 
 
@@ -57,7 +60,7 @@
                    :tx              0
                    :neighbour-id    (UUID. 0 0)
                    :attempt-number  1
-                   :ptype           0}))
+                   :ptype           :direct}))
 
 
 ;;;;

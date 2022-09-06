@@ -24,7 +24,7 @@
                                      :tx              0
                                      :neighbour-id    #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
                                      :attempt-number  42
-                                     :ptype           0})]
+                                     :ptype           :direct})]
 
       (testing "Prepare PingEvent to vector"
         (let [prepared-event (.prepare ping1)]
@@ -36,7 +36,7 @@
                                  (.-tx ping1)
                                  (.-neighbour_id ping1)
                                  (.-attempt_number ping1)
-                                 (.-ptype ping1)])))
+                                 0])))
 
       (testing "Restore PingEvent from vector"
         (let [v           [0
@@ -76,7 +76,7 @@
                            :tx             nat-int?
                            :neighbour-id   uuid?
                            :attempt-number pos-int?
-                           :ptype          nat-int?}))
+                           :ptype          keyword?}))
 
 
 ;;;;

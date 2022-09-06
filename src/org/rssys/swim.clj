@@ -421,8 +421,8 @@
 (defn new-ping-event
   "Returns new ping event.
   Params:
-  * `ptype` -  0 - direct ping, 1 - indirect ping for suspect neighbours"
-  ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number & {:keys [ptype] :or {ptype 0}}]
+  * `ptype` -  :direct or :indirect. Indirect ping is used for investigate suspect neighbours"
+  ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number & {:keys [ptype] :or {ptype :direct}}]
   (let [ping-event (event/map->PingEvent {:cmd-type        (:ping event/code)
                                           :id              (get-id this)
                                           :host            (get-host this)

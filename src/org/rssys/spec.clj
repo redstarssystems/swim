@@ -33,7 +33,9 @@
 (s/def ::anti-entropy-data (s/coll-of vector?))
 
 (s/def ::attempt-number pos-int?)
-(s/def ::ptype #{0 1})                                    ;; 0 - direct ping, 1 - indirect ping for suspect neighbours
+(s/def ::ptype #{:direct :indirect})
+
+
 (s/def ::ping-event
   (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter
                    ::tx ::neighbour-id ::attempt-number ::ptype]))
