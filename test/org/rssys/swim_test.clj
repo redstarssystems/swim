@@ -75,6 +75,7 @@
    :desc         "Test cluster1"
    :secret-token "0123456789abcdef0123456789abcdef"
    :nspace       "test-ns1"
+   :cluster-size 3
    :tags         #{"dc1" "rssys"}})
 
 
@@ -127,7 +128,7 @@
     (let [result (sut/new-cluster cluster-data)]
       (is (instance? Cluster result) "Should be Cluster instance")
       (is (s/valid? ::spec/cluster result))
-      (is (= 1 (.-cluster_size result))))))
+      (is (= 3 (.-cluster_size result))))))
 
 
 ;;;;
@@ -220,7 +221,7 @@
       (match (sut/get-restart-counter this) 7)
       (match (sut/get-tx this) 0)
       (match (sut/get-cluster this) cluster)
-      (match (sut/get-cluster-size this) 1)
+      (match (sut/get-cluster-size this) 3)
       (match (sut/get-payload this) empty?)
 
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
@@ -293,9 +294,9 @@
 (deftest set-cluster-size-test
   (testing "set cluster size"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-cluster-size this) 1)
-      (sut/set-cluster-size this 3)
       (match (sut/get-cluster-size this) 3)
+      (sut/set-cluster-size this 5)
+      (match (sut/get-cluster-size this) 5)
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid cluster size"
               (sut/set-cluster-size this -1)))))))
@@ -345,7 +346,7 @@
 
 (deftest upsert-neighbour-test
   (testing "upsert neighbour"
-    (let [this (sut/new-node-object node-data1 cluster)]
+    (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))]
       (match (sut/get-neighbours this) empty?)
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
@@ -674,8 +675,8 @@
 
 (deftest send-event-test
   (testing "node1 can send event to node2"
-    (let [this        (sut/new-node-object node-data1 cluster)
-          node2       (sut/new-node-object node-data2 cluster)
+    (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
+          node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
           probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
       (try
         (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
@@ -726,8 +727,8 @@
 
 (deftest send-event-ae-test
   (testing "node1 can send event to node2"
-    (let [this        (sut/new-node-object node-data1 cluster)
-          node2       (sut/new-node-object node-data2 cluster)
+    (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
+          node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
           probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
       (try
         (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
@@ -776,8 +777,8 @@
 
 (deftest send-queue-events-test
   (testing "node1 can send all events to node2 with anti-entropy data"
-    (let [this        (sut/new-node-object node-data1 cluster)
-          node2       (sut/new-node-object node-data2 cluster)
+    (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
+          node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
           probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
 
       (try
@@ -835,7 +836,7 @@
 
 
 (deftest get-neighbours-with-status-test
-  (let [this (sut/new-node-object node-data1 cluster)
+  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
         nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :left))
         nb1  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :stop))
         nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :alive))
@@ -885,7 +886,7 @@
 
 
 (deftest get-oldest-neighbour-test
-  (let [this (sut/new-node-object node-data1 cluster)
+  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
         nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000000"))
         nb11  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000011"))
         nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000002"))
@@ -903,6 +904,13 @@
     (match (dissoc nb3 :updated-at) (dissoc (sut/get-oldest-neighbour this #{:left}) :updated-at))))
 
 
+(deftest cluster-size-exceed?-test
+  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))]
+    (is (true? (sut/cluster-size-exceed? this)))
+    (sut/set-cluster-size this 3)
+    (is (false? (sut/cluster-size-exceed? this)))))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -911,8 +919,8 @@
 
 (deftest ^:logic probe-probe-ack-test
   (testing "Probe -> ProbeAck logic"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
+          node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))]
       (try
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
@@ -1269,6 +1277,8 @@
   (sut/stop node1)
   (sut/stop node2)
   )
+
+
 
 
 

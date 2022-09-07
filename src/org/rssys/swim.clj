@@ -300,6 +300,20 @@
   (swap! (:*node this) assoc :cluster (assoc (get-cluster this) :cluster-size new-cluster-size)))
 
 
+(defn nodes-in-cluster
+  "Returns number of nodes in cluster (neighbours + this). "
+  [^NodeObject this]
+  (-> this get-neighbours count inc))
+
+
+(defn cluster-size-exceed?
+  "Returns true if cluster size is reached its upper limit."
+  [this]
+  (let [node-number  (nodes-in-cluster this)
+        cluster-size (get-cluster-size this)]
+    (>= node-number cluster-size)))
+
+
 (defn set-status
   "Set new status for this node"
   [^NodeObject this ^Keyword new-status]
@@ -342,6 +356,12 @@
   (when-not (s/valid? ::spec/neighbour-node neighbour-node)
     (throw (ex-info "Invalid neighbour node data"
              (->> neighbour-node (s/explain-data ::spec/neighbour-node) spec/problems))))
+  (when (cluster-size-exceed? this)
+    (d> :upsert-neighbour-cluster-size-exceeded-error (get-id this)
+      {:nodes-in-cluster (nodes-in-cluster this)
+       :cluster-size     (get-cluster-size this)})
+    (throw (ex-info "Cluster size exceeded" {:nodes-in-cluster (nodes-in-cluster this)
+                                             :cluster-size     (get-cluster-size this)})))
   (when-not (= (get-id this) (:id neighbour-node))
     (d> :upsert-neighbour (get-id this) {:neighbour-node neighbour-node})
     (swap! (:*node this) assoc :neighbours (assoc
@@ -643,7 +663,9 @@
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
-(defn send-queue-events                                     ;; TODO put data or events from queue as param, preparing should be not here
+(defn send-queue-events
+  ;; TODO put data or events from queue as param, preparing should be not here
+
   "Send all events from outgoing queue with attached anti-entropy event.
    Events will be prepared, serialized and encrypted."
   ([^NodeObject this neighbour-host neighbour-port]
@@ -694,12 +716,6 @@
   [^NodeObject this event-or-neighbour]
   (= [true true] [(suitable-restart-counter? this event-or-neighbour)
                   (suitable-tx? this event-or-neighbour)]))
-
-
-(defn nodes-in-cluster
-  "Returns number of nodes in cluster (neighbours + this). "
-  [^NodeObject this]
-  (-> this get-neighbours count inc))
 
 
 (defn get-neighbours-with-status
@@ -774,24 +790,17 @@
 
 (defmethod process-incoming-event ProbeAckEvent
   [^NodeObject this ^ProbeAckEvent e]
-  (let [node-number  (nodes-in-cluster this)
-        cluster-size (get-cluster-size this)]
-    (if (>= node-number cluster-size)
-      (do
-        (d> :probe-ack-event-cluster-size-exceed-error (get-id this)
-          {:node-number  node-number
-           :cluster-size cluster-size}))
-      (let [nb (new-neighbour-node {:id              (.-id e)
-                                    :host            (.-host e)
-                                    :port            (.-port e)
-                                    :status          (.-status e)
-                                    :access          :direct
-                                    :restart-counter (.-restart_counter e)
-                                    :tx              (.-tx e)
-                                    :payload         {}
-                                    :updated-at      (System/currentTimeMillis)})]
-        (d> :probe-ack-event (get-id this) nb)
-        (upsert-neighbour this nb)))))
+  (let [nb (new-neighbour-node {:id              (.-id e)
+                                :host            (.-host e)
+                                :port            (.-port e)
+                                :status          (.-status e)
+                                :access          :direct
+                                :restart-counter (.-restart_counter e)
+                                :tx              (.-tx e)
+                                :payload         {}
+                                :updated-at      (System/currentTimeMillis)})]
+    (d> :probe-ack-event (get-id this) nb)
+    (upsert-neighbour this nb)))
 
 
 (defmethod process-incoming-event AckEvent
