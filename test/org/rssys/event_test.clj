@@ -9,6 +9,7 @@
       AliveEvent
       AntiEntropy
       DeadEvent
+      NewClusterSizeEvent
       PingEvent
       ProbeAckEvent
       ProbeEvent)))
@@ -416,12 +417,12 @@
                                  42])))
 
       (testing "Restore AliveEvent from vector"
-        (let [v          [3
-                          #uuid "00000000-0000-0000-0000-000000000002"
-                          5
-                          0
-                          #uuid "00000000-0000-0000-0000-000000000001"
-                          42]
+        (let [v            [3
+                            #uuid "00000000-0000-0000-0000-000000000002"
+                            5
+                            0
+                            #uuid "00000000-0000-0000-0000-000000000001"
+                            42]
               result-alive (.restore (sut/empty-alive) v)]
 
           (is (= AliveEvent (type result-alive)) "Should be AliveEvent type")
@@ -447,3 +448,59 @@
                             :tx              nat-int?
                             :neighbour-id    uuid?
                             :neighbour-tx    nat-int?}))
+
+
+;;;;
+
+;;;;
+
+(deftest map->NewClusterSizeEvent-test
+  (testing "NewClusterSizeEvent"
+    (let [ncs-event (sut/map->NewClusterSizeEvent {:cmd-type         13
+                                                   :id               #uuid "00000000-0000-0000-0000-000000000002"
+                                                   :restart-counter  5
+                                                   :tx               0
+                                                   :old-cluster-size 1
+                                                   :new-cluster-size 3})]
+
+      (testing "Prepare NewClusterSizeEvent to vector"
+        (let [prepared-event (.prepare ncs-event)]
+          (match prepared-event [(:new-cluster-size sut/code)
+                                 (.id ncs-event)
+                                 (.restart_counter ncs-event)
+                                 (.tx ncs-event)
+                                 1
+                                 3])))
+
+      (testing "Restore NewClusterSizeEvent from vector"
+        (let [v            [13
+                            #uuid "00000000-0000-0000-0000-000000000002"
+                            5
+                            0
+                            1
+                            3]
+              result-event (.restore (sut/empty-new-cluster-size) v)]
+
+          (is (= NewClusterSizeEvent (type result-event)) "Should be NewClusterSizeEvent type")
+          (is (= result-event ncs-event) "Restored NewClusterSizeEvent should be equals to original event")
+
+
+          (testing "Wrong event structure is prohibited"
+            (is (thrown-with-msg? Exception #"NewClusterSizeEvent vector has invalid structure"
+                  (.restore (sut/empty-new-cluster-size) [])))
+            (is (thrown-with-msg? Exception #"NewClusterSizeEvent vector has invalid structure"
+                  (.restore (sut/empty-new-cluster-size) [999
+                                                          #uuid "00000000-0000-0000-0000-000000000002"
+                                                          5
+                                                          0
+                                                          1
+                                                          3])))))))))
+
+
+(deftest empty-new-cluster-size-test
+  (match (sut/empty-new-cluster-size) {:cmd-type         (:new-cluster-size sut/code)
+                                       :id               uuid?
+                                       :restart-counter  nat-int?
+                                       :tx               nat-int?
+                                       :old-cluster-size nat-int?
+                                       :new-cluster-size nat-int?}))

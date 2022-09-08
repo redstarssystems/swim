@@ -48,6 +48,10 @@
 (s/def ::probe-ack-event (s/keys :req-un [::cmd-type ::id ::host ::port ::status ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 (s/def ::alive-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 
+(s/def ::old-cluster-size ::cluster-size)
+(s/def ::new-cluster-size ::cluster-size)
+(s/def ::new-cluster-size-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::old-cluster-size ::new-cluster-size]))
+
 
 ;; ::neighbour-id - dead node
 (s/def ::dead-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))

@@ -32,6 +32,7 @@
       AntiEntropy
       DeadEvent
       ISwimEvent
+      NewClusterSizeEvent
       PingEvent
       ProbeAckEvent
       ProbeEvent)))
@@ -610,6 +611,22 @@
       alive-event)))
 
 
+;;;;
+
+(defn new-cluster-size-event
+  "Returns new NewClusterSizeEvent event.
+  This event should be created before cluster size changed."
+  ^NewClusterSizeEvent [^NodeObject this ^long new-cluster-size]
+  (let [ncs-event (event/map->NewClusterSizeEvent {:cmd-type         (:new-cluster-size event/code)
+                                                   :id               (get-id this)
+                                                   :restart-counter  (get-restart-counter this)
+                                                   :tx               (get-tx this)
+                                                   :old-cluster-size (get-cluster-size this)
+                                                   :new-cluster-size new-cluster-size})]
+    (if-not (s/valid? ::spec/new-cluster-size-event ncs-event)
+      (throw (ex-info "Invalid new cluster size event" (spec/problems (s/explain-data ::spec/new-cluster-size-event ncs-event))))
+      ncs-event)))
+
 
 ;;;;;;;;;;;;;;;;;;;;
 
@@ -665,6 +682,7 @@
 
 (defn send-queue-events
   ;; TODO put data or events from queue as param, preparing should be not here
+  ;; todo: all events from queue from this node should have the same tx
 
   "Send all events from outgoing queue with attached anti-entropy event.
    Events will be prepared, serialized and encrypted."

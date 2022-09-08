@@ -18,6 +18,7 @@
       AliveEvent
       AntiEntropy
       DeadEvent
+      NewClusterSizeEvent
       PingEvent
       ProbeAckEvent
       ProbeEvent)
@@ -514,6 +515,30 @@
     (is (= AntiEntropy (type result)) "AntiEntropy has correct type")))
 
 
+(deftest new-alive-event-test
+  (let [this        (sut/new-node-object node-data1 cluster)
+        ack-event   (event/map->AliveEvent {:cmd-type        3
+                                            :id              #uuid "00000000-0000-0000-0000-000000000002"
+                                            :restart-counter 5
+                                            :tx              0
+                                            :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
+                                            :neighbour-tx    42})
+        alive-event (sut/new-alive-event this ack-event)]
+    (is (= AliveEvent (type alive-event)) "Should be AliveEvent  type")
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid alive event"
+            (sut/new-alive-event this (assoc ack-event :id :bad-value)))))))
+
+
+(deftest new-cluster-size-event-test
+  (let [this (sut/new-node-object node-data1 cluster)
+        ncs-event (sut/new-cluster-size-event this 5)]
+    (is (= NewClusterSizeEvent (type ncs-event)) "Should be NewClusterSizeEvent  type")
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid new cluster size event"
+            (sut/new-cluster-size-event this -1))))))
+
+
 ;;;;
 
 
@@ -820,7 +845,7 @@
                 (sut/send-queue-events this (random-uuid)))))
 
         (testing "Too big UDP packet is prohibited"
-          (let [config @sut/*config]       ;; increase from 2 to 100
+          (let [config @sut/*config]                        ;; increase from 2 to 100
             (swap! sut/*config assoc :max-anti-entropy-items 100)
             (is (thrown-with-msg? Exception #"UDP packet is too big"
                   (dotimes [n 100]                          ;; fill too many neighbours
@@ -888,7 +913,7 @@
 (deftest get-oldest-neighbour-test
   (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
         nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000000"))
-        nb11  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000011"))
+        nb11 (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000011"))
         nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000002"))
         nb3  (sut/new-neighbour-node (assoc neighbour-data2 :status :left :id #uuid"00000000-0000-0000-0000-000000000003"))]
     (sut/upsert-neighbour this nb0)
@@ -1183,7 +1208,7 @@
 
         (add-watch (:*node node2) :event-detect
           (fn [_ _ _ new-val]
-            (when (seq (:neighbours new-val))                   ;; wait for anti-entropy on node2
+            (when (seq (:neighbours new-val))               ;; wait for anti-entropy on node2
               (deliver *expecting-event (:neighbours new-val)))))
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
@@ -1207,7 +1232,7 @@
       (try
         (add-watch (:*node node2) :event-detect
           (fn [_ _ _ new-val]
-            (when (seq (:neighbours new-val))                   ;; wait for anti-entropy on node2
+            (when (seq (:neighbours new-val))               ;; wait for anti-entropy on node2
               (deliver *expecting-event (:neighbours new-val)))))
 
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
@@ -1232,7 +1257,7 @@
       (try
         (add-watch (:*node node2) :event-detect
           (fn [_ _ _ new-val]
-            (when (seq (:neighbours new-val))                   ;; wait for anti-entropy on node2
+            (when (seq (:neighbours new-val))               ;; wait for anti-entropy on node2
               (deliver *expecting-event (:neighbours new-val)))))
 
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)

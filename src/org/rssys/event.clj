@@ -8,19 +8,20 @@
 
 
 (def code
-  {:ping         0
-   :ack          1
-   :join         2
-   :alive        3
-   :suspect      4
-   :left         5
-   :dead         6
-   :payload      7
-   :anti-entropy 8
-   :probe        9
-   :probe-ack    10
-   :stop         11
-   :unknown      12})
+  {:ping             0
+   :ack              1
+   :join             2
+   :alive            3
+   :suspect          4
+   :left             5
+   :dead             6
+   :payload          7
+   :anti-entropy     8
+   :probe            9
+   :probe-ack        10
+   :stop             11
+   :unknown          12
+   :new-cluster-size 13})
 
 
 (def ping-types {:direct 0 :indirect 1})
@@ -246,3 +247,31 @@
                     :neighbour-tx    0}))
 
 
+
+;;;;
+
+(defrecord NewClusterSizeEvent [cmd-type id restart-counter tx old-cluster-size new-cluster-size]
+
+           ISwimEvent
+
+           (prepare [^NewClusterSizeEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-old_cluster_size e) (.-new_cluster_size e)])
+
+           (restore [^NewClusterSizeEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 6 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:new-cluster-size code)) uuid? nat-int? nat-int? nat-int? nat-int?] v)))
+               (apply ->NewClusterSizeEvent v)
+               (throw (ex-info "NewClusterSizeEvent vector has invalid structure" {:new-cluster-size-vec v})))))
+
+
+(defn empty-new-cluster-size
+  "Returns empty new cluster size event"
+  ^NewClusterSizeEvent []
+  (map->NewClusterSizeEvent {:cmd-type         (:new-cluster-size code)
+                             :id               (UUID. 0 0)
+                             :restart-counter  0
+                             :tx               0
+                             :old-cluster-size 0
+                             :new-cluster-size 0}))
