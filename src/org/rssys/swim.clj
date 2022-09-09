@@ -44,7 +44,7 @@
 
 (def *config
   (atom {:enable-diag-tap?       true                       ;; Put diagnostic data to tap>
-         :max-udp-size           1450                       ;; Max size of UDP packet in bytes
+         :max-udp-size           1432                       ;; Max size of UDP packet in bytes
          :ignore-max-udp-size?   false                      ;; by default we prevent sending UDP more than :max-udp-size
          :max-payload-size       256                        ;; Max payload size in bytes
          :max-anti-entropy-items 2                          ;; Max items number in anti-entropy
