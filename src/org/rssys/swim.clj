@@ -683,33 +683,34 @@
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
-(defn send-queue-events
-  ;; TODO put data or events from queue as param, preparing should be not here
-  ;; todo: all events from queue from this node should have the same tx
-
-  "Send all events from outgoing queue with attached anti-entropy event.
+(defn send-events
+  "Send given events to a neighbour.
    Events will be prepared, serialized and encrypted."
-  ([^NodeObject this neighbour-host neighbour-port]
-    (let [secret-key             (-> this get-cluster :secret-key)
-          events-vector          (take-events this)
-          prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
-          anti-entropy-event     (.prepare (new-anti-entropy-event this))
-          events                 (conj prepared-events-vector anti-entropy-event)
-          data                   ^bytes (e/encrypt-data secret-key (serialize events))]
-      (when (> (alength data) (:max-udp-size @*config))
-        (d> :send-queue-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (when-not (:ignore-max-udp-size? @*config)
-          (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
-      (d> :send-queue-events-udp-size (get-id this) {:udp-size (alength data)})
-      (udp/send-packet data neighbour-host neighbour-port)))
-  ([^NodeObject this ^UUID neighbour-id]
-    (if-let [nb (get-neighbour this neighbour-id)]
-      (let [nb-host (.-host nb)
-            nb-port (.-port nb)]
-        (send-queue-events this nb-host nb-port))
-      (do
-        (d> :send-queue-events-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
-        (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
+  [^NodeObject this events-vector neighbour-host neighbour-port]
+  (let [secret-key             (-> this get-cluster :secret-key)
+        prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
+        data                   ^bytes (e/encrypt-data secret-key (serialize prepared-events-vector))]
+    (when (> (alength data) (:max-udp-size @*config))
+      (d> :send-queue-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
+      (when-not (:ignore-max-udp-size? @*config)
+        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
+    (d> :send-queue-events-udp-size (get-id this) {:udp-size (alength data)})
+    (udp/send-packet data neighbour-host neighbour-port)))
+
+
+(defn send-ping
+  [^NodeObject this ^UUID neighbour-id attempt-number]
+  (if-let [nb (get-neighbour this neighbour-id)]
+    (let [nb-host       (.-host nb)
+          nb-port       (.-port nb)
+          events-vector (conj (take-events this)
+                          (new-ping-event this neighbour-id attempt-number)
+                          (new-anti-entropy-event this))]
+      (inc-tx this)                                         ;; because of new ping event
+      (send-events this events-vector nb-host nb-port))
+    (do
+      (d> :send-ping-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+      (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id})))))
 
 
 (defn suitable-restart-counter?
@@ -804,13 +805,13 @@
 (defmethod process-incoming-event ProbeEvent
   [^NodeObject this ^ProbeEvent e]
   (let [probe-ack-event (new-probe-ack-event this e)]
-    (inc-tx this)                                           ;; every new event on node increments tx
+    (inc-tx this)
     (d> :probe-ack-event (get-id this) probe-ack-event)
     (send-event this probe-ack-event (.-host e) (.-port e))))
 
 
 (defmethod process-incoming-event ProbeAckEvent
-  [^NodeObject this ^ProbeAckEvent e]
+  [^NodeObject this ^ProbeAckEvent e]                       ;; assume we trust probe ack events
   (let [nb (new-neighbour-node {:id              (.-id e)
                                 :host            (.-host e)
                                 :port            (.-port e)

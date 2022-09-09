@@ -800,7 +800,7 @@
           (sut/stop node2))))))
 
 
-(deftest send-queue-events-test
+(deftest send-events-test
   (testing "node1 can send all events to node2 with anti-entropy data"
     (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
           node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
@@ -814,17 +814,18 @@
           (let [*expecting-event (promise)]
             (sut/put-event this probe-event)
             (sut/put-event this (event/empty-ack))
+            (sut/put-event this (sut/new-anti-entropy-event this))
             (add-watch (:*node node2) :event-detect
               (fn [_ _ _ new-val]
                 (when-not (empty? (:payload new-val))
                   (deliver *expecting-event (:payload new-val)))))
-            (sut/send-queue-events this (sut/get-host node2) (sut/get-port node2))
+            (sut/send-events this (sut/take-events this) (sut/get-host node2) (sut/get-port node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/get-payload node2)
               [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event this))])
             (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
 
-        (testing "send all events using neighbour id"
+        #_(testing "send all events using neighbour id"
           (let [*expecting-event (promise)]
             (sut/put-event this probe-event)
             (sut/put-event this (event/empty-ack))
@@ -833,16 +834,16 @@
               (fn [_ _ _ new-val]
                 (when-not (empty? (:payload new-val))
                   (deliver *expecting-event (:payload new-val)))))
-            (sut/send-queue-events this (sut/get-id node2))
+            (sut/send-events this (sut/get-id node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/get-payload node2)
               [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event this))])
             (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
 
-        (testing "Wrong neighbour id is prohibited"
+        #_(testing "Wrong neighbour id is prohibited"
           (is (thrown-with-msg? Exception #"Unknown neighbour id"
                 (sut/put-event this probe-event)
-                (sut/send-queue-events this (random-uuid)))))
+                (sut/send-events this (random-uuid)))))
 
         (testing "Too big UDP packet is prohibited"
           (let [config @sut/*config]                        ;; increase from 2 to 100
@@ -850,7 +851,7 @@
             (is (thrown-with-msg? Exception #"UDP packet is too big"
                   (dotimes [n 100]                          ;; fill too many neighbours
                     (sut/upsert-neighbour this (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-                  (sut/send-queue-events this (sut/get-id node2))))
+                  (sut/send-events this [(sut/new-anti-entropy-event this)] (sut/get-host node2) (sut/get-port node2))))
             (reset! sut/*config config)))
 
         (catch Exception e
