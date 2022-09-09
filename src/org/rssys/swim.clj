@@ -671,7 +671,9 @@
   "Send one event with attached anti-entropy event to a neighbour.
   Events will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-    (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port))
+    (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port)
+    ;; increase tx because of new anti-entropy event
+    (inc-tx this))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
       (let [nb-host (.-host nb)
@@ -680,22 +682,6 @@
       (do
         (d> :send-event-ae-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
-
-
-
-(defn send-ping
-  [^NodeObject this ^UUID neighbour-id attempt-number]
-  (if-let [nb (get-neighbour this neighbour-id)]
-    (let [nb-host       (.-host nb)
-          nb-port       (.-port nb)
-          events-vector (conj (take-events this)
-                          (new-ping-event this neighbour-id attempt-number)
-                          (new-anti-entropy-event this))]
-      (inc-tx this)                                         ;; because of new ping event
-      (send-events this events-vector nb-host nb-port))
-    (do
-      (d> :send-ping-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
-      (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id})))))
 
 
 (defn suitable-restart-counter?
@@ -713,7 +699,7 @@
   [^NodeObject this event-or-neighbour]
   (let [neighbour-id (:id event-or-neighbour)]
     (when-let [nb ^NeighbourNode (get-neighbour this neighbour-id)]
-      (<= (.-tx nb) (:tx event-or-neighbour)))))
+      (> (:tx event-or-neighbour) (.-tx nb)))))
 
 
 (defn suitable-incarnation?
@@ -840,7 +826,7 @@
       :else (do
               ;; here we work only with alive and suspect nodes
               (delete-ping this neighbour-id)
-              (upsert-neighbour this (assoc nb :status :alive))
+              (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))
               (when (= :suspect (:status nb))
                 (put-event this (new-alive-event this e))
                 (inc-tx this)
@@ -881,70 +867,48 @@
               (upsert-neighbour this ae-neighbour))))))))
 
 
+
 (defmethod process-incoming-event PingEvent
   [^NodeObject this ^PingEvent e]
+  (let [neighbour-id (:id e)
+        nb           (get-neighbour this neighbour-id)]
+    (cond
 
-  ;; add new neighbour if it not exists in neighbours map
-  ;; TODO  переделать на проверку статуса dead т.к. это нарушает стейт-машину (нарисовать!)
-  (when (not (get-neighbour this (.-id e)))
-    (let [new-neighbour (new-neighbour-node {:id              (.-id e)
-                                             :host            (.-host e)
-                                             :port            (.-port e)
-                                             :status          :alive
-                                             :access          :direct
-                                             :restart-counter (.-restart_counter e)
-                                             :tx              (.-tx e)
-                                             :payload         {}
-                                             :updated-at      (System/currentTimeMillis)})]
+      ;; if this id is not equal to addressee id then do nothing
+      (not= (get-id this) (.-neighbour_id e))
+      (d> :ping-event-different-addressee-error (get-id this) e)
 
-      (d> :process-incoming-event-ping-add-new-neighbour (get-id this) new-neighbour)
-      (upsert-neighbour this new-neighbour)))
+      ;; do nothing if event from unknown node
+      (nil? nb)
+      (d> :ping-event-unknown-neighbour-error (get-id this) e)
 
-  (cond
+      ;; send dead event if outdated restart counter
+      (not (suitable-restart-counter? this e))
+      (do
+        (d> :ping-event-bad-restart-counter-error (get-id this) e)
+        ;;we don't increase tx here because dead event already known fact
+        (send-event this (new-dead-event this e) neighbour-id))
 
-    (not (suitable-restart-counter? this e))
-    (let [dead-event (new-dead-event this e)]
-      (inc-tx this)                                         ;; every event on node increments tx
-      (d> :process-incoming-event-ping-dead-event (get-id this) dead-event)
-      (send-event this dead-event (.-host e) (.-port e)))
+      ;; do nothing if event with outdated tx
+      (not (suitable-tx? this e))
+      (d> :ping-event-bad-tx-error (get-id this) e)
 
-    (not (suitable-tx? this e)) :do-nothing
+      ;; do not process events from not alive nodes
+      (not (#{:alive :suspect} (:status nb)))
+      (d> :ping-event-not-alive-neighbour-error (get-id this) e)
 
-    :else
-    (let [ack-event         (new-ack-event this e)
-          anti-entropy-data :todo]
-      (inc-tx this)                                         ;; every event on node increments tx
-      (d> :process-incoming-event-ping-ack-event (get-id this) ack-event)
-      (send-event-ae this ack-event (.-host e) (.-port e))))
-
-
-  ;; добавить новое событие probe
-  ;; не добавлять узел при обработке пинг, т.к. узлы должны заходить через событие join
-  ;; проверить, что узел не имел предыдущий статус dead
-  ;; обновить tx у neighbour в таблице соседей значением из пришедшего события.
-  ;; сформировать вектор из [ack event + все текущие исходящие события + антиэнтропия] но не более событий чем может принять udp пакет.
-  ;; отправить ack event немедленно.
-  ;; установить статус соседа как :alive
-
-  #_(when-let [nb ^NeighbourNode (.neighbour this (.-id e))]
-      (when (not=
-              [(.-host e) (.-port e)]
-              [(.-host nb) (.-port nb)])
-        ())
-      (.upsert_neighbour this (new-neighbour-node {:id              (.-id e)
-                                                   :host            (.-host e)
-                                                   :port            (.-port e)
-                                                   :status          :alive
-                                                   :access          :direct
-                                                   :restart-counter (.-restart_counter e)
-                                                   :tx              (.-tx e)
-                                                   :payload         {}
-                                                   :updated-at      (System/currentTimeMillis)})))
-  #_(let [neighbour-id (.-id e)                             ;; от кого получили пинг
-
-          ])
-  (get-neighbours this)
-  (println (get-tx this)))
+      :else
+      (let [ack-event      (new-ack-event this e)
+            current-status (:status nb)]
+        (inc-tx this)                                       ;; every event on node increments tx
+        (d> :ping-event-ack-event (get-id this) ack-event)
+        (send-event this ack-event (.-host e) (.-port e))
+        ;; update tx field for neighbour, and set status as :alive
+        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))
+        (when (= :suspect current-status)
+          (put-event this (new-alive-event this e))
+          (inc-tx this)                                     ;; we discovered new fact that neighbour is alive
+          (d> :alive-event (get-id this) {:neighbour-id neighbour-id :previous-status current-status}))))))
 
 
 
@@ -1003,6 +967,7 @@
   (when (= (get-status this) :stop)
     (set-status this :left)
     (set-restart-counter this (inc (get-restart-counter this)))
+    (swap! (:*node this) assoc :tx 0)
     (let [{:keys [host port]} (get-value this)]
       (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
     (when-not (s/valid? ::spec/node (get-value this))
@@ -1040,12 +1005,26 @@
     (send-event this probe-event neighbour-host neighbour-port)))
 
 
-;; NB: if in Ack id is different, then send event and change id in a neighbours table
 (defn ping
-  "Send Ping event to neighbour node"
+  "Send Ping event to neighbour node. Also, all known messages
+  Returns sent ping event if success or :ping-unknown-neighbour-id-error if error."
   [^NodeObject this neighbour-id]
-  ;;TODO
-  )
+  (if-let [nb (get-neighbour this neighbour-id)]
+    (let [nb-host       (.-host nb)
+          nb-port       (.-port nb)
+          previous-ping (get-ping-event this neighbour-id)
+          ping-event    (new-ping-event this neighbour-id (inc (or (:attempt-number previous-ping) 0)))
+          _             (inc-tx this)                       ;; because of new ping event
+          events-vector (conj (take-events this)
+                          ping-event
+                          (new-anti-entropy-event this))]
+      (inc-tx this)                                         ;; because of new anti-entropy event
+      (upsert-ping this ping-event)
+      (send-events this events-vector nb-host nb-port)
+      ping-event)
+    (do
+      (d> :ping-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+      :ping-unknown-neighbour-id-error)))
 
 
 (defn stop
