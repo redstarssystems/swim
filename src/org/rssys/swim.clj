@@ -637,19 +637,26 @@
 ;; Functions for processing events
 ;;;;
 
+(defn send-events
+  "Send given events to a neighbour.
+   Events will be prepared, serialized and encrypted."
+  [^NodeObject this events-vector neighbour-host neighbour-port]
+  (let [secret-key             (-> this get-cluster :secret-key)
+        prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
+        data                   ^bytes (e/encrypt-data secret-key (serialize prepared-events-vector))]
+    (when (> (alength data) (:max-udp-size @*config))
+      (d> :send-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
+      (when-not (:ignore-max-udp-size? @*config)
+        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
+    (d> :send-events-udp-size (get-id this) {:udp-size (alength data)})
+    (udp/send-packet data neighbour-host neighbour-port)))
+
 
 (defn send-event
   "Send one event to a neighbour.
   Event will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-    (let [secret-key     (-> this get-cluster :secret-key)
-          prepared-event (.prepare event)
-          data           ^bytes (e/encrypt-data secret-key (serialize [prepared-event]))]
-      (when (> (alength data) (:max-udp-size @*config))
-        (d> :send-event-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (when-not (:ignore-max-udp-size? @*config)
-          (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
-      (udp/send-packet data neighbour-host neighbour-port)))
+   (send-events this [event] neighbour-host neighbour-port))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
       (let [nb-host (.-host nb)
@@ -664,15 +671,7 @@
   "Send one event with attached anti-entropy event to a neighbour.
   Events will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-    (let [secret-key         (-> this get-cluster :secret-key)
-          prepared-event     (.prepare event)
-          anti-entropy-event (.prepare (new-anti-entropy-event this))
-          data               ^bytes (e/encrypt-data secret-key (serialize [prepared-event anti-entropy-event]))]
-      (when (> (alength data) (:max-udp-size @*config))
-        (d> :send-event-ae-too-big-udp-error (get-id this) {:udp-size (alength data)})
-        (when-not (:ignore-max-udp-size? @*config)
-          (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
-      (udp/send-packet data neighbour-host neighbour-port)))
+   (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
       (let [nb-host (.-host nb)
@@ -683,19 +682,6 @@
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
-(defn send-events
-  "Send given events to a neighbour.
-   Events will be prepared, serialized and encrypted."
-  [^NodeObject this events-vector neighbour-host neighbour-port]
-  (let [secret-key             (-> this get-cluster :secret-key)
-        prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
-        data                   ^bytes (e/encrypt-data secret-key (serialize prepared-events-vector))]
-    (when (> (alength data) (:max-udp-size @*config))
-      (d> :send-queue-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
-      (when-not (:ignore-max-udp-size? @*config)
-        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
-    (d> :send-queue-events-udp-size (get-id this) {:udp-size (alength data)})
-    (udp/send-packet data neighbour-host neighbour-port)))
 
 
 (defn send-ping
