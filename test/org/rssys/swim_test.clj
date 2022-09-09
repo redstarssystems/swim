@@ -767,7 +767,7 @@
                   (deliver *expecting-event (:payload new-val)))))
             (sut/send-event-ae this probe-event (sut/get-host node2) (sut/get-port node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-            (match (sut/get-payload node2) [(.prepare probe-event) (.prepare (event/empty-anti-entropy))])))
+            (is (= (sut/get-payload node2) [(.prepare probe-event) (.prepare (sut/new-anti-entropy-event this))]))))
 
         (testing "send event using neighbour id"
           (let [*expecting-event (promise)]
@@ -778,7 +778,7 @@
                   (deliver *expecting-event (:payload new-val)))))
             (sut/send-event-ae this (event/empty-ack) (sut/get-id node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-            (match (sut/get-payload node2) [(.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])))
+            (match (sut/get-payload node2) [(.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event this))])))
 
         (testing "Wrong neighbour id is prohibited"
           (is (thrown-with-msg? Exception #"Unknown neighbour id"
@@ -821,7 +821,7 @@
             (sut/send-queue-events this (sut/get-host node2) (sut/get-port node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/get-payload node2)
-              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
+              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event this))])
             (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
 
         (testing "send all events using neighbour id"
@@ -836,7 +836,7 @@
             (sut/send-queue-events this (sut/get-id node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/get-payload node2)
-              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (event/empty-anti-entropy))])
+              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event this))])
             (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
 
         (testing "Wrong neighbour id is prohibited"
@@ -1206,19 +1206,20 @@
           *expecting-event (promise)]
       (try
 
-        (add-watch (:*node node2) :event-detect
-          (fn [_ _ _ new-val]
-            (when (seq (:neighbours new-val))               ;; wait for anti-entropy on node2
-              (deliver *expecting-event (:neighbours new-val)))))
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (match (sut/get-neighbours node2) empty?)
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (add-watch (:*node node2) :event-detect
+          (fn [_ _ _ new-val]
+            (when (= 2 (count (:neighbours new-val)))               ;; wait for anti-entropy on node2
+              (deliver *expecting-event (:neighbours new-val)))))
+        (match (count (sut/get-neighbours node2)) 1)
         ;; sending normal anti-entropy event to node 2
         (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
         ;; wait for event processing and event-catcher-fn
         (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-        (match (count (sut/get-neighbours node2)) 1)
+        (is (= 2 (count (sut/get-neighbours node2))))
         (catch Exception e
           (println (ex-message e)))
         (finally
@@ -1230,15 +1231,15 @@
           node2            (sut/new-node-object node-data2 cluster)
           *expecting-event (promise)]
       (try
-        (add-watch (:*node node2) :event-detect
-          (fn [_ _ _ new-val]
-            (when (seq (:neighbours new-val))               ;; wait for anti-entropy on node2
-              (deliver *expecting-event (:neighbours new-val)))))
-
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :payload {})))
+        (add-watch (:*node node2) :event-detect
+          (fn [_ _ _ new-val]
+            (when (= 1 (count (:neighbours new-val)))               ;; wait for anti-entropy on node2
+              (deliver *expecting-event (:neighbours new-val)))))
+
         ;; sending normal anti-entropy event to node 2
         (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
         ;; wait for event processing and event-catcher-fn
@@ -1255,15 +1256,14 @@
           node2            (sut/new-node-object node-data2 cluster)
           *expecting-event (promise)]
       (try
-        (add-watch (:*node node2) :event-detect
-          (fn [_ _ _ new-val]
-            (when (seq (:neighbours new-val))               ;; wait for anti-entropy on node2
-              (deliver *expecting-event (:neighbours new-val)))))
-
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :payload {} :restart-counter 999)))
+        (add-watch (:*node node2) :event-detect
+          (fn [_ _ _ new-val]
+            (when (= 1 (count (:neighbours new-val)))               ;; wait for anti-entropy on node2
+              (deliver *expecting-event (:neighbours new-val)))))
         ;; sending normal anti-entropy event to node 2
         (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
         ;; wait for event processing and event-catcher-fn
@@ -1276,32 +1276,6 @@
           (sut/stop node2))))))
 
 
-(comment
-  (def node1 (sut/new-node-object node-data1 cluster))
-  (def node2 (sut/new-node-object node-data2 cluster))
-  (sut/start node1 sut/node-process-fn sut/incoming-udp-processor-fn)
-  (sut/start node2 sut/node-process-fn sut/incoming-udp-processor-fn)
-  (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-
-
-
-  (sut/get-neighbours node1)
-  (sut/get-neighbours node2)
-  (sut/delete-neighbour node2 (:id neighbour-data2))
-  (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-  (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-  (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :restart-counter 6)))
-  (sut/build-anti-entropy-data node1)
-  (def ae-event (sut/new-anti-entropy-event node1))
-  (alength (sut/serialize (.prepare ae-event)))
-
-  (sut/delete-neighbour node2 (sut/get-id node2))
-  (sut/send-event node1 ae-event (sut/get-id node2))
-
-
-  (sut/stop node1)
-  (sut/stop node2)
-  )
 
 
 

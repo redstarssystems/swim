@@ -335,6 +335,9 @@
 (deftest map->AntiEntropy-test
   (testing "AntiEntropy"
     (let [anti-entropy-event (sut/map->AntiEntropy {:cmd-type          8
+                                                    :id #uuid "00000000-0000-0000-0000-000000000001"
+                                                    :restart-counter 1
+                                                    :tx 2
                                                     :anti-entropy-data [{:id              #uuid "00000000-0000-0000-0000-000000000002"
                                                                          :host            "127.0.0.1"
                                                                          :port            5432
@@ -348,6 +351,9 @@
       (testing "Prepare AntiEntropy to vector"
         (let [prepared-event (.prepare anti-entropy-event)]
           (match prepared-event [(:anti-entropy sut/code)
+                                 #uuid "00000000-0000-0000-0000-000000000001"
+                                 1
+                                 2
                                  [{:id              #uuid "00000000-0000-0000-0000-000000000002"
                                    :host            "127.0.0.1"
                                    :port            5432
@@ -360,6 +366,9 @@
 
       (testing "Restore AntiEntropy from vector"
         (let [v                         [8
+                                         #uuid "00000000-0000-0000-0000-000000000001"
+                                         1
+                                         2
                                          [{:id              #uuid "00000000-0000-0000-0000-000000000002"
                                            :host            "127.0.0.1"
                                            :port            5432
@@ -379,6 +388,9 @@
               (.restore (sut/empty-anti-entropy) [])))
         (is (thrown-with-msg? Exception #"AntiEntropy vector has invalid structure"
               (.restore (sut/empty-anti-entropy) [999
+                                                  #uuid "00000000-0000-0000-0000-000000000001"
+                                                  1
+                                                  2
                                                   [{:id              #uuid "00000000-0000-0000-0000-000000000002"
                                                     :host            "127.0.0.1"
                                                     :port            5432
@@ -393,6 +405,9 @@
 
 (deftest empty-anti-entropy-test
   (match (sut/empty-anti-entropy) {:cmd-type          8
+                                   :id #uuid "00000000-0000-0000-0000-000000000000"
+                                   :restart-counter 0
+                                   :tx 0
                                    :anti-entropy-data []}))
 
 

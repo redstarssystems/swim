@@ -589,6 +589,9 @@
   ^AntiEntropy [^NodeObject this]
   (let [anti-entropy-data (build-anti-entropy-data this)
         ae-event          (event/map->AntiEntropy {:cmd-type          (:anti-entropy event/code)
+                                                   :id                (get-id this)
+                                                   :restart-counter   (get-restart-counter this)
+                                                   :tx                (get-tx this)
                                                    :anti-entropy-data anti-entropy-data})]
     (if-not (s/valid? ::spec/anti-entropy-event ae-event)
       (throw (ex-info "Invalid anti-entropy event" (spec/problems (s/explain-data ::spec/anti-entropy-event ae-event))))
@@ -861,15 +864,35 @@
 
 (defmethod process-incoming-event AntiEntropy
   [^NodeObject this ^AntiEntropy e]
-  (let [neighbour-vec (->> e (.-anti_entropy_data) (mapv vec->neighbour))]
-    (doseq [ae-neighbour neighbour-vec]
-      (if (get-neighbour this (:id ae-neighbour))
-        (when (suitable-incarnation? this ae-neighbour)
-          (d> :anti-entropy-event (get-id this) ae-neighbour)
-          (upsert-neighbour this ae-neighbour))
-        (when-not (= (get-id this) (:id ae-neighbour))      ;; we don't want to put itself to neighbour map
-          (d> :anti-entropy-event (get-id this) ae-neighbour)
-          (upsert-neighbour this ae-neighbour))))))
+  (let [neighbour-id (:id e)
+        nb           (get-neighbour this neighbour-id)]
+    (cond
+      ;; do nothing if event from unknown node
+      (nil? nb)
+      (d> :anti-entropy-event-unknown-neighbour-error (get-id this) e)
+
+      ;; do nothing if event with outdated restart counter
+      (not (suitable-restart-counter? this e))
+      (d> :anti-entropy-event-bad-restart-counter-error (get-id this) e)
+
+      ;; do nothing if event with outdated tx
+      (not (suitable-tx? this e))
+      (d> :anti-entropy-event-bad-tx-error (get-id this) e)
+
+      ;; do not process events from not alive nodes
+      (not (#{:alive :suspect} (:status nb)))
+      (d> :anti-entropy-event-not-alive-neighbour-error (get-id this) e)
+
+      :else
+      (let [neighbour-vec (->> e (.-anti_entropy_data) (mapv vec->neighbour))]
+        (doseq [ae-neighbour neighbour-vec]
+          (if (get-neighbour this (:id ae-neighbour))
+            (when (suitable-incarnation? this ae-neighbour)
+              (d> :anti-entropy-event (get-id this) ae-neighbour)
+              (upsert-neighbour this ae-neighbour))
+            (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to neighbour map
+              (d> :anti-entropy-event (get-id this) ae-neighbour)
+              (upsert-neighbour this ae-neighbour))))))))
 
 
 (defmethod process-incoming-event PingEvent

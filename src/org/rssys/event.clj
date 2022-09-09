@@ -195,17 +195,17 @@
 ;;;;
 
 
-(defrecord AntiEntropy [cmd-type anti-entropy-data]
+(defrecord AntiEntropy [cmd-type id  restart-counter tx anti-entropy-data]
            ISwimEvent
 
            (prepare [^AntiEntropy e]
-             [(.-cmd_type e) (.-anti_entropy_data e)])
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx e) (.-anti_entropy_data e)])
 
            (restore [^AntiEntropy _ v]
              (if (and
                    (vector? v)
-                   (= 2 (count v))
-                   (every? true? (map #(%1 %2) [#(= % (:anti-entropy code)) vector?] v)))
+                   (= 5 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:anti-entropy code)) uuid? nat-int? nat-int? vector?] v)))
                (apply ->AntiEntropy v)
                (throw (ex-info "AntiEntropy vector has invalid structure" {:anti-entropy-vec v})))))
 
@@ -214,6 +214,9 @@
   "Returns empty anti-entropy event"
   ^AntiEntropy []
   (map->AntiEntropy {:cmd-type          (:anti-entropy code)
+                     :id                (UUID. 0 0)
+                     :restart-counter   0
+                     :tx                0
                      :anti-entropy-data []}))
 
 

@@ -57,7 +57,7 @@
 (s/def ::dead-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::neighbour-id ::neighbour-tx]))
 
 (s/def ::probe-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-host ::neighbour-port]))
-(s/def ::anti-entropy-event (s/keys :req-un [::cmd-type ::anti-entropy-data]))
+(s/def ::anti-entropy-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::anti-entropy-data]))
 
 (s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
