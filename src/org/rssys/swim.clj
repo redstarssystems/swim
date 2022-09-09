@@ -656,7 +656,7 @@
   "Send one event to a neighbour.
   Event will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-   (send-events this [event] neighbour-host neighbour-port))
+    (send-events this [event] neighbour-host neighbour-port))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
       (let [nb-host (.-host nb)
@@ -671,7 +671,7 @@
   "Send one event with attached anti-entropy event to a neighbour.
   Events will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-   (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port))
+    (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
     (if-let [nb (get-neighbour this neighbour-id)]
       (let [nb-host (.-host nb)
@@ -680,7 +680,6 @@
       (do
         (d> :send-event-ae-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
-
 
 
 
