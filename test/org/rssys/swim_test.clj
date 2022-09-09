@@ -28,7 +28,7 @@
 
 (def ^:dynamic *max-test-timeout*
   "Max promise timeout ms in tests"
-  1000)
+  1500)
 
 
 (deftest safe-test
@@ -987,17 +987,46 @@
               (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
             (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
               (match (sut/get-tx node2) (+ 2 before-tx2)))))
-
         (catch Exception e
           (println (ex-message e)))
         (finally
           (sut/stop node1)
-          (sut/stop node2))))))
+          (sut/stop node2))))
+
+    (testing "Do not add neighbour to neighbours map if status is :alive or :suspect"
+      (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 3))
+            node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 3))
+            *expecting-event (promise)
+            event-catcher-fn (fn [v]
+                               (when-let [cmd (:org.rssys.swim/cmd v)]
+                                 (when (= cmd :probe-ack-event)
+                                   (deliver *expecting-event cmd))))]
+        (try
+          (add-tap event-catcher-fn)
+          (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+          (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+          (sut/set-cluster-size node1 3)                    ;; increase cluster size
+
+          ;; check we have only this node in cluster
+          (match (sut/nodes-in-cluster node1) 1)
+          ;; change status to any :alive or :suspect to verify that neighbour will not added
+          (sut/set-status node1 :alive)
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+          (sut/set-status node1 :suspect)
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+          (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+          (match (sut/nodes-in-cluster node1) 1)
+          (catch Exception e
+            (println (ex-message e)))
+          (finally
+            (remove-tap event-catcher-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))))
 
 
 (deftest ^:logic ack-event-test
 
-  (testing "Don't process event from unknown neighbour"
+  (testing "Don't process ack event from unknown neighbour"
     (let [node1            (sut/new-node-object node-data1 cluster)
           node2            (sut/new-node-object node-data2 cluster)
           *expecting-error (promise)
@@ -1013,7 +1042,7 @@
         (sut/send-event node2 (sut/new-ack-event node2 {:id (sut/get-id node1) :tx 0})
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
-        (not-match (deref *expecting-error 1500 :timeout) :timeout) ;; 1000 is not enough for this test
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
         (match  @*expecting-error :ack-event-unknown-neighbour-error)
         (catch Exception e
           (println (ex-message e)))
@@ -1022,7 +1051,7 @@
           (sut/stop node1)
           (sut/stop node2)))))
 
-  (testing "Don't process event with outdated restart counter"
+  (testing "Don't process ack event with outdated restart counter"
     (let [node1            (sut/new-node-object node-data1 cluster)
           node2            (sut/new-node-object node-data2 cluster)
           *expecting-error (promise)
@@ -1050,7 +1079,7 @@
           (sut/stop node2)))))
 
 
-  (testing "Don't process event with outdated tx"
+  (testing "Don't process ack event with outdated tx"
     (let [node1            (sut/new-node-object node-data1 cluster)
           node2            (sut/new-node-object node-data2 cluster)
           *expecting-error (promise)
@@ -1078,7 +1107,7 @@
           (sut/stop node2)))))
 
 
-  (testing "Don't process event from not alive nodes"
+  (testing "Don't process ack event from not alive nodes"
     (let [node1            (sut/new-node-object node-data1 cluster)
           node2            (sut/new-node-object node-data2 cluster)
           *expecting-error (promise)
@@ -1107,7 +1136,7 @@
           (sut/stop node2)))))
 
 
-  (testing "Don't process event if ack is not requested"
+  (testing "Don't process ack event if ack is not requested"
     (let [node1            (sut/new-node-object node-data1 cluster)
           node2            (sut/new-node-object node-data2 cluster)
           *expecting-error (promise)

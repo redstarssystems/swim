@@ -782,7 +782,7 @@
 
 
 (defmethod process-incoming-event ProbeAckEvent
-  [^NodeObject this ^ProbeAckEvent e]                       ;; assume we trust probe ack events
+  [^NodeObject this ^ProbeAckEvent e]
   (let [nb (new-neighbour-node {:id              (.-id e)
                                 :host            (.-host e)
                                 :port            (.-port e)
@@ -793,7 +793,9 @@
                                 :payload         {}
                                 :updated-at      (System/currentTimeMillis)})]
     (d> :probe-ack-event (get-id this) nb)
-    (upsert-neighbour this nb)))
+    (when (and (= (.-neighbour_id e) (get-id this))         ;; we trust probe ack events only if
+            (not (#{:suspect :alive} (get-status this))))
+      (upsert-neighbour this nb))))
 
 
 (defmethod process-incoming-event AckEvent
