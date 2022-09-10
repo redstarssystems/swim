@@ -968,7 +968,7 @@
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/nodes-in-cluster node1) 1)
             (testing "tx on node 1 is incremented correctly"
-              (match  (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
+              (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
             (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
               (match (sut/get-tx node2) (+ 2 before-tx2)))))
 
@@ -1458,61 +1458,109 @@
           (sut/stop node2)))))
 
   (testing "Process normal ping from alive node"
-    (let [node1            (sut/new-node-object node-data1 cluster)
-          node2            (sut/new-node-object node-data2 cluster)
-          *expecting-event (promise)
-          event-catcher-fn (fn [v]
-                             (when-let [cmd (:org.rssys.swim/cmd v)]
-                               (when (= cmd :ping-event-ack-event)
-                                 (deliver *expecting-event cmd))))]
+    (let [node1             (sut/new-node-object node-data1 cluster)
+          node2             (sut/new-node-object node-data2 cluster)
+          *expecting-event  (promise)
+          *expecting-event2 (promise)
+          event-catcher-fn  (fn [v]
+                              (when-let [cmd (:org.rssys.swim/cmd v)]
+                                (when (= cmd :ping-event-ack-event)
+                                  (deliver *expecting-event cmd))))
+          event-catcher-fn2 (fn [v]
+                              (when-let [cmd (:org.rssys.swim/cmd v)]
+                                (when (= cmd :ack-event)
+                                  (deliver *expecting-event2 cmd))))]
       (try
-        (add-tap event-catcher-fn)                          ;; register error catcher
+        (add-tap event-catcher-fn)                          ;; register event catcher
+        (add-tap event-catcher-fn2)                         ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :alive)))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :alive)))
 
         ;; sending ping event to node 1 from alive node 2
 
-        (sut/send-event node2 (sut/new-ping-event node2 (sut/get-id node1) 1)
-          (sut/get-host node1) (sut/get-port node1))
+        (testing "Ping event on node 1 is received and processed correctly"
+          (let [ping-event (sut/new-ping-event node2 (sut/get-id node1) 1)]
+            (sut/upsert-ping node2 ping-event)
+            (sut/send-event node2 ping-event (sut/get-host node1) (sut/get-port node1))))
         ;; wait for event processing and error-catcher-fn
         (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
         (when (realized? *expecting-event)
           (match @*expecting-event :ping-event-ack-event))
+
+        (testing "AckEvent on node 2 is received and processed correctly"
+          (not-match (deref *expecting-event2 *max-test-timeout* :timeout) :timeout)
+          (when (realized? *expecting-event2)
+            (match @*expecting-event2 :ack-event)))
+
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap event-catcher-fn)                     ;; unregister error catcher
+          (remove-tap event-catcher-fn)                     ;; unregister event catcher
+          (remove-tap event-catcher-fn2)                    ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
 
   (testing "Process normal ping from suspect node"
-    (let [node1            (sut/new-node-object node-data1 cluster)
-          node2            (sut/new-node-object node-data2 cluster)
-          *expecting-event (promise)
-          event-catcher-fn (fn [v]
-                             (when-let [cmd (:org.rssys.swim/cmd v)]
-                               (when (= cmd :ping-event-ack-event)
-                                 (deliver *expecting-event cmd))))]
+    (let [node1             (sut/new-node-object node-data1 cluster)
+          node2             (sut/new-node-object node-data2 cluster)
+          *expecting-event  (promise)
+          *expecting-event2 (promise)
+          *expecting-event3 (promise)
+          event-catcher-fn  (fn [v]
+                              (when-let [cmd (:org.rssys.swim/cmd v)]
+                                (when (= cmd :ping-event-ack-event)
+                                  (deliver *expecting-event cmd))))
+          event-catcher-fn2 (fn [v]
+                              (when-let [cmd (:org.rssys.swim/cmd v)]
+                                (when (= cmd :ack-event)
+                                  (deliver *expecting-event2 cmd))))
+          event-catcher-fn3 (fn [v]
+                              (when-let [cmd (:org.rssys.swim/cmd v)]
+                                (when (= cmd :alive-event)
+                                  (deliver *expecting-event3 v))))]
       (try
-        (add-tap event-catcher-fn)                          ;; register error catcher
+        (add-tap event-catcher-fn)                          ;; register event catcher
+        (add-tap event-catcher-fn2)                         ;; register event catcher
+        (add-tap event-catcher-fn3)                         ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :alive)))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :suspect)))
 
-        ;; sending ping event to node 1 from alive node 2
+        ;; sending ping event to node 1 from suspect node 2
 
-        (sut/send-event node2 (sut/new-ping-event node2 (sut/get-id node1) 1)
-          (sut/get-host node1) (sut/get-port node1))
+        (testing "Ping event on node 1 is received and processed correctly"
+          (let [ping-event (sut/new-ping-event node2 (sut/get-id node1) 1)]
+            (sut/upsert-ping node2 ping-event)
+            (sut/send-event node2 ping-event (sut/get-host node1) (sut/get-port node1))))
         ;; wait for event processing and error-catcher-fn
         (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
         (when (realized? *expecting-event)
           (match @*expecting-event :ping-event-ack-event))
+
+        (testing "AckEvent on node 2 is received and processed correctly"
+          (not-match (deref *expecting-event2 *max-test-timeout* :timeout) :timeout)
+          (when (realized? *expecting-event2)
+            (match @*expecting-event2 :ack-event)))
+
+        (testing "node 1 should create new event that node 2 is now alive"
+          (not-match (deref *expecting-event3 *max-test-timeout* :timeout) :timeout)
+          (when (realized? *expecting-event3)
+            (match @*expecting-event3 {:org.rssys.swim/cmd :alive-event
+                                       :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+                                       :data
+                                       {:neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
+                                        :previous-status :suspect}})))
+
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap event-catcher-fn)                     ;; unregister error catcher
+          (remove-tap event-catcher-fn)                     ;; unregister event catcher
+          (remove-tap event-catcher-fn2)                    ;; unregister event catcher
+          (remove-tap event-catcher-fn3)                    ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2))))))
 
