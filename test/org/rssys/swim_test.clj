@@ -9,6 +9,8 @@
     [org.rssys.spec :as spec]
     [org.rssys.swim :as sut])
   (:import
+    (java.util
+      UUID)
     (org.rssys.domain
       Cluster
       NeighbourNode
@@ -960,13 +962,13 @@
                 *expecting-event (promise)]
             (add-watch (:*node node1) :event-detect
               (fn [_ _ _ new-val]
-                (when (= 2 (:tx new-val))                   ;; wait for ack-probe from node2
+                (when (= 3 (:tx new-val))                   ;; wait for ack-probe from node2
                   (deliver *expecting-event (:payload new-val)))))
             (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/nodes-in-cluster node1) 1)
             (testing "tx on node 1 is incremented correctly"
-              (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
+              (match  (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
             (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
               (match (sut/get-tx node2) (+ 2 before-tx2)))))
 
@@ -994,8 +996,8 @@
           (sut/stop node2))))
 
     (testing "Do not add neighbour to neighbours map if status is :alive or :suspect"
-      (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 3))
-            node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 3))
+      (let [node1            (sut/new-node-object node-data1 (assoc cluster :cluster-size 3))
+            node2            (sut/new-node-object node-data2 (assoc cluster :cluster-size 3))
             *expecting-event (promise)
             event-catcher-fn (fn [v]
                                (when-let [cmd (:org.rssys.swim/cmd v)]
@@ -1043,7 +1045,7 @@
           (sut/get-host node1) (sut/get-port node1))
         ;; wait for event processing and error-catcher-fn
         (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
-        (match  @*expecting-error :ack-event-unknown-neighbour-error)
+        (match @*expecting-error :ack-event-unknown-neighbour-error)
         (catch Exception e
           (println (ex-message e)))
         (finally
@@ -1310,6 +1312,207 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
+          (sut/stop node1)
+          (sut/stop node2))))))
+
+
+(deftest ^:logic ping-event-test
+
+  (testing "Don't process ping event for different addressee"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          ping-event       (sut/new-ping-event node2 (sut/get-id node1) 1)
+          *expecting-error (promise)
+          error-catcher-fn (fn [v]
+                             (when-let [cmd (:org.rssys.swim/cmd v)]
+                               (when (= cmd :ping-event-different-addressee-error)
+                                 (deliver *expecting-error cmd))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        ;; sending ping event to node 1 for different addressee (another id)
+        (sut/send-event node2 (assoc ping-event :neighbour-id (UUID. 0 99)) (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
+        (when (realized? *expecting-error)
+          (match @*expecting-error :ping-event-different-addressee-error))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+
+  (testing "Don't process ping event from unknown neighbour"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          ping-event       (sut/new-ping-event node2 (sut/get-id node1) 1)
+          *expecting-error (promise)
+          error-catcher-fn (fn [v]
+                             (when-let [cmd (:org.rssys.swim/cmd v)]
+                               (when (= cmd :ping-event-unknown-neighbour-error)
+                                 (deliver *expecting-error cmd))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        ;; sending ack event to node 1 from unknown neighbour
+        (sut/send-event node2 ping-event (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
+        (when (realized? *expecting-error)
+          (match @*expecting-error :ping-event-unknown-neighbour-error))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Don't process ping event with outdated restart counter"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          ping-event       (sut/new-ping-event node2 (sut/get-id node1) 1)
+          *expecting-error (promise)
+          error-catcher-fn (fn [v]
+                             (when-let [cmd (:org.rssys.swim/cmd v)]
+                               (when (= cmd :ping-event-bad-restart-counter-error)
+                                 (deliver *expecting-error cmd))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :restart-counter 999)))
+
+        ;; sending ping event to node 1 from node 2 with outdated restart counter
+        (sut/send-event node2 ping-event (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
+        (when (realized? *expecting-error)
+          (match @*expecting-error :ping-event-bad-restart-counter-error))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+
+  (testing "Don't process ping event with outdated tx"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          ping-event       (sut/new-ping-event node2 (sut/get-id node1) 1)
+          *expecting-error (promise)
+          error-catcher-fn (fn [v]
+                             (when-let [cmd (:org.rssys.swim/cmd v)]
+                               (when (= cmd :ping-event-bad-tx-error)
+                                 (deliver *expecting-error cmd))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :tx 999)))
+
+        ;; sending ping event to node 1 from node 2 with outdated tx
+        (sut/send-event node2 ping-event (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
+        (when (realized? *expecting-error)
+          (match @*expecting-error :ping-event-bad-tx-error))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Don't process ping event from not alive nodes"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          *expecting-error (promise)
+          error-catcher-fn (fn [v]
+                             (when-let [cmd (:org.rssys.swim/cmd v)]
+                               (when (= cmd :ping-event-not-alive-neighbour-error)
+                                 (deliver *expecting-error cmd))))]
+      (try
+        (add-tap error-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :dead)))
+
+        ;; sending ping event to node 1 from the dead neighbour
+
+        (sut/send-event node2 (sut/new-ping-event node2 (sut/get-id node1) 1)
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
+        (when (realized? *expecting-error)
+          (match @*expecting-error :ping-event-not-alive-neighbour-error))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Process normal ping from alive node"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          *expecting-event (promise)
+          event-catcher-fn (fn [v]
+                             (when-let [cmd (:org.rssys.swim/cmd v)]
+                               (when (= cmd :ping-event-ack-event)
+                                 (deliver *expecting-event cmd))))]
+      (try
+        (add-tap event-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :alive)))
+
+        ;; sending ping event to node 1 from alive node 2
+
+        (sut/send-event node2 (sut/new-ping-event node2 (sut/get-id node1) 1)
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+        (when (realized? *expecting-event)
+          (match @*expecting-event :ping-event-ack-event))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap event-catcher-fn)                     ;; unregister error catcher
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+
+  (testing "Process normal ping from suspect node"
+    (let [node1            (sut/new-node-object node-data1 cluster)
+          node2            (sut/new-node-object node-data2 cluster)
+          *expecting-event (promise)
+          event-catcher-fn (fn [v]
+                             (when-let [cmd (:org.rssys.swim/cmd v)]
+                               (when (= cmd :ping-event-ack-event)
+                                 (deliver *expecting-event cmd))))]
+      (try
+        (add-tap event-catcher-fn)                          ;; register error catcher
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :suspect)))
+
+        ;; sending ping event to node 1 from alive node 2
+
+        (sut/send-event node2 (sut/new-ping-event node2 (sut/get-id node1) 1)
+          (sut/get-host node1) (sut/get-port node1))
+        ;; wait for event processing and error-catcher-fn
+        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
+        (when (realized? *expecting-event)
+          (match @*expecting-event :ping-event-ack-event))
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap event-catcher-fn)                     ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2))))))
 

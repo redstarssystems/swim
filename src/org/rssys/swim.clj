@@ -900,6 +900,7 @@
       (d> :ping-event-not-alive-neighbour-error (get-id this) e)
 
       :else
+      ;; process ping event only for :alive :suspect statuses
       (let [ack-event      (new-ack-event this e)
             current-status (:status nb)]
         (inc-tx this)                                       ;; every event on node increments tx
@@ -969,7 +970,7 @@
   (when (= (get-status this) :stop)
     (set-status this :left)
     (set-restart-counter this (inc (get-restart-counter this)))
-    (swap! (:*node this) assoc :tx 0)
+    (swap! (:*node this) assoc :tx 1)
     (let [{:keys [host port]} (get-value this)]
       (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
     (when-not (s/valid? ::spec/node (get-value this))
