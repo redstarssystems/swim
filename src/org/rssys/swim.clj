@@ -886,10 +886,12 @@
 
       ;; send dead event if outdated restart counter
       (not (suitable-restart-counter? this e))
-      (do
+      (let [dead-event (new-dead-event this e)]
         (d> :ping-event-bad-restart-counter-error (get-id this) e)
-        ;;we don't increase tx here because dead event already known fact
-        (send-event this (new-dead-event this e) neighbour-id))
+        ;; we don't put it to outgoing queue because it is known fact
+        (send-event this dead-event neighbour-id)
+        (inc-tx this)
+        (d> :ping-event-reply-dead-event (get-id this) dead-event))
 
       ;; do nothing if event with outdated tx
       (not (suitable-tx? this e))

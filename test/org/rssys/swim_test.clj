@@ -1328,7 +1328,7 @@
                                (when (= cmd :ping-event-different-addressee-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                          ;; register error catcher
+        (add-tap error-catcher-fn)                      ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         ;; sending ping event to node 1 for different addressee (another id)
@@ -1340,7 +1340,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (remove-tap error-catcher-fn)                 ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1355,7 +1355,7 @@
                                (when (= cmd :ping-event-unknown-neighbour-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                          ;; register error catcher
+        (add-tap error-catcher-fn)                  ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         ;; sending ack event to node 1 from unknown neighbour
@@ -1367,21 +1367,27 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (remove-tap error-catcher-fn)             ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
   (testing "Don't process ping event with outdated restart counter"
-    (let [node1            (sut/new-node-object node-data1 cluster)
-          node2            (sut/new-node-object node-data2 cluster)
-          ping-event       (sut/new-ping-event node2 (sut/get-id node1) 1)
-          *expecting-error (promise)
-          error-catcher-fn (fn [v]
-                             (when-let [cmd (:org.rssys.swim/cmd v)]
-                               (when (= cmd :ping-event-bad-restart-counter-error)
-                                 (deliver *expecting-error cmd))))]
+    (let [node1             (sut/new-node-object node-data1 cluster)
+          node2             (sut/new-node-object node-data2 cluster)
+          ping-event        (sut/new-ping-event node2 (sut/get-id node1) 1)
+          *expecting-error  (promise)
+          *expecting-error2 (promise)
+          error-catcher-fn  (fn [v]
+                              (when-let [cmd (:org.rssys.swim/cmd v)]
+                                (when (= cmd :ping-event-bad-restart-counter-error)
+                                  (deliver *expecting-error cmd))))
+          error-catcher-fn2 (fn [v]
+                              (when-let [cmd (:org.rssys.swim/cmd v)]
+                                (when (= cmd :ping-event-reply-dead-event)
+                                  (deliver *expecting-error2 v))))]
       (try
         (add-tap error-catcher-fn)                          ;; register error catcher
+        (add-tap error-catcher-fn2)                         ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :restart-counter 999)))
@@ -1392,10 +1398,25 @@
         (not-match (deref *expecting-error *max-test-timeout* :timeout) :timeout)
         (when (realized? *expecting-error)
           (match @*expecting-error :ping-event-bad-restart-counter-error))
+
+        (testing "node 1 should send dead event to node 2"
+          (not-match (deref *expecting-error2 *max-test-timeout* :timeout) :timeout)
+          (when (realized? *expecting-error2)
+            (match @*expecting-error2 {:org.rssys.swim/cmd :ping-event-reply-dead-event
+                                       :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+                                       :data
+                                       #org.rssys.event.DeadEvent{:cmd-type        6
+                                                                  :id              #uuid "00000000-0000-0000-0000-000000000001"
+                                                                  :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
+                                                                  :neighbour-tx    0
+                                                                  :restart-counter 8
+                                                                  :tx              2}})))
+
         (catch Exception e
           (println (ex-message e)))
         (finally
           (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (remove-tap error-catcher-fn2)                    ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1410,7 +1431,7 @@
                                (when (= cmd :ping-event-bad-tx-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                          ;; register error catcher
+        (add-tap error-catcher-fn)                  ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :tx 999)))
@@ -1424,7 +1445,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (remove-tap error-catcher-fn)             ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1437,7 +1458,7 @@
                                (when (= cmd :ping-event-not-alive-neighbour-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                          ;; register error catcher
+        (add-tap error-catcher-fn)                  ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :dead)))
@@ -1453,7 +1474,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)                     ;; unregister error catcher
+          (remove-tap error-catcher-fn)             ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1471,8 +1492,8 @@
                                 (when (= cmd :ack-event)
                                   (deliver *expecting-event2 cmd))))]
       (try
-        (add-tap event-catcher-fn)                          ;; register event catcher
-        (add-tap event-catcher-fn2)                         ;; register event catcher
+        (add-tap event-catcher-fn)                  ;; register event catcher
+        (add-tap event-catcher-fn2)                 ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :alive)))
@@ -1497,8 +1518,8 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap event-catcher-fn)                     ;; unregister event catcher
-          (remove-tap event-catcher-fn2)                    ;; unregister event catcher
+          (remove-tap event-catcher-fn)             ;; unregister event catcher
+          (remove-tap event-catcher-fn2)            ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1522,9 +1543,9 @@
                                 (when (= cmd :alive-event)
                                   (deliver *expecting-event3 v))))]
       (try
-        (add-tap event-catcher-fn)                          ;; register event catcher
-        (add-tap event-catcher-fn2)                         ;; register event catcher
-        (add-tap event-catcher-fn3)                         ;; register event catcher
+        (add-tap event-catcher-fn)                  ;; register event catcher
+        (add-tap event-catcher-fn2)                 ;; register event catcher
+        (add-tap event-catcher-fn3)                 ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :alive)))
@@ -1558,9 +1579,9 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap event-catcher-fn)                     ;; unregister event catcher
-          (remove-tap event-catcher-fn2)                    ;; unregister event catcher
-          (remove-tap event-catcher-fn3)                    ;; unregister event catcher
+          (remove-tap event-catcher-fn)             ;; unregister event catcher
+          (remove-tap event-catcher-fn2)            ;; unregister event catcher
+          (remove-tap event-catcher-fn3)            ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2))))))
 
