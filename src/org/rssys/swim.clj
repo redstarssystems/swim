@@ -793,7 +793,8 @@
                                 :payload         {}
                                 :updated-at      (System/currentTimeMillis)})]
     (d> :probe-ack-event (get-id this) nb)
-    (when (and (= (.-neighbour_id e) (get-id this))         ;; we trust probe ack events only if
+    (when (and (= (.-neighbour_id e) (get-id this))
+            ;; we trust probe ack events only if our status not #{:suspect :alive}
             (not (#{:suspect :alive} (get-status this))))
       (upsert-neighbour this nb))))
 
