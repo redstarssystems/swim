@@ -62,15 +62,15 @@
 (s/def ::ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
                                     ::neighbour-id ::neighbour-tx ::attempt-number]))
 
-(s/def ::indirect-ping-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::intermediate-id
-                                              ::intermediate-host ::intermediate-port ::neighbour-host ::neighbour-port
-                                              ::attempt-number]))
+(s/def ::indirect-ping-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
+                                              ::intermediate-id ::intermediate-host ::intermediate-port
+                                              ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
 
 (s/def ::indirect-ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::status ::host ::port
                                              ::intermediate-id ::intermediate-host ::intermediate-port
                                              ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
 
-
+;; alive node is a neighbour
 (s/def ::alive-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
                                       ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
 
@@ -87,6 +87,17 @@
 (s/def ::anti-entropy-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
                                              ::anti-entropy-data]))
 
+(s/def ::join-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx]))
+
+
+;; suspect node is a neighbour
+(s/def ::suspect-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+                                      ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
+
+
+(s/def ::left-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx]))
+
+(s/def ::payload-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::payload]))
 
 ;;;;;;;;;;
 ;; Domain specs

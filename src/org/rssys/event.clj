@@ -382,4 +382,31 @@
                      :anti-entropy-data []}))
 
 
+;;;;
+
+
+(defrecord JoinEvent [cmd-type id restart-counter tx]
+
+           ISwimEvent
+
+           (prepare [^JoinEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e)])
+
+           (restore [^JoinEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 4 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:join code)) uuid? nat-int? nat-int?] v)))
+               (apply ->JoinEvent v)
+               (throw (ex-info "JoinEvent vector has invalid structure" {:join-vec v})))))
+
+
+(defn empty-join
+  "Returns empty join event"
+  ^JoinEvent []
+  (map->JoinEvent {:cmd-type                  (:join code)
+                   :id                        (UUID. 0 0)
+                   :restart-counter           0
+                   :tx                        0}))
+
 
