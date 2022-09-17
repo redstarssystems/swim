@@ -1,8 +1,9 @@
 (ns org.rssys.event-test
   (:require
     [clojure.test :refer [deftest is testing]]
-    [matcho.core :refer [match]]
-    [org.rssys.event :as sut])
+    [matcho.core :as m :refer [match]]
+    [org.rssys.event :as sut]
+    [org.rssys.spec :as spec])
   (:import
     (org.rssys.event
       AckEvent
@@ -13,6 +14,151 @@
       PingEvent
       ProbeAckEvent
       ProbeEvent)))
+
+
+;;;;
+
+(deftest map->ProbeEvent-test
+  (testing "ProbeEvent"
+    (let [probe-event (sut/map->ProbeEvent {:cmd-type        9
+                                            :id              #uuid "00000000-0000-0000-0000-000000000001"
+                                            :host            "127.0.0.1"
+                                            :port            5376
+                                            :restart-counter 7
+                                            :tx              1
+                                            :neighbour-host  "127.0.0.1"
+                                            :neighbour-port  5377
+                                            :probe-key       "probe1"})]
+
+      (testing "Prepare ProbeEvent to vector"
+        (let [prepared-event (.prepare probe-event)]
+          (m/assert ^:matcho/strict [(:probe sut/code)
+                                     (.-id probe-event)
+                                     (.-host probe-event)
+                                     (.-port probe-event)
+                                     (.-restart_counter probe-event)
+                                     (.-tx probe-event)
+                                     (.-neighbour_host probe-event)
+                                     (.-neighbour_port probe-event)
+                                     (.-probe_key probe-event)]
+            prepared-event)))
+
+      (testing "Restore ProbeEvent from vector"
+        (let [v            [9
+                            #uuid "00000000-0000-0000-0000-000000000001"
+                            "127.0.0.1"
+                            5376
+                            7
+                            1
+                            "127.0.0.1"
+                            5377
+                            "probe1"]
+              result-probe (.restore (sut/empty-probe) v)]
+
+          (testing "Restored ProbeEvent should be equals to original event"
+            (m/assert ProbeEvent (type probe-event))
+            (m/assert probe-event result-probe))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"ProbeEvent vector has invalid structure"
+              (.restore (sut/empty-probe) [])))
+        (is (thrown-with-msg? Exception #"ProbeEvent vector has invalid structure"
+              (.restore (sut/empty-probe) [999
+                                           #uuid "00000000-0000-0000-0000-000000000001"
+                                           "127.0.0.1"
+                                           5376
+                                           7
+                                           1
+                                           "127.0.0.1"
+                                           5377
+                                           "probe1"])))))))
+
+
+(deftest empty-probe-test
+  (m/assert ^:matcho/strict {:cmd-type        (:probe sut/code)
+                             :id              uuid?
+                             :host            string?
+                             :port            nat-int?
+                             :restart-counter nat-int?
+                             :tx              nat-int?
+                             :neighbour-host  string?
+                             :neighbour-port  nat-int?
+                             :probe-key       any?}
+    (sut/empty-probe)))
+
+
+;;;;
+
+(deftest map->ProbeAckEvent-test
+  (testing "ProbeAckEvent"
+    (let [probe-ack-event
+          (sut/map->ProbeAckEvent {:cmd-type        10
+                                   :id              #uuid "00000000-0000-0000-0000-000000000001"
+                                   :host            "127.0.0.1"
+                                   :port            5376
+                                   :status          :alive
+                                   :restart-counter 7
+                                   :tx              1
+                                   :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
+                                   :probe-key       "probe1"})]
+
+      (testing "Prepare ProbeAckEvent to vector"
+        (let [prepared-event (.prepare probe-ack-event)]
+          (m/assert ^:matcho/strict [(:probe-ack sut/code)
+                                     (.-id probe-ack-event)
+                                     (.-host probe-ack-event)
+                                     (.-port probe-ack-event)
+                                     3
+                                     (.-restart_counter probe-ack-event)
+                                     (.-tx probe-ack-event)
+                                     (.-neighbour_id probe-ack-event)
+                                     (.-probe_key probe-ack-event)]
+            prepared-event)))
+
+      (testing "Restore ProbeAckEvent from vector"
+        (let [v            [10
+                            #uuid "00000000-0000-0000-0000-000000000001"
+                            "127.0.0.1"
+                            5376
+                            3
+                            7
+                            1
+                            #uuid "00000000-0000-0000-0000-000000000002"
+                            "probe1"]
+              result-probe (.restore (sut/empty-probe-ack) v)]
+
+          (testing "Restored ProbeAckEvent should be equals to original event"
+            (m/assert ProbeAckEvent (type probe-ack-event))
+            (m/assert probe-ack-event result-probe))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"ProbeAckEvent vector has invalid structure"
+              (.restore (sut/empty-probe-ack) [])))
+        (is (thrown-with-msg? Exception #"ProbeAckEvent vector has invalid structure"
+              (.restore (sut/empty-probe-ack) [999
+                                               #uuid "00000000-0000-0000-0000-000000000001"
+                                               "127.0.0.1"
+                                               5376
+                                               3
+                                               7
+                                               1
+                                               #uuid "00000000-0000-0000-0000-000000000002"
+                                               "probe1"])))))))
+
+
+(deftest empty-probe-ack-test
+  (m/assert ^:matcho/strict {:cmd-type        (:probe-ack sut/code)
+                             :id              uuid?
+                             :host            string?
+                             :port            nat-int?
+                             :status          :unknown
+                             :restart-counter nat-int?
+                             :tx              nat-int?
+                             :neighbour-id    uuid?
+                             :probe-key       any?}
+    (sut/empty-probe-ack)))
+
+;;;;
 
 
 (deftest map->PingEvent-test
@@ -197,136 +343,11 @@
                            :neighbour-tx    nat-int?}))
 
 
-;;;;
-
-
-(deftest map->ProbeEvent-test
-  (testing "ProbeEvent"
-    (let [probe-event (sut/map->ProbeEvent {:cmd-type        9
-                                            :id              #uuid "00000000-0000-0000-0000-000000000001"
-                                            :host            "127.0.0.1"
-                                            :port            5376
-                                            :restart-counter 7
-                                            :tx              0
-                                            :neighbour-host  "127.0.0.1"
-                                            :neighbour-port  5377})]
-
-      (testing "Prepare ProbeEvent to vector"
-        (let [prepared-event (.prepare probe-event)]
-          (match prepared-event [(:probe sut/code)
-                                 (.-id probe-event)
-                                 (.-host probe-event)
-                                 (.-port probe-event)
-                                 (.-restart_counter probe-event)
-                                 (.-tx probe-event)
-                                 (.-neighbour_host probe-event)
-                                 (.-neighbour_port probe-event)])))
-
-      (testing "Restore ProbeEvent from vector"
-        (let [v            [9
-                            #uuid "00000000-0000-0000-0000-000000000001"
-                            "127.0.0.1"
-                            5376
-                            7
-                            0
-                            "127.0.0.1"
-                            5377]
-              result-probe (.restore (sut/empty-probe) v)]
-
-          (is (= ProbeEvent (type probe-event)) "ProbeEvent has correct type")
-          (is (= result-probe probe-event) "Restored ProbeEvent should be equals to original event")
-
-          (testing "Wrong event structure is prohibited"
-            (is (thrown-with-msg? Exception #"ProbeEvent vector has invalid structure"
-                  (.restore (sut/empty-probe) [])))
-            (is (thrown-with-msg? Exception #"ProbeEvent vector has invalid structure"
-                  (.restore (sut/empty-probe) [999
-                                               #uuid "00000000-0000-0000-0000-000000000001"
-                                               "127.0.0.1"
-                                               5376
-                                               7
-                                               0
-                                               "127.0.0.1"
-                                               5377])))))))))
-
-
-(deftest empty-probe-test
-  (match (sut/empty-probe) {:cmd-type        (:probe sut/code)
-                            :id              uuid?
-                            :host            string?
-                            :port            nat-int?
-                            :restart-counter nat-int?
-                            :tx              nat-int?
-                            :neighbour-host  string?
-                            :neighbour-port  nat-int?}))
-
-
 
 ;;;;
 
 
-(deftest map->ProbeAckEvent-test
-  (testing "ProbeAckEvent"
-    (let [probe-ack-event (sut/map->ProbeAckEvent {:cmd-type        10
-                                                   :id              #uuid "00000000-0000-0000-0000-000000000002"
-                                                   :host            "127.0.0.1"
-                                                   :port            5377
-                                                   :status          :left
-                                                   :restart-counter 5
-                                                   :tx              0
-                                                   :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                                                   :neighbour-tx    0})]
 
-      (testing "Prepare ProbeAckEvent to vector"
-        (let [prepared-event (.prepare probe-ack-event)]
-          (match prepared-event [(:probe-ack sut/code)
-                                 (.-id probe-ack-event)
-                                 (.-host probe-ack-event)
-                                 (.-port probe-ack-event)
-                                 ((.-status probe-ack-event) sut/code)
-                                 (.-restart_counter probe-ack-event)
-                                 (.-tx probe-ack-event)
-                                 (.-neighbour_id probe-ack-event)
-                                 (.-neighbour_tx probe-ack-event)])))
-
-      (testing "Restore ProbeAckEvent from vector"
-        (let [v              [10
-                              #uuid "00000000-0000-0000-0000-000000000002"
-                              "127.0.0.1"
-                              5377
-                              5
-                              5
-                              0
-                              #uuid "00000000-0000-0000-0000-000000000001"
-                              0]
-              restored-event (.restore (sut/empty-probe-ack) v)]
-
-          (is (= ProbeAckEvent (type restored-event)) "Should be ProbeAckEvent type")
-          (is (= restored-event probe-ack-event) "Restored ProbeAckEvent should be equals to original event")
-
-          (testing "Wrong event structure is prohibited"
-            (is (thrown-with-msg? Exception #"ProbeAckEvent vector has invalid structure"
-                  (.restore (sut/empty-probe-ack) [])))
-            (is (thrown-with-msg? Exception #"ProbeAckEvent vector has invalid structure"
-                  (.restore (sut/empty-probe-ack) [999
-                                                   #uuid "00000000-0000-0000-0000-000000000002"
-                                                   5
-                                                   0
-                                                   #uuid "00000000-0000-0000-0000-000000000001"
-                                                   0])))))))))
-
-
-
-(deftest empty-probe-ack-test
-  (match (sut/empty-probe-ack) {:cmd-type        10
-                                :id              #uuid "00000000-0000-0000-0000-000000000000"
-                                :host            "127.0.0.1"
-                                :port            0
-                                :status          :unknown
-                                :restart-counter 0
-                                :tx              0
-                                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000000"
-                                :neighbour-tx    0}))
 
 
 ;;;;
@@ -335,9 +356,9 @@
 (deftest map->AntiEntropy-test
   (testing "AntiEntropy"
     (let [anti-entropy-event (sut/map->AntiEntropy {:cmd-type          8
-                                                    :id #uuid "00000000-0000-0000-0000-000000000001"
-                                                    :restart-counter 1
-                                                    :tx 2
+                                                    :id                #uuid "00000000-0000-0000-0000-000000000001"
+                                                    :restart-counter   1
+                                                    :tx                2
                                                     :anti-entropy-data [{:id              #uuid "00000000-0000-0000-0000-000000000002"
                                                                          :host            "127.0.0.1"
                                                                          :port            5432
@@ -405,9 +426,9 @@
 
 (deftest empty-anti-entropy-test
   (match (sut/empty-anti-entropy) {:cmd-type          8
-                                   :id #uuid "00000000-0000-0000-0000-000000000000"
-                                   :restart-counter 0
-                                   :tx 0
+                                   :id                #uuid "00000000-0000-0000-0000-000000000000"
+                                   :restart-counter   0
+                                   :tx                0
                                    :anti-entropy-data []}))
 
 

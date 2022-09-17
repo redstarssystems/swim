@@ -77,15 +77,15 @@
               (.tx e) (.-neighbour_id e) (.-probe_key e)])
 
            (restore [^ProbeAckEvent _ v]
-             (if (and
-                   (vector? v)
-                   (= 9 (count v))
-                   (let [status-pos 4]
+             (let [status-pos 4]
+               (if (and
+                     (vector? v)
+                     (= 9 (count v))
                      (every? true? (map #(%1 %2)
                                      [#(= % (:probe-ack code)) uuid? string? pos-int? nat-int?
-                                      nat-int? nat-int? uuid? any?] v))
-                     (apply ->ProbeAckEvent (assoc v status-pos (get (clojure.set/map-invert code) (nth v status-pos))))))
-               (throw (ex-info "ProbeAckEvent vector has invalid structure" {:probe-ack-vec v})))))
+                                      nat-int? nat-int? uuid? any?] v)))
+                 (apply ->ProbeAckEvent (assoc v status-pos (get (clojure.set/map-invert code) (nth v status-pos))))
+                 (throw (ex-info "ProbeAckEvent vector has invalid structure" {:probe-ack-vec v}))))))
 
 
 
@@ -99,7 +99,7 @@
                        :status          :unknown
                        :restart-counter 0
                        :tx              0
-                       :neighbour-id    (UUID. 0 0)
+                       :neighbour-id    (UUID. 0 1)
                        :probe-key       "probekey0"}))
 
 
