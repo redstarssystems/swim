@@ -108,7 +108,7 @@
                                      (.-id probe-ack-event)
                                      (.-host probe-ack-event)
                                      (.-port probe-ack-event)
-                                     3
+                                     (:alive sut/code)
                                      (.-restart_counter probe-ack-event)
                                      (.-tx probe-ack-event)
                                      (.-neighbour_id probe-ack-event)
@@ -163,27 +163,26 @@
 
 (deftest map->PingEvent-test
   (testing "PingEvent"
-    (let [ping1 (sut/map->PingEvent {:cmd-type        0
-                                     :id              #uuid "00000000-0000-0000-0000-000000000001"
-                                     :host            "127.0.0.1"
-                                     :port            5376
-                                     :restart-counter 7
-                                     :tx              0
-                                     :neighbour-id    #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
-                                     :attempt-number  42
-                                     :ptype           :direct})]
+    (let [ping-event (sut/map->PingEvent {:cmd-type        0
+                                          :id              #uuid "00000000-0000-0000-0000-000000000001"
+                                          :host            "127.0.0.1"
+                                          :port            5376
+                                          :restart-counter 7
+                                          :tx              0
+                                          :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
+                                          :attempt-number  42})]
 
       (testing "Prepare PingEvent to vector"
-        (let [prepared-event (.prepare ping1)]
-          (match prepared-event [(:ping sut/code)
-                                 (.-id ping1)
-                                 (.-host ping1)
-                                 (.-port ping1)
-                                 (.-restart_counter ping1)
-                                 (.-tx ping1)
-                                 (.-neighbour_id ping1)
-                                 (.-attempt_number ping1)
-                                 0])))
+        (let [prepared-event (.prepare ping-event)]
+          (m/assert ^:matcho/strict [(:ping sut/code)
+                                     (.-id ping-event)
+                                     (.-host ping-event)
+                                     (.-port ping-event)
+                                     (.-restart_counter ping-event)
+                                     (.-tx ping-event)
+                                     (.-neighbour_id ping-event)
+                                     (.-attempt_number ping-event)]
+            prepared-event)))
 
       (testing "Restore PingEvent from vector"
         (let [v           [0
@@ -192,38 +191,39 @@
                            5376
                            7
                            0
-                           #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
-                           42
-                           0]
+                           #uuid "00000000-0000-0000-0000-000000000002"
+                           42]
               result-ping (.restore (sut/empty-ping) v)]
 
-          (is (= PingEvent (type result-ping)) "Should be PingEvent type")
-          (is (= result-ping ping1) "Restored PingEvent should be equals to original event")
+          (testing "Restored PingEvent should be equals to original event"
+            (m/assert PingEvent (type result-ping))
+            (m/assert ping-event result-ping))))
 
-          (testing "Wrong event structure is prohibited"
-            (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
-                  (.restore (sut/empty-ping) [])))
-            (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
-                  (.restore (sut/empty-ping) [999
-                                              #uuid "00000000-0000-0000-0000-000000000001"
-                                              "127.0.0.1"
-                                              5376
-                                              7
-                                              0
-                                              #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
-                                              42
-                                              0])))))))))
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
+              (.restore (sut/empty-ping) [])))
+        (is (thrown-with-msg? Exception #"PingEvent vector has invalid structure"
+              (.restore (sut/empty-ping) [999
+                                          #uuid "00000000-0000-0000-0000-000000000001"
+                                          "127.0.0.1"
+                                          5376
+                                          7
+                                          0
+                                          #uuid "8acc376e-f90d-470b-aa58-400a339d9424"
+                                          42
+                                          0])))))))
 
 
 (deftest empty-ping-test
-  (match (sut/empty-ping) {:cmd-type       (:ping sut/code)
-                           :id             uuid?
-                           :host           string?
-                           :port           nat-int?
-                           :tx             nat-int?
-                           :neighbour-id   uuid?
-                           :attempt-number pos-int?
-                           :ptype          keyword?}))
+  (m/assert ^:matcho/strict {:cmd-type        (:ping sut/code)
+                             :id              uuid?
+                             :host            string?
+                             :port            nat-int?
+                             :restart-counter nat-int?
+                             :tx              nat-int?
+                             :neighbour-id    uuid?
+                             :attempt-number  pos-int?}
+    (sut/empty-ping)))
 
 
 ;;;;
@@ -231,62 +231,61 @@
 
 (deftest map->AckEvent-test
   (testing "AckEvent"
-    (let [ping1 (sut/map->PingEvent {:cmd-type        0
-                                     :id              #uuid "00000000-0000-0000-0000-000000000001"
-                                     :host            "127.0.0.1"
-                                     :port            5376
-                                     :restart-counter 7
-                                     :tx              0
-                                     :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
-                                     :attempt-number  42})
-          ack1  (sut/map->AckEvent {:cmd-type        1
-                                    :id              #uuid "00000000-0000-0000-0000-000000000002"
-                                    :restart-counter 5
-                                    :tx              0
-                                    :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                                    :neighbour-tx    0})]
+    (let [ack-event (sut/map->AckEvent {:cmd-type        1
+                                        :id              #uuid "00000000-0000-0000-0000-000000000002"
+                                        :restart-counter 5
+                                        :tx              2
+                                        :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
+                                        :neighbour-tx    3
+                                        :attempt-number  42})]
 
       (testing "Prepare AckEvent to vector"
-        (let [prepared-event (.prepare ack1)]
-          (match prepared-event [(:ack sut/code)
-                                 (.id ack1)
-                                 (.restart_counter ack1)
-                                 (.tx ack1)
-                                 (.id ping1)
-                                 (.tx ping1)])))
+        (let [prepared-event (.prepare ack-event)]
+          (m/assert ^:matcho/strict [(:ack sut/code)
+                                     (.-id ack-event)
+                                     (.-restart_counter ack-event)
+                                     (.-tx ack-event)
+                                     (.-neighbour_id ack-event)
+                                     (.-neighbour_tx ack-event)
+                                     (.-attempt_number ack-event)]
+            prepared-event)))
 
       (testing "Restore AckEvent from vector"
         (let [v          [1
                           #uuid "00000000-0000-0000-0000-000000000002"
                           5
-                          0
+                          2
                           #uuid "00000000-0000-0000-0000-000000000001"
-                          0]
+                          3
+                          42]
               result-ack (.restore (sut/empty-ack) v)]
 
-          (is (= AckEvent (type result-ack)) "Should be AckEvent type")
-          (is (= result-ack ack1) "Restored AckEvent should be equals to original event")
+          (testing "Restored AckEvent should be equals to original event"
+            (m/assert AckEvent (type result-ack))
+            (m/assert ack-event result-ack))))
 
-
-          (testing "Wrong event structure is prohibited"
-            (is (thrown-with-msg? Exception #"AckEvent vector has invalid structure"
-                  (.restore (sut/empty-ack) [])))
-            (is (thrown-with-msg? Exception #"AckEvent vector has invalid structure"
-                  (.restore (sut/empty-ack) [999
-                                             #uuid "00000000-0000-0000-0000-000000000002"
-                                             5
-                                             0
-                                             #uuid "00000000-0000-0000-0000-000000000001"
-                                             1])))))))))
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"AckEvent vector has invalid structure"
+              (.restore (sut/empty-ack) [])))
+        (is (thrown-with-msg? Exception #"AckEvent vector has invalid structure"
+              (.restore (sut/empty-ack) [999
+                                         #uuid "00000000-0000-0000-0000-000000000002"
+                                         5
+                                         2
+                                         #uuid "00000000-0000-0000-0000-000000000001"
+                                         3
+                                         42])))))))
 
 
 (deftest empty-ack-test
-  (match (sut/empty-ack) {:cmd-type        (:ack sut/code)
-                          :id              uuid?
-                          :restart-counter nat-int?
-                          :tx              nat-int?
-                          :neighbour-id    uuid?
-                          :neighbour-tx    nat-int?}))
+  (m/assert ^:matcho/strict {:cmd-type        (:ack sut/code)
+                             :id              uuid?
+                             :restart-counter nat-int?
+                             :tx              nat-int?
+                             :neighbour-id    uuid?
+                             :neighbour-tx    nat-int?
+                             :attempt-number  pos-int?}
+    (sut/empty-ack)))
 
 
 ;;;;
