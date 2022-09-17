@@ -73,19 +73,18 @@
            ISwimEvent
 
            (prepare [^ProbeAckEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) ((.-status e) code) (.-restart_counter e)
+             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-status e) (.-restart_counter e)
               (.tx e) (.-neighbour_id e) (.-probe_key e)])
 
            (restore [^ProbeAckEvent _ v]
-             (let [status-pos 4]
-               (if (and
-                     (vector? v)
-                     (= 9 (count v))
-                     (every? true? (map #(%1 %2)
-                                     [#(= % (:probe-ack code)) uuid? string? pos-int? nat-int?
-                                      nat-int? nat-int? uuid? any?] v)))
-                 (apply ->ProbeAckEvent (assoc v status-pos (get (clojure.set/map-invert code) (nth v status-pos))))
-                 (throw (ex-info "ProbeAckEvent vector has invalid structure" {:probe-ack-vec v}))))))
+             (if (and
+                   (vector? v)
+                   (= 9 (count v))
+                   (every? true? (map #(%1 %2)
+                                   [#(= % (:probe-ack code)) uuid? string? pos-int? keyword?
+                                    nat-int? nat-int? uuid? any?] v)))
+               (apply ->ProbeAckEvent v)
+               (throw (ex-info "ProbeAckEvent vector has invalid structure" {:probe-ack-vec v})))))
 
 
 
@@ -150,7 +149,8 @@
              (if (and
                    (vector? v)
                    (= 7 (count v))
-                   (every? true? (map #(%1 %2) [#(= % (:ack code)) uuid? nat-int? nat-int? uuid? nat-int? pos-int?] v)))
+                   (every? true? (map #(%1 %2) [#(= % (:ack code)) uuid? nat-int? nat-int?
+                                                uuid? nat-int? pos-int?] v)))
                (apply ->AckEvent v)
                (throw (ex-info "AckEvent vector has invalid structure" {:ack-vec v})))))
 
@@ -214,7 +214,7 @@
 
 ;;;;
 
-(defrecord IndirectAckEvent [cmd-type id restart-counter tx status host port
+(defrecord IndirectAckEvent [cmd-type id host port restart-counter tx status
                              intermediate-id intermediate-host intermediate-port
                              neighbour-id neighbour-host neighbour-port
                              attempt-number]
@@ -222,8 +222,7 @@
            ISwimEvent
 
            (prepare [^IndirectAckEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx e)
-              (.-status e) (.-host e) (.-port e)
+             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e) (.-status e)
               (.-intermediate_id e) (.-intermediate_host e) (.-intermediate_port e)
               (.-neighbour_id e) (.-neighbour_host e) (.-neighbour_port e)
               (.-attempt_number e)])
@@ -232,8 +231,8 @@
              (if (and
                    (vector? v)
                    (= 14 (count v))
-                   (every? true? (map #(%1 %2) [#(= % (:indirect-ack code)) uuid? nat-int? nat-int?
-                                                nat-int? string? pos-int?
+                   (every? true? (map #(%1 %2) [#(= % (:indirect-ack code))
+                                                uuid? string? pos-int? nat-int? nat-int? keyword?
                                                 uuid? string? pos-int?
                                                 uuid? string? pos-int?
                                                 pos-int?] v)))
@@ -246,11 +245,11 @@
   ^IndirectAckEvent []
   (map->IndirectAckEvent {:cmd-type          (:indirect-ack code)
                           :id                (UUID. 0 0)
-                          :restart-counter   0
-                          :tx                0
-                          :status            :alive
                           :host              "localhost"
                           :port              1
+                          :restart-counter   0
+                          :tx                0
+                          :status            :unknown
                           :intermediate-id   (UUID. 0 1)
                           :intermediate-host "localhost"
                           :intermediate-port 10
