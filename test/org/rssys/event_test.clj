@@ -15,7 +15,7 @@
       ProbeAckEvent
       ProbeEvent
       IndirectPingEvent
-      IndirectAckEvent)))
+      IndirectAckEvent JoinEvent SuspectEvent LeftEvent PayloadEvent)))
 
 
 ;;;;
@@ -483,38 +483,147 @@
                              :attempt-number    pos-int?}
     (sut/empty-indirect-ack)))
 
+;;;;
+
+(deftest map->AliveEvent-test
+  (testing "AliveEvent"
+    (let [alive-event
+          (sut/map->AliveEvent {:cmd-type                  3
+                                :id                        #uuid "00000000-0000-0000-0000-000000000002"
+                                :restart-counter           5
+                                :tx                        0
+                                :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
+                                :neighbour-restart-counter 7
+                                :neighbour-tx              42})]
+
+      (testing "Prepare AliveEvent to vector"
+        (let [prepared-event (.prepare alive-event)]
+          (m/assert ^:matcho/strict [(:alive sut/code)
+                                     (.-id alive-event)
+                                     (.-restart_counter alive-event)
+                                     (.-tx alive-event)
+                                     #uuid "00000000-0000-0000-0000-000000000001"
+                                     7
+                                     42]
+            prepared-event)))
+
+      (testing "Restore AliveEvent from vector"
+        (let [v            [3
+                            #uuid "00000000-0000-0000-0000-000000000002"
+                            5
+                            0
+                            #uuid "00000000-0000-0000-0000-000000000001"
+                            7
+                            42]
+              result-alive (.restore (sut/empty-alive) v)]
+
+          (testing "Restored AliveEvent should be equals to original event"
+            (m/assert AliveEvent (type result-alive))
+            (m/assert alive-event result-alive))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"AliveEvent vector has invalid structure"
+              (.restore (sut/empty-alive) [])))
+        (is (thrown-with-msg? Exception #"AliveEvent vector has invalid structure"
+              (.restore (sut/empty-alive) [999
+                                           #uuid "00000000-0000-0000-0000-000000000002"
+                                           5
+                                           0
+                                           #uuid "00000000-0000-0000-0000-000000000001"
+                                           7
+                                           42])))))))
 
 
+(deftest empty-alive-test
+  (m/assert ^:matcho/strict {:cmd-type                  (:alive sut/code)
+                             :id                        uuid?
+                             :restart-counter           nat-int?
+                             :tx                        nat-int?
+                             :neighbour-id              uuid?
+                             :neighbour-restart-counter nat-int?
+                             :neighbour-tx              nat-int?}
+    (sut/empty-alive)))
+
+;;;;
+
+(deftest map->NewClusterSizeEvent-test
+  (testing "NewClusterSizeEvent"
+    (let [ncs-event
+          (sut/map->NewClusterSizeEvent {:cmd-type         13
+                                         :id               #uuid "00000000-0000-0000-0000-000000000002"
+                                         :restart-counter  5
+                                         :tx               0
+                                         :old-cluster-size 1
+                                         :new-cluster-size 3})]
+
+      (testing "Prepare NewClusterSizeEvent to vector"
+        (let [prepared-event (.prepare ncs-event)]
+          (match prepared-event [(:new-cluster-size sut/code)
+                                 (.id ncs-event)
+                                 (.restart_counter ncs-event)
+                                 (.tx ncs-event)
+                                 1
+                                 3])))
+
+      (testing "Restore NewClusterSizeEvent from vector"
+        (let [v            [13
+                            #uuid "00000000-0000-0000-0000-000000000002"
+                            5
+                            0
+                            1
+                            3]
+              result-event (.restore (sut/empty-new-cluster-size) v)]
+
+          (testing "Restored NewClusterSizeEvent should be equals to original event"
+            (m/assert NewClusterSizeEvent (type result-event))
+            (m/assert ncs-event result-event))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"NewClusterSizeEvent vector has invalid structure"
+              (.restore (sut/empty-new-cluster-size) [])))
+        (is (thrown-with-msg? Exception #"NewClusterSizeEvent vector has invalid structure"
+              (.restore (sut/empty-new-cluster-size) [999
+                                                      #uuid "00000000-0000-0000-0000-000000000002"
+                                                      5
+                                                      0
+                                                      1
+                                                      3])))))))
 
 
-
-
-
+(deftest empty-new-cluster-size-test
+  (m/assert ^:matcho/strict {:cmd-type         (:new-cluster-size sut/code)
+                             :id               uuid?
+                             :restart-counter  nat-int?
+                             :tx               nat-int?
+                             :old-cluster-size nat-int?
+                             :new-cluster-size nat-int?}
+    (sut/empty-new-cluster-size)))
 
 
 ;;;;
 
 
-
-
-
 (deftest map->DeadEvent-test
   (testing "DeadEvent"
-    (let [dead1 (sut/map->DeadEvent {:cmd-type        6
-                                     :id              #uuid "00000000-0000-0000-0000-000000000002"
-                                     :restart-counter 5
-                                     :tx              0
-                                     :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                                     :neighbour-tx    0})]
+    (let [dead-event
+          (sut/map->DeadEvent {:cmd-type                  6
+                               :id                        #uuid "00000000-0000-0000-0000-000000000002"
+                               :restart-counter           5
+                               :tx                        0
+                               :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
+                               :neighbour-restart-counter 7
+                               :neighbour-tx              1})]
 
       (testing "Prepare DeadEvent to vector"
-        (let [prepared-event (.prepare dead1)]
-          (match prepared-event [(:dead sut/code)
-                                 (.-id dead1)
-                                 (.-restart_counter dead1)
-                                 (.-tx dead1)
-                                 (.-neighbour_id dead1)
-                                 (.-neighbour_tx dead1)])))
+        (let [prepared-event (.prepare dead-event)]
+          (m/assert ^:matcho/strict [(:dead sut/code)
+                                     (.-id dead-event)
+                                     (.-restart_counter dead-event)
+                                     (.-tx dead-event)
+                                     (.-neighbour_id dead-event)
+                                     (.-neighbour_restart_counter dead-event)
+                                     (.-neighbour_tx dead-event)]
+            prepared-event)))
 
       (testing "Restore DeadEvent from vector"
         (let [v           [6
@@ -522,38 +631,36 @@
                            5
                            0
                            #uuid "00000000-0000-0000-0000-000000000001"
-                           0]
+                           7
+                           1]
               result-dead (.restore (sut/empty-dead) v)]
 
-          (is (= DeadEvent (type result-dead)) "Should be DeadEvent type")
-          (is (= result-dead dead1) "Restored DeadEvent should be equals to original event")
+          (testing "Restored DeadEvent should be equals to original event"
+            (m/assert DeadEvent (type result-dead))
+            (m/assert dead-event result-dead))))
 
-
-          (testing "Wrong event structure is prohibited"
-            (is (thrown-with-msg? Exception #"DeadEvent vector has invalid structure"
-                  (.restore (sut/empty-dead) [])))
-            (is (thrown-with-msg? Exception #"DeadEvent vector has invalid structure"
-                  (.restore (sut/empty-dead) [999
-                                              #uuid "00000000-0000-0000-0000-000000000002"
-                                              5
-                                              0
-                                              #uuid "00000000-0000-0000-0000-000000000001"
-                                              1])))))))))
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"DeadEvent vector has invalid structure"
+              (.restore (sut/empty-dead) [])))
+        (is (thrown-with-msg? Exception #"DeadEvent vector has invalid structure"
+              (.restore (sut/empty-dead) [999
+                                          #uuid "00000000-0000-0000-0000-000000000002"
+                                          5
+                                          0
+                                          #uuid "00000000-0000-0000-0000-000000000001"
+                                          7
+                                          1])))))))
 
 
 (deftest empty-dead-test
-  (match (sut/empty-dead) {:cmd-type        (:dead sut/code)
-                           :id              uuid?
-                           :restart-counter nat-int?
-                           :tx              nat-int?
-                           :neighbour-id    uuid?
-                           :neighbour-tx    nat-int?}))
-
-
-
-;;;;
-
-
+  (m/assert ^:matcho/strict {:cmd-type                  (:dead sut/code)
+                             :id                        uuid?
+                             :restart-counter           nat-int?
+                             :tx                        nat-int?
+                             :neighbour-id              uuid?
+                             :neighbour-restart-counter nat-int?
+                             :neighbour-tx              nat-int?}
+    (sut/empty-dead)))
 
 
 
@@ -562,35 +669,37 @@
 
 (deftest map->AntiEntropy-test
   (testing "AntiEntropy"
-    (let [anti-entropy-event (sut/map->AntiEntropy {:cmd-type          8
-                                                    :id                #uuid "00000000-0000-0000-0000-000000000001"
-                                                    :restart-counter   1
-                                                    :tx                2
-                                                    :anti-entropy-data [{:id              #uuid "00000000-0000-0000-0000-000000000002"
-                                                                         :host            "127.0.0.1"
-                                                                         :port            5432
-                                                                         :status          :alive
-                                                                         :access          :direct
-                                                                         :restart-counter 2
-                                                                         :tx              2
-                                                                         :payload         {}
-                                                                         :updated-at      1661799880969}]})]
+    (let [anti-entropy-event
+          (sut/map->AntiEntropy {:cmd-type          8
+                                 :id                #uuid "00000000-0000-0000-0000-000000000001"
+                                 :restart-counter   1
+                                 :tx                2
+                                 :anti-entropy-data [{:id              #uuid "00000000-0000-0000-0000-000000000002"
+                                                      :host            "127.0.0.1"
+                                                      :port            5432
+                                                      :status          :alive
+                                                      :access          :direct
+                                                      :restart-counter 2
+                                                      :tx              2
+                                                      :payload         {}
+                                                      :updated-at      1661799880969}]})]
 
       (testing "Prepare AntiEntropy to vector"
         (let [prepared-event (.prepare anti-entropy-event)]
-          (match prepared-event [(:anti-entropy sut/code)
-                                 #uuid "00000000-0000-0000-0000-000000000001"
-                                 1
-                                 2
-                                 [{:id              #uuid "00000000-0000-0000-0000-000000000002"
-                                   :host            "127.0.0.1"
-                                   :port            5432
-                                   :status          :alive
-                                   :access          :direct
-                                   :restart-counter 2
-                                   :tx              2
-                                   :payload         {}
-                                   :updated-at      1661799880969}]])))
+          (m/assert ^:matcho/strict [(:anti-entropy sut/code)
+                                     #uuid "00000000-0000-0000-0000-000000000001"
+                                     1
+                                     2
+                                     [{:id              #uuid "00000000-0000-0000-0000-000000000002"
+                                       :host            "127.0.0.1"
+                                       :port            5432
+                                       :status          :alive
+                                       :access          :direct
+                                       :restart-counter 2
+                                       :tx              2
+                                       :payload         {}
+                                       :updated-at      1661799880969}]]
+            prepared-event)))
 
       (testing "Restore AntiEntropy from vector"
         (let [v                         [8
@@ -608,8 +717,9 @@
                                            :updated-at      1661799880969}]]
               result-anti-entropy-event (.restore (sut/empty-anti-entropy) v)]
 
-          (is (= AntiEntropy (type result-anti-entropy-event)) "Should be AntiEntropy type")
-          (is (= result-anti-entropy-event anti-entropy-event) "Restored AntiEntropy should be equals to original event")))
+          (testing "Restored AntiEntropy should be equals to original event"
+            (m/assert AntiEntropy (type result-anti-entropy-event))
+            (m/assert anti-entropy-event result-anti-entropy-event))))
 
       (testing "Wrong event structure is prohibited"
         (is (thrown-with-msg? Exception #"AntiEntropy vector has invalid structure"
@@ -632,118 +742,220 @@
 
 
 (deftest empty-anti-entropy-test
-  (match (sut/empty-anti-entropy) {:cmd-type          8
-                                   :id                #uuid "00000000-0000-0000-0000-000000000000"
-                                   :restart-counter   0
-                                   :tx                0
-                                   :anti-entropy-data []}))
+  (m/assert ^:matcho/strict {:cmd-type          8
+                             :id                #uuid "00000000-0000-0000-0000-000000000000"
+                             :restart-counter   0
+                             :tx                0
+                             :anti-entropy-data []}
+    (sut/empty-anti-entropy)))
 
 
 ;;;;
 
-(deftest map->AliveEvent-test
-  (testing "AliveEvent"
-    (let [alive-event (sut/map->AliveEvent {:cmd-type        3
-                                            :id              #uuid "00000000-0000-0000-0000-000000000002"
-                                            :restart-counter 5
-                                            :tx              0
-                                            :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                                            :neighbour-tx    42})]
+(deftest map->JoinEvent-test
+  (testing "JoinEvent"
+    (let [join-event
+          (sut/map->JoinEvent {:cmd-type        2
+                               :id              #uuid "00000000-0000-0000-0000-000000000001"
+                               :restart-counter 5
+                               :tx              1})]
 
-      (testing "Prepare AliveEvent to vector"
-        (let [prepared-event (.prepare alive-event)]
-          (match prepared-event [(:alive sut/code)
-                                 (.id alive-event)
-                                 (.restart_counter alive-event)
-                                 (.tx alive-event)
-                                 #uuid "00000000-0000-0000-0000-000000000001"
-                                 42])))
+      (testing "Prepare JoinEvent to vector"
+        (let [prepared-event (.prepare join-event)]
+          (m/assert ^:matcho/strict [(:join sut/code)
+                                     (.-id join-event)
+                                     (.-restart_counter join-event)
+                                     (.-tx join-event)]
+            prepared-event)))
 
-      (testing "Restore AliveEvent from vector"
-        (let [v            [3
-                            #uuid "00000000-0000-0000-0000-000000000002"
-                            5
-                            0
-                            #uuid "00000000-0000-0000-0000-000000000001"
-                            42]
-              result-alive (.restore (sut/empty-alive) v)]
+      (testing "Restore JoinEvent from vector"
+        (let [v           [2
+                           #uuid "00000000-0000-0000-0000-000000000001"
+                           5
+                           1]
+              result-join (.restore (sut/empty-join) v)]
 
-          (is (= AliveEvent (type result-alive)) "Should be AliveEvent type")
-          (is (= result-alive alive-event) "Restored AliveEvent should be equals to original event")
+          (testing "Restored JoinEvent should be equals to original event"
+            (m/assert JoinEvent (type result-join))
+            (m/assert join-event result-join))))
 
-
-          (testing "Wrong event structure is prohibited"
-            (is (thrown-with-msg? Exception #"AliveEvent vector has invalid structure"
-                  (.restore (sut/empty-alive) [])))
-            (is (thrown-with-msg? Exception #"AliveEvent vector has invalid structure"
-                  (.restore (sut/empty-alive) [999
-                                               #uuid "00000000-0000-0000-0000-000000000002"
-                                               5
-                                               0
-                                               #uuid "00000000-0000-0000-0000-000000000001"
-                                               42])))))))))
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"JoinEvent vector has invalid structure"
+              (.restore (sut/empty-join) [])))
+        (is (thrown-with-msg? Exception #"JoinEvent vector has invalid structure"
+              (.restore (sut/empty-join) [999
+                                          #uuid "00000000-0000-0000-0000-000000000002"
+                                          5
+                                          1])))))))
 
 
-(deftest empty-alive-test
-  (match (sut/empty-alive) {:cmd-type        (:alive sut/code)
-                            :id              uuid?
-                            :restart-counter nat-int?
-                            :tx              nat-int?
-                            :neighbour-id    uuid?
-                            :neighbour-tx    nat-int?}))
+(deftest empty-join-test
+  (m/assert ^:matcho/strict {:cmd-type        (:join sut/code)
+                             :id              uuid?
+                             :restart-counter nat-int?
+                             :tx              nat-int?}
+    (sut/empty-join)))
 
 
 ;;;;
 
+
+(deftest map->SuspectEvent-test
+  (testing "SuspectEvent"
+    (let [suspect-event
+          (sut/map->SuspectEvent {:cmd-type                  4
+                                  :id                        #uuid "00000000-0000-0000-0000-000000000002"
+                                  :restart-counter           5
+                                  :tx                        0
+                                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
+                                  :neighbour-restart-counter 7
+                                  :neighbour-tx              1})]
+
+      (testing "Prepare SuspectEvent to vector"
+        (let [prepared-event (.prepare suspect-event)]
+          (m/assert ^:matcho/strict [(:suspect sut/code)
+                                     (.-id suspect-event)
+                                     (.-restart_counter suspect-event)
+                                     (.-tx suspect-event)
+                                     (.-neighbour_id suspect-event)
+                                     (.-neighbour_restart_counter suspect-event)
+                                     (.-neighbour_tx suspect-event)]
+            prepared-event)))
+
+      (testing "Restore SuspectEvent from vector"
+        (let [v           [4
+                           #uuid "00000000-0000-0000-0000-000000000002"
+                           5
+                           0
+                           #uuid "00000000-0000-0000-0000-000000000001"
+                           7
+                           1]
+              result-dead (.restore (sut/empty-suspect) v)]
+
+          (testing "Restored SuspectEvent should be equals to original event"
+            (m/assert SuspectEvent (type result-dead))
+            (m/assert suspect-event result-dead))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"SuspectEvent vector has invalid structure"
+              (.restore (sut/empty-suspect) [])))
+        (is (thrown-with-msg? Exception #"SuspectEvent vector has invalid structure"
+              (.restore (sut/empty-suspect) [999
+                                             #uuid "00000000-0000-0000-0000-000000000002"
+                                             5
+                                             0
+                                             #uuid "00000000-0000-0000-0000-000000000001"
+                                             7
+                                             1])))))))
+
+
+(deftest empty-suspect-test
+  (m/assert ^:matcho/strict {:cmd-type                  (:suspect sut/code)
+                             :id                        uuid?
+                             :restart-counter           nat-int?
+                             :tx                        nat-int?
+                             :neighbour-id              uuid?
+                             :neighbour-restart-counter nat-int?
+                             :neighbour-tx              nat-int?}
+    (sut/empty-suspect)))
+
+
+
 ;;;;
 
-(deftest map->NewClusterSizeEvent-test
-  (testing "NewClusterSizeEvent"
-    (let [ncs-event (sut/map->NewClusterSizeEvent {:cmd-type         13
-                                                   :id               #uuid "00000000-0000-0000-0000-000000000002"
-                                                   :restart-counter  5
-                                                   :tx               0
-                                                   :old-cluster-size 1
-                                                   :new-cluster-size 3})]
+(deftest map->LeftEvent-test
+  (testing "LeftEvent"
+    (let [left-event
+          (sut/map->LeftEvent {:cmd-type        5
+                               :id              #uuid "00000000-0000-0000-0000-000000000001"
+                               :restart-counter 7
+                               :tx              1})]
 
-      (testing "Prepare NewClusterSizeEvent to vector"
-        (let [prepared-event (.prepare ncs-event)]
-          (match prepared-event [(:new-cluster-size sut/code)
-                                 (.id ncs-event)
-                                 (.restart_counter ncs-event)
-                                 (.tx ncs-event)
-                                 1
-                                 3])))
+      (testing "Prepare LeftEvent to vector"
+        (let [prepared-event (.prepare left-event)]
+          (m/assert ^:matcho/strict [(:left sut/code)
+                                     (.-id left-event)
+                                     (.-restart_counter left-event)
+                                     (.-tx left-event)]
+            prepared-event)))
 
-      (testing "Restore NewClusterSizeEvent from vector"
-        (let [v            [13
-                            #uuid "00000000-0000-0000-0000-000000000002"
-                            5
-                            0
-                            1
-                            3]
-              result-event (.restore (sut/empty-new-cluster-size) v)]
+      (testing "Restore LeftEvent from vector"
+        (let [v           [5
+                           #uuid "00000000-0000-0000-0000-000000000001"
+                           7
+                           1]
+              result-left (.restore (sut/empty-left) v)]
 
-          (is (= NewClusterSizeEvent (type result-event)) "Should be NewClusterSizeEvent type")
-          (is (= result-event ncs-event) "Restored NewClusterSizeEvent should be equals to original event")
+          (testing "Restored LeftEvent should be equals to original event"
+            (m/assert LeftEvent (type result-left))
+            (m/assert left-event result-left))))
 
-
-          (testing "Wrong event structure is prohibited"
-            (is (thrown-with-msg? Exception #"NewClusterSizeEvent vector has invalid structure"
-                  (.restore (sut/empty-new-cluster-size) [])))
-            (is (thrown-with-msg? Exception #"NewClusterSizeEvent vector has invalid structure"
-                  (.restore (sut/empty-new-cluster-size) [999
-                                                          #uuid "00000000-0000-0000-0000-000000000002"
-                                                          5
-                                                          0
-                                                          1
-                                                          3])))))))))
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"LeftEvent vector has invalid structure"
+              (.restore (sut/empty-left) [])))
+        (is (thrown-with-msg? Exception #"LeftEvent vector has invalid structure"
+              (.restore (sut/empty-left) [999
+                                          #uuid "00000000-0000-0000-0000-000000000002"
+                                          7
+                                          1])))))))
 
 
-(deftest empty-new-cluster-size-test
-  (match (sut/empty-new-cluster-size) {:cmd-type         (:new-cluster-size sut/code)
-                                       :id               uuid?
-                                       :restart-counter  nat-int?
-                                       :tx               nat-int?
-                                       :old-cluster-size nat-int?
-                                       :new-cluster-size nat-int?}))
+(deftest empty-left-test
+  (m/assert ^:matcho/strict {:cmd-type        (:left sut/code)
+                             :id              uuid?
+                             :restart-counter nat-int?
+                             :tx              nat-int?}
+    (sut/empty-left)))
+
+
+;;;;
+
+(deftest map->PayloadEvent-test
+  (testing "PayloadEvent"
+    (let [payload-event
+          (sut/map->PayloadEvent {:cmd-type        7
+                                  :id              #uuid "00000000-0000-0000-0000-000000000001"
+                                  :restart-counter 5
+                                  :tx              1
+                                  :payload         {:name "node1"}})]
+
+      (testing "Prepare PayloadEvent to vector"
+        (let [prepared-event (.prepare payload-event)]
+          (m/assert ^:matcho/strict [(:payload sut/code)
+                                     (.-id payload-event)
+                                     (.-restart_counter payload-event)
+                                     (.-tx payload-event)
+                                     (.-payload payload-event)]
+            prepared-event)))
+
+      (testing "Restore PayloadEvent from vector"
+        (let [v              [7
+                              #uuid "00000000-0000-0000-0000-000000000001"
+                              5
+                              1
+                              {:name "node1"}]
+              result-payload (.restore (sut/empty-payload) v)]
+
+          (testing "Restored PayloadEvent should be equals to original event"
+            (m/assert PayloadEvent (type result-payload))
+            (m/assert payload-event result-payload))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"PayloadEvent vector has invalid structure"
+              (.restore (sut/empty-payload) [])))
+        (is (thrown-with-msg? Exception #"PayloadEvent vector has invalid structure"
+              (.restore (sut/empty-payload) [999
+                                             #uuid "00000000-0000-0000-0000-000000000002"
+                                             5
+                                             1])))))))
+
+
+(deftest empty-payload-test
+  (m/assert ^:matcho/strict {:cmd-type        (:payload sut/code)
+                             :id              uuid?
+                             :restart-counter nat-int?
+                             :tx              nat-int?
+                             :payload         any?}
+    (sut/empty-payload)))
+
+
