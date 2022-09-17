@@ -13,7 +13,9 @@
       NewClusterSizeEvent
       PingEvent
       ProbeAckEvent
-      ProbeEvent)))
+      ProbeEvent
+      IndirectPingEvent
+      IndirectAckEvent)))
 
 
 ;;;;
@@ -108,7 +110,7 @@
                                      (.-id probe-ack-event)
                                      (.-host probe-ack-event)
                                      (.-port probe-ack-event)
-                                     (:alive sut/code)
+                                     (.-status probe-ack-event)
                                      (.-restart_counter probe-ack-event)
                                      (.-tx probe-ack-event)
                                      (.-neighbour_id probe-ack-event)
@@ -120,7 +122,7 @@
                             #uuid "00000000-0000-0000-0000-000000000001"
                             "127.0.0.1"
                             5376
-                            3
+                            :alive
                             7
                             1
                             #uuid "00000000-0000-0000-0000-000000000002"
@@ -163,14 +165,15 @@
 
 (deftest map->PingEvent-test
   (testing "PingEvent"
-    (let [ping-event (sut/map->PingEvent {:cmd-type        0
-                                          :id              #uuid "00000000-0000-0000-0000-000000000001"
-                                          :host            "127.0.0.1"
-                                          :port            5376
-                                          :restart-counter 7
-                                          :tx              0
-                                          :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
-                                          :attempt-number  42})]
+    (let [ping-event
+          (sut/map->PingEvent {:cmd-type        0
+                               :id              #uuid "00000000-0000-0000-0000-000000000001"
+                               :host            "127.0.0.1"
+                               :port            5376
+                               :restart-counter 7
+                               :tx              0
+                               :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
+                               :attempt-number  42})]
 
       (testing "Prepare PingEvent to vector"
         (let [prepared-event (.prepare ping-event)]
@@ -289,6 +292,211 @@
 
 
 ;;;;
+
+
+(deftest map->IndirectPingEvent-test
+  (testing "IndirectPingEvent"
+    (let [indirect-ping-event
+          (sut/map->IndirectPingEvent {:cmd-type          14
+                                       :id                #uuid "00000000-0000-0000-0000-000000000001"
+                                       :host              "127.0.0.1"
+                                       :port              5376
+                                       :restart-counter   7
+                                       :tx                0
+                                       :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+                                       :intermediate-host "127.0.0.1"
+                                       :intermediate-port 5377
+                                       :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
+                                       :neighbour-host    "127.0.0.1"
+                                       :neighbour-port    5378
+                                       :attempt-number    42})]
+
+      (testing "Prepare IndirectPingEvent to vector"
+        (let [prepared-event (.prepare indirect-ping-event)]
+          (m/assert ^:matcho/strict [(:indirect-ping sut/code)
+                                     (.-id indirect-ping-event)
+                                     (.-host indirect-ping-event)
+                                     (.-port indirect-ping-event)
+                                     (.-restart_counter indirect-ping-event)
+                                     (.-tx indirect-ping-event)
+                                     (.-intermediate_id indirect-ping-event)
+                                     (.-intermediate_host indirect-ping-event)
+                                     (.-intermediate_port indirect-ping-event)
+                                     (.-neighbour_id indirect-ping-event)
+                                     (.-neighbour_host indirect-ping-event)
+                                     (.-neighbour_port indirect-ping-event)
+                                     (.-attempt_number indirect-ping-event)]
+            prepared-event)))
+
+      (testing "Restore IndirectPingEvent from vector"
+        (let [v [14
+                 #uuid "00000000-0000-0000-0000-000000000001"
+                 "127.0.0.1"
+                 5376
+                 7
+                 0
+                 #uuid "00000000-0000-0000-0000-000000000002"
+                 "127.0.0.1"
+                 537715 #uuid "00000000-0000-0000-0000-000000000003"
+                 "127.0.0.1"
+                 5378
+                 42]
+              result-indirect-ping
+                (.restore (sut/empty-indirect-ping) v)]
+
+          (testing "Restored IndirectPingEvent should be equals to original event"
+            (m/assert IndirectPingEvent (type result-indirect-ping))
+            (m/assert indirect-ping-event result-indirect-ping))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"IndirectPingEvent vector has invalid structure"
+              (.restore (sut/empty-indirect-ping) [])))
+        (is (thrown-with-msg? Exception #"IndirectPingEvent vector has invalid structure"
+              (.restore (sut/empty-indirect-ping) [999
+                                                   #uuid "00000000-0000-0000-0000-000000000001"
+                                                   "127.0.0.1"
+                                                   5376
+                                                   7
+                                                   0
+                                                   #uuid "00000000-0000-0000-0000-000000000002"
+                                                   "127.0.0.1"
+                                                   5377
+                                                   #uuid "00000000-0000-0000-0000-000000000003"
+                                                   "127.0.0.1"
+                                                   5378
+                                                   42])))))))
+
+
+(deftest empty-indirect-ping-test
+  (m/assert ^:matcho/strict {:cmd-type          (:indirect-ping sut/code)
+                             :id                uuid?
+                             :host              string?
+                             :port              nat-int?
+                             :restart-counter   nat-int?
+                             :tx                nat-int?
+                             :intermediate-id   uuid?
+                             :intermediate-host string?
+                             :intermediate-port pos-int?
+                             :neighbour-id      uuid?
+                             :neighbour-host    string?
+                             :neighbour-port    pos-int?
+                             :attempt-number    pos-int?}
+    (sut/empty-indirect-ping)))
+
+
+
+;;;;
+
+
+(deftest map->IndirectAckEvent-test
+  (testing "IndirectAckEvent"
+    (let [indirect-ack-event
+          (sut/map->IndirectAckEvent {:cmd-type          15
+                                      :id                #uuid "00000000-0000-0000-0000-000000000001"
+                                      :host              "127.0.0.1"
+                                      :port              5376
+                                      :restart-counter   7
+                                      :tx                0
+                                      :status            :alive
+                                      :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+                                      :intermediate-host "127.0.0.1"
+                                      :intermediate-port 5377
+                                      :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
+                                      :neighbour-host    "127.0.0.1"
+                                      :neighbour-port    5378
+                                      :attempt-number    42})]
+
+      (testing "Prepare IndirectAckEvent to vector"
+        (let [prepared-event (.prepare indirect-ack-event)]
+          (m/assert ^:matcho/strict [(:indirect-ack sut/code)
+                                     (.-id indirect-ack-event)
+                                     (.-host indirect-ack-event)
+                                     (.-port indirect-ack-event)
+                                     (.-restart_counter indirect-ack-event)
+                                     (.-tx indirect-ack-event)
+                                     (.-status indirect-ack-event)
+                                     (.-intermediate_id indirect-ack-event)
+                                     (.-intermediate_host indirect-ack-event)
+                                     (.-intermediate_port indirect-ack-event)
+                                     (.-neighbour_id indirect-ack-event)
+                                     (.-neighbour_host indirect-ack-event)
+                                     (.-neighbour_port indirect-ack-event)
+                                     (.-attempt_number indirect-ack-event)]
+            prepared-event)))
+
+      (testing "Restore IndirectAckEvent from vector"
+        (let [v [15
+                 #uuid "00000000-0000-0000-0000-000000000001"
+                 "127.0.0.1"
+                 5376
+                 7
+                 0
+                 :alive
+                 #uuid "00000000-0000-0000-0000-000000000002"
+                 "127.0.0.1"
+                 5377
+                 #uuid "00000000-0000-0000-0000-000000000003"
+                 "127.0.0.1"
+                 5378
+                 42]
+              result-indirect-ack
+                (.restore (sut/empty-indirect-ack) v)]
+
+          (testing "Restored IndirectAckEvent should be equals to original event"
+            (m/assert IndirectAckEvent (type result-indirect-ack))
+            (m/assert indirect-ack-event result-indirect-ack))))
+
+      (testing "Wrong event structure is prohibited"
+        (is (thrown-with-msg? Exception #"IndirectAckEvent vector has invalid structure"
+              (.restore (sut/empty-indirect-ack) [])))
+        (is (thrown-with-msg? Exception #"IndirectAckEvent vector has invalid structure"
+              (.restore (sut/empty-indirect-ack) [999
+                                                  #uuid "00000000-0000-0000-0000-000000000001"
+                                                  "127.0.0.1"
+                                                  5376
+                                                  7
+                                                  0
+                                                  (:alive sut/code)
+                                                  #uuid "00000000-0000-0000-0000-000000000002"
+                                                  "127.0.0.1"
+                                                  5377
+                                                  #uuid "00000000-0000-0000-0000-000000000003"
+                                                  "127.0.0.1"
+                                                  5378
+                                                  42])))))))
+
+
+(deftest empty-indirect-ack-test
+  (m/assert ^:matcho/strict {:cmd-type          (:indirect-ack sut/code)
+                             :id                uuid?
+                             :host              string?
+                             :port              nat-int?
+                             :restart-counter   nat-int?
+                             :tx                nat-int?
+                             :status            :unknown
+                             :intermediate-id   uuid?
+                             :intermediate-host string?
+                             :intermediate-port pos-int?
+                             :neighbour-id      uuid?
+                             :neighbour-host    string?
+                             :neighbour-port    pos-int?
+                             :attempt-number    pos-int?}
+    (sut/empty-indirect-ack)))
+
+
+
+
+
+
+
+
+
+
+;;;;
+
+
+
+
 
 (deftest map->DeadEvent-test
   (testing "DeadEvent"
