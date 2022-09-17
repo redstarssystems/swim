@@ -47,11 +47,13 @@
                  restart-counter
                  tx
                  ping-events
+                 indirect-ping-events
                  payload
                  scheduler-pool
                  *udp-server
-                 outgoing-event-queue
-                 ping-round-buffer]
+                 outgoing-events
+                 ping-round-buffer
+                 probe-events]
            Object
            (toString [this] (.toString this)))
 
