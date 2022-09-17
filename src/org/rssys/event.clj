@@ -384,7 +384,6 @@
 
 ;;;;
 
-
 (defrecord JoinEvent [cmd-type id restart-counter tx]
 
            ISwimEvent
@@ -404,9 +403,94 @@
 (defn empty-join
   "Returns empty join event"
   ^JoinEvent []
-  (map->JoinEvent {:cmd-type                  (:join code)
-                   :id                        (UUID. 0 0)
-                   :restart-counter           0
-                   :tx                        0}))
+  (map->JoinEvent {:cmd-type        (:join code)
+                   :id              (UUID. 0 0)
+                   :restart-counter 0
+                   :tx              0}))
 
+;;;;
+
+
+(defrecord SuspectEvent [cmd-type id restart-counter tx neighbour-id neighbour-restart-counter neighbour-tx]
+
+           ISwimEvent
+
+           (prepare [^SuspectEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e)
+              (.-neighbour_restart_counter e) (.-neighbour_tx e)])
+
+           (restore [^SuspectEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 7 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:suspect code)) uuid? nat-int? nat-int? uuid? nat-int? nat-int?] v)))
+               (apply ->SuspectEvent v)
+               (throw (ex-info "SuspectEvent vector has invalid structure" {:suspect-vec v})))))
+
+
+(defn empty-suspect
+  "Returns empty suspect event"
+  ^SuspectEvent []
+  (map->SuspectEvent {:cmd-type                  (:suspect code)
+                      :id                        (UUID. 0 0)
+                      :restart-counter           0
+                      :tx                        0
+                      :neighbour-id              (UUID. 0 1)
+                      :neighbour-restart-counter 0
+                      :neighbour-tx              0}))
+
+
+;;;;
+
+(defrecord LeftEvent [cmd-type id restart-counter tx]
+
+           ISwimEvent
+
+           (prepare [^LeftEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e)])
+
+           (restore [^LeftEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 4 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:left code)) uuid? nat-int? nat-int?] v)))
+               (apply ->LeftEvent v)
+               (throw (ex-info "LeftEvent vector has invalid structure" {:left-vec v})))))
+
+
+(defn empty-left
+  "Returns empty left event"
+  ^LeftEvent []
+  (map->LeftEvent {:cmd-type        (:left code)
+                   :id              (UUID. 0 0)
+                   :restart-counter 0
+                   :tx              0}))
+
+
+;;;;
+
+(defrecord PayloadEvent [cmd-type id restart-counter tx payload]
+
+           ISwimEvent
+
+           (prepare [^PayloadEvent e]
+             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx e) (.-payload e)])
+
+           (restore [^PayloadEvent _ v]
+             (if (and
+                   (vector? v)
+                   (= 5 (count v))
+                   (every? true? (map #(%1 %2) [#(= % (:payload code)) uuid? nat-int? nat-int? any?] v)))
+               (apply ->PayloadEvent v)
+               (throw (ex-info "PayloadEvent vector has invalid structure" {:payload-vec v})))))
+
+
+(defn empty-payload
+  "Returns empty payload event"
+  ^PayloadEvent []
+  (map->PayloadEvent {:cmd-type        (:payload code)
+                      :id              (UUID. 0 0)
+                      :restart-counter 0
+                      :tx              0
+                      :payload         {:name "node0"}}))
 
