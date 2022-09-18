@@ -4,11 +4,11 @@
     [clojure.string :as string]
     [clojure.test :refer [deftest is testing]]
     [matcho.core :refer [match not-match]]
+    [matcho.core :as m]
     [org.rssys.encrypt :as e]
     [org.rssys.event :as event]
     [org.rssys.spec :as spec]
-    [org.rssys.swim :as sut]
-    [matcho.core :as m])
+    [org.rssys.swim :as sut])
   (:import
     (java.util
       UUID)
@@ -21,10 +21,16 @@
       AliveEvent
       AntiEntropy
       DeadEvent
+      IndirectAckEvent
+      IndirectPingEvent
+      JoinEvent
+      LeftEvent
       NewClusterSizeEvent
+      PayloadEvent
       PingEvent
       ProbeAckEvent
-      ProbeEvent IndirectPingEvent IndirectAckEvent)
+      ProbeEvent
+      SuspectEvent)
     (org.rssys.scheduler
       MutablePool)))
 
@@ -61,12 +67,12 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                      [-110 -93 126 35 39 -52 -128]
-                      [-110 -93 126 35 39 -91 104 101 108 108 111]
-                      [-110 -93 126 35 39 -64]
-                      [-110 -93 126 35 39 -93 126 58 107]
-                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                      [-110, -50, 73, -106, 2, -46, 1]))
+                       [-110 -93 126 35 39 -52 -128]
+                       [-110 -93 126 35 39 -91 104 101 108 108 111]
+                       [-110 -93 126 35 39 -64]
+                       [-110 -93 126 35 39 -93 126 58 107]
+                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                       [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
       (m/assert values dvalues))))
 
@@ -133,6 +139,7 @@
       (m/assert Cluster (type result))
       (m/assert ::spec/cluster result)
       (m/assert 3 (.-cluster_size result)))))
+
 
 ;;;;
 
@@ -601,6 +608,7 @@
       (is (thrown-with-msg? Exception #"Invalid probe event"
             (sut/new-probe-event this "127.0.01" -1))))))
 
+
 ;;;;
 
 (deftest new-probe-ack-event-test
@@ -613,6 +621,7 @@
       (is (thrown-with-msg? Exception #"Invalid probe ack event"
             (sut/new-probe-ack-event this (assoc probe-event :id :bad-value)))))))
 
+
 ;;;;
 
 (deftest new-ping-event-test
@@ -622,6 +631,7 @@
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ping event"
             (sut/new-ping-event this :bad-value 42))))))
+
 
 ;;;;
 
@@ -633,6 +643,7 @@
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ack event"
             (sut/new-ack-event this (assoc ping-event :id :bad-value)))))))
+
 
 ;;;;
 
@@ -670,6 +681,7 @@
       (is (thrown-with-msg? Exception #"Invalid indirect ping event"
             (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) :bad-value))))))
 
+
 ;;;;
 
 (deftest new-indirect-ack-event-test
@@ -699,50 +711,138 @@
       (is (thrown-with-msg? Exception #"Invalid indirect ack event"
             (sut/new-indirect-ack-event this (assoc indirect-ping-event :attempt-number -1)))))))
 
+
 ;;;;
-
-(deftest new-dead-event-test
-  (let [this       (sut/new-node-object node-data1 cluster)
-        ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
-        result     (sut/new-dead-event this ping-event)]
-    (is (= DeadEvent (type result)) "DeadEvent has correct type")
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid dead event"
-            (sut/new-dead-event this (assoc ping-event :id :bad-value)))))))
-
-
-
-(deftest new-anti-entropy-event-test
-  (let [this   (sut/new-node-object node-data1 cluster)
-        result (sut/new-anti-entropy-event this)]
-    (is (= AntiEntropy (type result)) "AntiEntropy has correct type")))
 
 
 (deftest new-alive-event-test
-  (let [this        (sut/new-node-object node-data1 cluster)
-        ack-event   (event/map->AliveEvent {:cmd-type        3
-                                            :id              #uuid "00000000-0000-0000-0000-000000000002"
-                                            :restart-counter 5
-                                            :tx              0
-                                            :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                                            :neighbour-tx    42})
-        alive-event (sut/new-alive-event this ack-event)]
-    (is (= AliveEvent (type alive-event)) "Should be AliveEvent  type")
+  (let [this           (sut/new-node-object node-data1 cluster)
+        neighbour-this (sut/new-node-object node-data2 cluster)
+        _              (sut/inc-tx this)
+        _              (sut/inc-tx neighbour-this)
+        _              (sut/inc-tx neighbour-this)
+        ping-event     (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
+        ack-event      (sut/new-ack-event neighbour-this ping-event)
+        alive-event    (sut/new-alive-event this ack-event)]
+    (m/assert AliveEvent (type alive-event))
+    (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"
+               :neighbour-tx (sut/get-tx neighbour-this)} alive-event)
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid alive event"
             (sut/new-alive-event this (assoc ack-event :id :bad-value)))))))
 
 
+;;;;
+
 (deftest new-cluster-size-event-test
-  (let [this      (sut/new-node-object node-data1 cluster)
-        ncs-event (sut/new-cluster-size-event this 5)]
-    (is (= NewClusterSizeEvent (type ncs-event)) "Should be NewClusterSizeEvent  type")
+  (let [this             (sut/new-node-object node-data1 cluster)
+        new-cluster-size 5
+        ncs-event        (sut/new-cluster-size-event this new-cluster-size)]
+    (m/assert NewClusterSizeEvent (type ncs-event))
+    (m/assert {:old-cluster-size (.-cluster_size cluster)
+               :new-cluster-size new-cluster-size}
+      ncs-event)
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid new cluster size event"
             (sut/new-cluster-size-event this -1))))))
 
 
+
 ;;;;
+
+(deftest new-dead-event-test
+  (let [this       (sut/new-node-object node-data1 cluster)
+        ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
+        neighbour  (sut/new-neighbour-node neighbour-data1)
+        _          (sut/upsert-neighbour this neighbour)
+        result     (sut/new-dead-event this (.-neighbour_id ping-event))]
+    (m/assert DeadEvent (type result))
+    (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
+      result)
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid dead event"
+            (sut/new-dead-event this (assoc ping-event :id :bad-value)))))))
+
+
+;;;;
+
+(deftest new-anti-entropy-event-test
+  (let [this      (sut/new-node-object node-data1 cluster)
+        neighbour (sut/new-neighbour-node neighbour-data1)
+        _         (sut/upsert-neighbour this neighbour)
+        result    (sut/new-anti-entropy-event this)]
+    (m/assert AntiEntropy (type result))
+    (m/assert {:anti-entropy-data [[#uuid "00000000-0000-0000-0000-000000000002"
+                                    "127.0.0.1"
+                                    5377
+                                    3
+                                    0
+                                    3
+                                    0
+                                    {:tcp-port 4567}]]}
+      result)))
+
+
+;;;;
+
+(deftest new-join-event-test
+  (let [this   (sut/new-node-object node-data1 cluster)
+        result (sut/new-join-event this)]
+    (m/assert JoinEvent (type result))
+    (m/assert {:cmd-type        (:join event/code)
+               :id              (sut/get-id this)
+               :restart-counter (sut/get-restart-counter this)
+               :tx              (sut/get-tx this)}
+      result)))
+
+
+;;;;
+
+(deftest new-suspect-event-test
+  (let [this      (sut/new-node-object node-data1 cluster)
+        neighbour (sut/new-neighbour-node neighbour-data1)
+        _         (sut/upsert-neighbour this neighbour)
+        result    (sut/new-suspect-event this (:id neighbour))]
+    (m/assert SuspectEvent (type result))
+    (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
+      result)
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid suspect event data"
+            (sut/new-suspect-event this :bad-value))))))
+
+
+;;;;
+
+(deftest new-left-event-test
+  (let [this   (sut/new-node-object node-data1 cluster)
+        result (sut/new-left-event this)]
+    (m/assert LeftEvent (type result))
+    (m/assert {:cmd-type        (:left event/code)
+               :id              (sut/get-id this)
+               :restart-counter (sut/get-restart-counter this)
+               :tx              (sut/get-tx this)}
+      result)))
+
+
+;;;;
+
+(deftest new-payload-event-test
+  (let [this        (sut/new-node-object node-data1 cluster)
+        new-payload {:a 1 :b [3]}
+        _           (sut/set-payload this new-payload)
+        result      (sut/new-payload-event this)]
+    (m/assert PayloadEvent (type result))
+    (m/assert {:cmd-type        (:payload event/code)
+               :id              (sut/get-id this)
+               :restart-counter (sut/get-restart-counter this)
+               :tx              (sut/get-tx this)
+               :payload (sut/get-payload this)}
+      result)))
+
+
+
+;;;;;;;;;;;;;;;;;;
+
 
 
 (deftest suitable-restart-counter?-test

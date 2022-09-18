@@ -3,6 +3,7 @@
   (:require
     [clojure.spec.alpha :as s]))
 
+
 ;;;;;;;;;;;;;
 ;;; Basic specs
 
@@ -47,57 +48,77 @@
 (s/def ::old-cluster-size ::cluster-size)
 (s/def ::new-cluster-size ::cluster-size)
 
+
 ;;;;;;;;;;
 ;; Event specs
 
-(s/def ::probe-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-host
-                                      ::neighbour-port ::probe-key]))
+(s/def ::probe-event
+  (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-host
+                   ::neighbour-port ::probe-key]))
 
-(s/def ::probe-ack-event (s/keys :req-un [::cmd-type ::id ::host ::port ::status ::restart-counter ::tx
-                                          ::neighbour-id ::probe-key]))
 
-(s/def ::ping-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
-                                     ::neighbour-id ::attempt-number]))
+(s/def ::probe-ack-event
+  (s/keys :req-un [::cmd-type ::id ::host ::port ::status ::restart-counter ::tx
+                   ::neighbour-id ::probe-key]))
 
-(s/def ::ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                                    ::neighbour-id ::neighbour-tx ::attempt-number]))
 
-(s/def ::indirect-ping-event (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
-                                              ::intermediate-id ::intermediate-host ::intermediate-port
-                                              ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
+(s/def ::ping-event
+  (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
+                   ::neighbour-id ::attempt-number]))
 
-(s/def ::indirect-ack-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::status ::host ::port
-                                             ::intermediate-id ::intermediate-host ::intermediate-port
-                                             ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
+
+(s/def ::ack-event
+  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+                   ::neighbour-id ::neighbour-tx ::attempt-number]))
+
+
+(s/def ::indirect-ping-event
+  (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
+                   ::intermediate-id ::intermediate-host ::intermediate-port
+                   ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
+
+
+(s/def ::indirect-ack-event
+  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::status ::host ::port
+                   ::intermediate-id ::intermediate-host ::intermediate-port
+                   ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
+
 
 ;; alive node is a neighbour
-(s/def ::alive-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                                      ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
+(s/def ::alive-event
+  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+                   ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
 
 
-(s/def ::new-cluster-size-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                                                 ::old-cluster-size ::new-cluster-size]))
+(s/def ::new-cluster-size-event
+  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+                   ::old-cluster-size ::new-cluster-size]))
 
 
 ;; ::neighbour-id - dead node
-(s/def ::dead-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                                     ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
+(s/def ::dead-event
+  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+                   ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
 
 
-(s/def ::anti-entropy-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                                             ::anti-entropy-data]))
+(s/def ::anti-entropy-event
+  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+                   ::anti-entropy-data]))
+
 
 (s/def ::join-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx]))
 
 
 ;; suspect node is a neighbour
-(s/def ::suspect-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                                      ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
+(s/def ::suspect-event
+  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+                   ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
 
 
 (s/def ::left-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx]))
 
 (s/def ::payload-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::payload]))
+
 
 ;;;;;;;;;;
 ;; Domain specs
@@ -106,11 +127,13 @@
   (s/keys :req-un [::id ::host ::port ::cluster ::status ::neighbours ::restart-counter
                    ::tx ::ping-events ::indirect-ping-events
                    ::payload ::scheduler-pool ::*udp-server ::outgoing-events
-                   ::ping-round-buffer ::probe-events ]))
+                   ::ping-round-buffer ::probe-events]))
 
 
-(s/def ::neighbour-node (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter
-                                         ::tx ::payload ::updated-at]))
+(s/def ::neighbour-node
+  (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter
+                   ::tx ::payload ::updated-at]))
+
 
 (s/def ::neighbours (s/map-of ::neighbour-id ::neighbour-node))
 
@@ -120,14 +143,18 @@
 
 (s/def ::probe-events (s/map-of ::probe-key (s/nilable ::probe-ack-event)))
 
+
 ;; buffer for ping events we sent and waiting for an ack
 (s/def ::ping-events (s/map-of ::neighbour-id ::ping-event))
+
 
 ;; buffer for indirect pings we sent and waiting for an ack
 (s/def ::indirect-ping-events (s/map-of ::neighbour-id ::indirect-ping-event))
 
+
 ;; buffer for outgoing events which we propagate via piggieback with ping events
 (s/def ::outgoing-events vector?)
+
 
 ;; collection of neighbour ids for future ping
 (s/def ::ping-round-buffer (s/coll-of ::neighbour-id))

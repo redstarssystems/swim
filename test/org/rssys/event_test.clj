@@ -10,12 +10,16 @@
       AliveEvent
       AntiEntropy
       DeadEvent
+      IndirectAckEvent
+      IndirectPingEvent
+      JoinEvent
+      LeftEvent
       NewClusterSizeEvent
+      PayloadEvent
       PingEvent
       ProbeAckEvent
       ProbeEvent
-      IndirectPingEvent
-      IndirectAckEvent JoinEvent SuspectEvent LeftEvent PayloadEvent)))
+      SuspectEvent)))
 
 
 ;;;;
@@ -159,6 +163,7 @@
                              :neighbour-id    uuid?
                              :probe-key       any?}
     (sut/empty-probe-ack)))
+
 
 ;;;;
 
@@ -342,7 +347,7 @@
                  5378
                  42]
               result-indirect-ping
-                (.restore (sut/empty-indirect-ping) v)]
+              (.restore (sut/empty-indirect-ping) v)]
 
           (testing "Restored IndirectPingEvent should be equals to original event"
             (m/assert IndirectPingEvent (type result-indirect-ping))
@@ -440,7 +445,7 @@
                  5378
                  42]
               result-indirect-ack
-                (.restore (sut/empty-indirect-ack) v)]
+              (.restore (sut/empty-indirect-ack) v)]
 
           (testing "Restored IndirectAckEvent should be equals to original event"
             (m/assert IndirectAckEvent (type result-indirect-ack))
@@ -482,6 +487,7 @@
                              :neighbour-port    pos-int?
                              :attempt-number    pos-int?}
     (sut/empty-indirect-ack)))
+
 
 ;;;;
 
@@ -543,6 +549,7 @@
                              :neighbour-restart-counter nat-int?
                              :neighbour-tx              nat-int?}
     (sut/empty-alive)))
+
 
 ;;;;
 

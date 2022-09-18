@@ -135,6 +135,7 @@
                    :neighbour-id    (UUID. 0 1)
                    :attempt-number  1}))
 
+
 ;;;;
 
 (defrecord AckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx attempt-number]
@@ -321,6 +322,7 @@
                              :old-cluster-size 1
                              :new-cluster-size 2}))
 
+
 ;;;;
 
 
@@ -406,6 +408,7 @@
                    :id              (UUID. 0 0)
                    :restart-counter 0
                    :tx              0}))
+
 
 ;;;;
 
