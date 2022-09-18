@@ -24,7 +24,7 @@
       NewClusterSizeEvent
       PingEvent
       ProbeAckEvent
-      ProbeEvent)
+      ProbeEvent IndirectPingEvent IndirectAckEvent)
     (org.rssys.scheduler
       MutablePool)))
 
@@ -591,24 +591,115 @@
 ;; Event builders tests
 ;;;;
 
+
+(deftest new-probe-event-test
+  (let [this        (sut/new-node-object node-data1 cluster)
+        probe-event (sut/new-probe-event this "127.0.0.1" 5376)]
+    (m/assert ProbeEvent (type probe-event))
+    (m/assert uuid? (.-probe_key probe-event))
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid probe event"
+            (sut/new-probe-event this "127.0.01" -1))))))
+
+;;;;
+
+(deftest new-probe-ack-event-test
+  (let [this            (sut/new-node-object node-data1 cluster)
+        probe-event     (sut/new-probe-event this "127.0.0.1" 5376)
+        probe-ack-event (sut/new-probe-ack-event this probe-event)]
+    (m/assert ProbeAckEvent (type probe-ack-event))
+    (m/assert (.-probe_key probe-event) (.-probe_key probe-ack-event))
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid probe ack event"
+            (sut/new-probe-ack-event this (assoc probe-event :id :bad-value)))))))
+
+;;;;
+
 (deftest new-ping-event-test
   (let [this   (sut/new-node-object node-data1 cluster)
         result (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)]
-    (is (= PingEvent (type result)) "PingEvent has correct type")
+    (m/assert PingEvent (type result))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ping event"
             (sut/new-ping-event this :bad-value 42))))))
 
+;;;;
 
 (deftest new-ack-event-test
   (let [this       (sut/new-node-object node-data1 cluster)
         ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
         result     (sut/new-ack-event this ping-event)]
-    (is (= AckEvent (type result)) "PingEvent has correct type")
+    (m/assert AckEvent (type result))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ack event"
             (sut/new-ack-event this (assoc ping-event :id :bad-value)))))))
 
+;;;;
+
+(deftest new-indirect-ping-event-test
+
+  (let [this         (sut/new-node-object node-data1 cluster)
+        intermediate (sut/new-neighbour-node neighbour-data1)
+        neighbour    (sut/new-neighbour-node neighbour-data2)]
+
+    (sut/upsert-neighbour this intermediate)
+    (sut/upsert-neighbour this neighbour)
+
+    (testing "Create normal indirect ping event"
+
+      (let [indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)]
+        (m/assert IndirectPingEvent (type indirect-ping-event))
+        (m/assert {:intermediate-id   (:id intermediate)
+                   :intermediate-host (:host intermediate)
+                   :intermediate-port (:port intermediate)}
+          indirect-ping-event)
+        (m/assert {:neighbour-id   (:id neighbour)
+                   :neighbour-host (:host neighbour)
+                   :neighbour-port (:port neighbour)}
+          indirect-ping-event)))
+
+    (testing "Unknown intermediate node is prohibited"
+      (is (thrown-with-msg? Exception #"Unknown intermediate node with such id"
+            (sut/new-indirect-ping-event this :bad-id (:id neighbour) 1))))
+
+    (testing "Unknown neighbour node is prohibited"
+      (is (thrown-with-msg? Exception #"Unknown neighbour node with such id"
+            (sut/new-indirect-ping-event this (:id intermediate) :bad-id 1))))
+
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid indirect ping event"
+            (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) :bad-value))))))
+
+;;;;
+
+(deftest new-indirect-ack-event-test
+
+  (let [this                (sut/new-node-object node-data1 cluster)
+        intermediate        (sut/new-neighbour-node neighbour-data1)
+        neighbour           (sut/new-neighbour-node neighbour-data2)
+        _                   (sut/upsert-neighbour this intermediate)
+        _                   (sut/upsert-neighbour this neighbour)
+        indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)
+        neighbour-this      (sut/new-node-object node-data3 cluster)]
+
+    (testing "Create normal indirect ack event"
+
+      (let [indirect-ack-event (sut/new-indirect-ack-event neighbour-this indirect-ping-event)]
+        (m/assert IndirectAckEvent (type indirect-ack-event))
+        (m/assert {:intermediate-id   (:id intermediate)
+                   :intermediate-host (:host intermediate)
+                   :intermediate-port (:port intermediate)}
+          indirect-ack-event)
+        (m/assert {:neighbour-id   (sut/get-id this)
+                   :neighbour-host (sut/get-host this)
+                   :neighbour-port (sut/get-port this)}
+          indirect-ack-event)))
+
+    (testing "Wrong data is prohibited by spec"
+      (is (thrown-with-msg? Exception #"Invalid indirect ack event"
+            (sut/new-indirect-ack-event this (assoc indirect-ping-event :attempt-number -1)))))))
+
+;;;;
 
 (deftest new-dead-event-test
   (let [this       (sut/new-node-object node-data1 cluster)
@@ -619,24 +710,6 @@
       (is (thrown-with-msg? Exception #"Invalid dead event"
             (sut/new-dead-event this (assoc ping-event :id :bad-value)))))))
 
-
-(deftest new-probe-event-test
-  (let [this        (sut/new-node-object node-data1 cluster)
-        probe-event (sut/new-probe-event this "127.0.0.1" 5376 123)]
-    (is (= ProbeEvent (type probe-event)) "ProbeEvent has correct type")
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid probe event"
-            (sut/new-probe-event this "127.0.01" -1 123))))))
-
-
-(deftest new-probe-ack-event-test
-  (let [this            (sut/new-node-object node-data1 cluster)
-        probe-event     (sut/new-probe-event this "127.0.0.1" 5376 123)
-        probe-ack-event (sut/new-probe-ack-event this probe-event)]
-    (is (= ProbeAckEvent (type probe-ack-event)) "ProbeAckEvent has correct type")
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid probe ack event"
-            (sut/new-probe-ack-event this (assoc probe-event :id :bad-value)))))))
 
 
 (deftest new-anti-entropy-event-test

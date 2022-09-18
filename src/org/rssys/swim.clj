@@ -35,7 +35,7 @@
       NewClusterSizeEvent
       PingEvent
       ProbeAckEvent
-      ProbeEvent IndirectPingEvent)))
+      ProbeEvent IndirectPingEvent IndirectAckEvent)))
 
 
 ;;;;
@@ -512,6 +512,48 @@
 ;; Event builders
 ;;;;
 
+
+(defn new-probe-event
+  "Returns new probe event"
+  ^ProbeEvent [^NodeObject this ^String neighbour-host ^long neighbour-port]
+  (let [probe-event (event/map->ProbeEvent {:cmd-type        (:probe event/code)
+                                            :id              (get-id this)
+                                            :host            (get-host this)
+                                            :port            (get-port this)
+                                            :restart-counter (get-restart-counter this)
+                                            :tx              (get-tx this)
+                                            :neighbour-host  neighbour-host
+                                            :neighbour-port  neighbour-port
+                                            :probe-key       (UUID/randomUUID)})]
+    (if-not (s/valid? ::spec/probe-event probe-event)
+      (throw (ex-info "Invalid probe event" (spec/problems (s/explain-data ::spec/probe-event probe-event))))
+      probe-event)))
+
+
+;;;;
+
+
+
+(defn new-probe-ack-event
+  "Returns new probe ack event"
+  ^ProbeAckEvent [^NodeObject this ^ProbeEvent e]
+  (let [ack-event (event/map->ProbeAckEvent {:cmd-type        (:probe-ack event/code)
+                                             :id              (get-id this)
+                                             :host            (get-host this)
+                                             :port            (get-port this)
+                                             :status          (get-status this)
+                                             :restart-counter (get-restart-counter this)
+                                             :tx              (get-tx this)
+                                             :neighbour-id    (.-id e)
+                                             :neighbour-tx    (.-tx e)
+                                             :probe-key       (.-probe_key e)})]
+    (if-not (s/valid? ::spec/probe-ack-event ack-event)
+      (throw (ex-info "Invalid probe ack event" (spec/problems (s/explain-data ::spec/probe-ack-event ack-event))))
+      ack-event)))
+
+;;;;
+
+
 (defn new-ping-event
   "Returns new ping event."
   ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number]
@@ -538,11 +580,74 @@
                                         :restart-counter (get-restart-counter this)
                                         :tx              (get-tx this)
                                         :neighbour-id    (:id e)
-                                        :neighbour-tx    (:tx e)})]
+                                        :neighbour-tx    (:tx e)
+                                        :attempt-number  (:attempt-number e)})]
     (if-not (s/valid? ::spec/ack-event ack-event)
       (throw (ex-info "Invalid ack event" (spec/problems (s/explain-data ::spec/ack-event ack-event))))
       ack-event)))
 
+
+;;;;
+
+
+(defn new-indirect-ping-event
+  "Returns new indirect ping event."
+  ^IndirectPingEvent [^NodeObject this ^UUID intermediate-id ^UUID neighbour-id attempt-number]
+  (let [intermediate (get-neighbour this intermediate-id)
+        neighbour    (get-neighbour this neighbour-id)]
+    (cond
+
+      (nil? intermediate)
+      (throw (ex-info "Unknown intermediate node with such id" {:intermediate-id intermediate-id}))
+
+      (nil? neighbour)
+      (throw (ex-info "Unknown neighbour node with such id" {:neighbour-id neighbour-id}))
+
+      :else
+      (let [indirect-ping-event
+            (event/map->IndirectPingEvent {:cmd-type          (:indirect-ping event/code)
+                                           :id                (get-id this)
+                                           :host              (get-host this)
+                                           :port              (get-port this)
+                                           :restart-counter   (get-restart-counter this)
+                                           :tx                (get-tx this)
+                                           :intermediate-id   intermediate-id
+                                           :intermediate-host (:host intermediate)
+                                           :intermediate-port (:port intermediate)
+                                           :neighbour-id      neighbour-id
+                                           :neighbour-host    (:host neighbour)
+                                           :neighbour-port    (:port neighbour)
+                                           :attempt-number    attempt-number})]
+        (if-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
+          (throw (ex-info "Invalid indirect ping event"
+                   (spec/problems (s/explain-data ::spec/indirect-ping-event indirect-ping-event))))
+          indirect-ping-event)))))
+
+
+;;;;
+
+(defn new-indirect-ack-event
+  "Returns new indirect ack event"
+  ^IndirectAckEvent [^NodeObject this ^IndirectPingEvent e]
+  (let [indirect-ack-event
+        (event/map->IndirectAckEvent {:cmd-type          (:indirect-ack event/code)
+                                      :id                (get-id this)
+                                      :host              (get-host this)
+                                      :port              (get-port this)
+                                      :restart-counter   (get-restart-counter this)
+                                      :tx                (get-tx this)
+                                      :status (get-status this)
+                                      :intermediate-id   (.-intermediate_id e)
+                                      :intermediate-host (.-intermediate_host e)
+                                      :intermediate-port (.-intermediate_port e)
+                                      :neighbour-id      (.-id e)
+                                      :neighbour-host    (.-host e)
+                                      :neighbour-port    (.-port e)
+                                      :attempt-number    (.-attempt_number e)})]
+    (if-not (s/valid? ::spec/indirect-ack-event indirect-ack-event)
+      (throw (ex-info "Invalid indirect ack event"
+               (spec/problems (s/explain-data ::spec/indirect-ack-event indirect-ack-event))))
+      indirect-ack-event)))
 
 ;;;;;
 
@@ -558,48 +663,6 @@
     (if-not (s/valid? ::spec/dead-event dead-event)
       (throw (ex-info "Invalid dead event" (spec/problems (s/explain-data ::spec/dead-event dead-event))))
       dead-event)))
-
-
-;;;;
-
-(defn new-probe-event
-  "Returns new probe event"
-  ^ProbeEvent [^NodeObject this ^String neighbour-host ^long neighbour-port payload]
-  (let [probe-event (event/map->ProbeEvent {:cmd-type        (:probe event/code)
-                                            :id              (get-id this)
-                                            :host            (get-host this)
-                                            :port            (get-port this)
-                                            :restart-counter (get-restart-counter this)
-                                            :tx              (get-tx this)
-                                            :payload         payload
-                                            :neighbour-host  neighbour-host
-                                            :neighbour-port  neighbour-port})]
-    (if-not (s/valid? ::spec/probe-event probe-event)
-      (throw (ex-info "Invalid probe event" (spec/problems (s/explain-data ::spec/probe-event probe-event))))
-      probe-event)))
-
-
-;;;;
-
-
-
-(defn new-probe-ack-event
-  "Returns new probe ack event"
-  ^ProbeAckEvent [^NodeObject this ^ProbeEvent e]
-  (let [ack-event (event/map->ProbeAckEvent {:cmd-type        (:probe-ack event/code)
-                                             :id              (get-id this)
-                                             :host            (get-host this)
-                                             :port            (get-port this)
-                                             :status          (get-status this)
-                                             :restart-counter (get-restart-counter this)
-                                             :tx              (get-tx this)
-                                             :neighbour-id    (.-id e)
-                                             :neighbour-tx    (.-tx e)
-                                             :payload         (.-payload e)})]
-    (if-not (s/valid? ::spec/probe-ack-event ack-event)
-      (throw (ex-info "Invalid probe ack event" (spec/problems (s/explain-data ::spec/probe-ack-event ack-event))))
-      ack-event)))
-
 
 ;;;;
 
