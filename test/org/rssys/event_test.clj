@@ -85,7 +85,7 @@
                              :tx              nat-int?
                              :neighbour-host  string?
                              :neighbour-port  nat-int?
-                             :probe-key       any?}
+                             :probe-key       uuid?}
     (sut/empty-probe)))
 
 
@@ -337,7 +337,7 @@
                  0
                  #uuid "00000000-0000-0000-0000-000000000002"
                  "127.0.0.1"
-                 537715 #uuid "00000000-0000-0000-0000-000000000003"
+                 5377 #uuid "00000000-0000-0000-0000-000000000003"
                  "127.0.0.1"
                  5378
                  42]

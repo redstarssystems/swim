@@ -35,7 +35,7 @@
       NewClusterSizeEvent
       PingEvent
       ProbeAckEvent
-      ProbeEvent)))
+      ProbeEvent IndirectPingEvent)))
 
 
 ;;;;
@@ -43,13 +43,20 @@
 ;;;;
 
 (def *config
-  (atom {:enable-diag-tap?       true                       ;; Put diagnostic data to tap>
-         :max-udp-size           1432                       ;; Max size of UDP packet in bytes
-         :ignore-max-udp-size?   false                      ;; by default we prevent sending UDP more than :max-udp-size
-         :max-payload-size       256                        ;; Max payload size in bytes
-         :max-anti-entropy-items 2                          ;; Max items number in anti-entropy
+  (atom {:enable-diag-tap?                    true          ;; Put diagnostic data to tap>
+         :max-udp-size                        1432          ;; Max size of UDP packet in bytes
+         :ignore-max-udp-size?                false         ;; by default, we prevent sending UDP more than :max-udp-size
+         :max-payload-size                    256           ;; Max payload size in bytes
+         :max-anti-entropy-items              2             ;; Max items number in anti-entropy
+         :max-ping-without-ack-before-suspect 2             ;; How many pings without ack before node became suspect
+         :max-ping-without-ack-before-dead    4             ;; How many pings without ack before node considered as dead
+
+         :ping-heartbeat-ms                   300           ;; Send ping+events to neighbours every N ms
          }))
 
+(def *stat
+  (atom {:bad-udp-counter 0                                 ;; how many UDP packet we received is bad
+         }))
 
 
 (defn d>
@@ -120,47 +127,51 @@
   "Returns new NeighbourNode instance."
 
   (^NeighbourNode [neighbour-map]
-    (if-not (s/valid? ::spec/neighbour-node neighbour-map)
-      (throw (ex-info "Invalid neighbour data" (->> neighbour-map (s/explain-data ::spec/neighbour-node) spec/problems)))
-      (domain/map->NeighbourNode neighbour-map)))
+   (if-not (s/valid? ::spec/neighbour-node neighbour-map)
+     (throw (ex-info "Invalid neighbour data" (->> neighbour-map (s/explain-data ::spec/neighbour-node) spec/problems)))
+     (domain/map->NeighbourNode neighbour-map)))
 
 
   (^NeighbourNode [^UUID id ^String host ^long port]
-    (new-neighbour-node {:id              id
-                         :host            host
-                         :port            port
-                         :status          :unknown
-                         :access          :direct
-                         :restart-counter 0
-                         :tx              0
-                         :payload         {}
-                         :updated-at      (System/currentTimeMillis)})))
+   (new-neighbour-node {:id              id
+                        :host            host
+                        :port            port
+                        :status          :unknown
+                        :access          :direct
+                        :restart-counter 0
+                        :tx              0
+                        :payload         {}
+                        :updated-at      (System/currentTimeMillis)})))
 
 
 (defn new-node-object
   "Returns new NodeObject instance."
 
   (^NodeObject [node-data]
-    (when-not (s/valid? ::spec/node node-data)
-      (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node node-data)))))
-    (d> :new-node-object (:id node-data) {:node-data (select-keys node-data [:host :port :status :restart-counter :tx])})
-    (domain/map->NodeObject {:*node (atom (domain/map->Node node-data))}))
+   (when-not (s/valid? ::spec/node node-data)
+     (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node node-data)))))
+   (d> :new-node-object (:id node-data) {:node-data (select-keys node-data [:host :port :status :restart-counter :tx])})
+   (domain/map->NodeObject {:*node (atom (domain/map->Node node-data))}))
 
   (^NodeObject [{:keys [^UUID id ^String host ^long port ^long restart-counter]} ^Cluster cluster]
-    (new-node-object {:id                   (or id (random-uuid))
-                      :host                 host
-                      :port                 port
-                      :cluster              cluster
-                      :status               :stop
-                      :neighbours           {}
-                      :restart-counter      (or restart-counter 0)
-                      :tx                   0
-                      :ping-events          {}               ;; active pings on the fly. we wait ack for them. key ::neighbour-id
-                      :outgoing-event-queue []               ;; outgoing events that we'll send to random logN neighbours next time
-                      :ping-round-buffer    []               ;; we take logN neighbour ids to send events from event queue
-                      :payload              {}               ;; data that this node claims in cluster about itself
-                      :scheduler-pool       (scheduler/mk-pool)
-                      :*udp-server          nil})))
+   (new-node-object {:id                   (or id (random-uuid))
+                     :host                 host
+                     :port                 port
+                     :cluster              cluster
+                     :status               :stop
+                     :neighbours           {}
+                     :restart-counter      (or restart-counter 0)
+                     :tx                   0
+                     :ping-events          {}               ;; active direct pings
+                     :indirect-ping-events {}               ;; active indirect pings
+                     :payload              {}               ;; data that this node claims in cluster about itself
+                     :scheduler-pool       (scheduler/mk-pool)
+                     :*udp-server          nil
+                     :outgoing-events      []               ;; outgoing events that we'll send to random logN neighbours next time
+                     :ping-round-buffer    []               ;; we take logN neighbour ids to send events from event queue
+                     :probe-events         {}               ;; outgoing probe events
+
+                     })))
 
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -197,6 +208,38 @@
   (.-port (get-value this)))
 
 
+(defn get-cluster
+  "Get cluster value"
+  ^Cluster
+  [^NodeObject this]
+  (.-cluster (get-value this)))
+
+(defn get-cluster-size
+  "Get cluster size"
+  ^long [^NodeObject this]
+  (.-cluster_size (get-cluster this)))
+
+
+(defn get-status
+  "Get current node status"
+  ^Keyword
+  [^NodeObject this]
+  (.-status (get-value this)))
+
+
+(defn get-neighbours
+  "Get all node neighbours. Returns map of {:id :neighbour-node}."
+  [^NodeObject this]
+  (.-neighbours (get-value this)))
+
+
+(defn get-neighbour
+  "Get NeighbourNode by id if exists or nil if absent."
+  ^NeighbourNode
+  [^NodeObject this ^UUID id]
+  (get (.-neighbours (get-value this)) id))
+
+
 (defn get-restart-counter
   "Get node restart counter"
   ^long
@@ -208,51 +251,6 @@
   "Get node tx"
   ^long [^NodeObject this]
   (.-tx (get-value this)))
-
-
-(defn get-cluster
-  "Get cluster value"
-  ^Cluster
-  [^NodeObject this]
-  (.-cluster (get-value this)))
-
-
-(defn get-cluster-size
-  "Get cluster size"
-  ^long [^NodeObject this]
-  (.-cluster_size (get-cluster this)))
-
-
-(defn get-payload
-  "Get node payload"
-  [^NodeObject this]
-  (:payload (get-value this)))
-
-
-(defn get-neighbour
-  "Get NeighbourNode by id if exists or nil if absent."
-  ^NeighbourNode
-  [^NodeObject this ^UUID id]
-  (get (.-neighbours (get-value this)) id))
-
-
-(defn get-neighbours
-  "Get all node neighbours. Returns map of {:id :neighbour-node}."
-  [^NodeObject this]
-  (.-neighbours (get-value this)))
-
-
-(defn get-status
-  "Get current node status"
-  ^Keyword
-  [^NodeObject this]
-  (.-status (get-value this)))
-
-
-(defn get-outgoing-event-queue
-  "Get vector of prepared outgoing events"
-  [^NodeObject this]
-  (.-outgoing_event_queue (get-value this)))
 
 
 (defn get-ping-events
@@ -267,6 +265,48 @@
   [^NodeObject this neighbour-id]
   (get (get-ping-events this) neighbour-id))
 
+
+(defn get-indirect-ping-events
+  "Get map of active indirect ping events which we received from neighbours"
+  [^NodeObject this]
+  (.-indirect_ping_events (get-value this)))
+
+
+(defn get-indirect-ping-event
+  "Get active indirect ping event by keyword  if exist"
+  ^PingEvent
+  [^NodeObject this ^Keyword indirect-id]
+  (get (get-indirect-ping-events this) indirect-id))
+
+(defn get-payload
+  "Get node payload"
+  [^NodeObject this]
+  (:payload (get-value this)))
+
+
+(defn get-outgoing-events
+  "Get vector of prepared outgoing events"
+  [^NodeObject this]
+  (.-outgoing_events (get-value this)))
+
+
+(defn get-ping-round-buffer
+  "Get vector of neighbour ids"
+  [^NodeObject this]
+  (.-ping_round_buffer (get-value this)))
+
+
+(defn get-probe-events
+  "Get map of probe events which we received from neighbours"
+  [^NodeObject this]
+  (.-probe_events (get-value this)))
+
+
+(defn get-probe-event
+  "Get active probe event if exist"
+  ^PingEvent
+  [^NodeObject this ^UUID probe-key]
+  (get (get-probe-events this) probe-key))
 
 ;;;;;;;;;;;;;;;;;;;;
 
@@ -378,14 +418,15 @@
   (swap! (:*node this) assoc :neighbours (dissoc (get-neighbours this) neighbour-id)))
 
 
-(defn set-outgoing-event-queue
-  "Set outgoing events queue new value"
-  [^NodeObject this new-event-queue]
-  (when-not (s/valid? ::spec/outgoing-event-queue new-event-queue)
-    (throw (ex-info "Invalid outgoing event queue data"
-             (->> new-event-queue (s/explain-data ::spec/outgoing-event-queue) spec/problems))))
-  (d> :set-outgoing-event-queue (get-id this) {:new-event-queue new-event-queue})
-  (swap! (:*node this) assoc :outgoing-event-queue new-event-queue))
+(defn set-outgoing-events
+  "Set outgoing events to new value"
+  [^NodeObject this new-outgoing-events]
+  (when-not (s/valid? ::spec/outgoing-events new-outgoing-events)
+    (throw (ex-info "Invalid outgoing events data"
+             (->> new-outgoing-events
+               (s/explain-data ::spec/outgoing-events) spec/problems))))
+  (d> :set-outgoing-events (get-id this) {:new-outgoing-events new-outgoing-events})
+  (swap! (:*node this) assoc :outgoing-events new-outgoing-events))
 
 
 (defn put-event
@@ -394,29 +435,21 @@
   (when-not (instance? ISwimEvent event)
     (throw (ex-info "Event should be instance of ISwimEvent" {:event event})))
   (d> :put-event (get-id this) {:event event :tx (get-tx this)})
-  (swap! (:*node this) assoc :outgoing-event-queue
-    (conj (get-outgoing-event-queue this) event) :tx (get-tx this)))
-
-
-(defn take-event
-  "Take one event from outgoing queue (FIFO). Returns it.
-  Taken event will be removed from queue."
-  ^ISwimEvent [^NodeObject this]
-  (let [event (first (get-outgoing-event-queue this))]
-    (swap! (:*node this) assoc :outgoing-event-queue (->> this get-outgoing-event-queue rest vec))
-    event))
+  (swap! (:*node this) assoc :outgoing-events
+    (conj (get-outgoing-events this) event) :tx (get-tx this)))
 
 
 ;; NB ;; the group-by [:id :restart-counter :tx] and send the latest events only
 (defn take-events
-  "Take `n`  events from outgoing queue (FIFO). Returns them. If `n` is omitted then take all events.
-  Taken events will be removed from queue."
+  "Take `n`  outgoing events from FIFO buffer and return them.
+   If `n` is omitted then take all events.
+   Taken events will be removed from buffer."
   ([^NodeObject this ^long n]
-    (let [events (->> this get-outgoing-event-queue (take n) vec)]
-      (swap! (:*node this) assoc :outgoing-event-queue (->> this get-outgoing-event-queue (drop n) vec))
-      events))
+   (let [events (->> this get-outgoing-events (take n) vec)]
+     (swap! (:*node this) assoc :outgoing-events (->> this get-outgoing-events (drop n) vec))
+     events))
   ([^NodeObject this]
-    (take-events this (count (get-outgoing-event-queue this)))))
+   (take-events this (count (get-outgoing-events this)))))
 
 
 (defn upsert-ping
@@ -435,6 +468,44 @@
   (swap! (:*node this) assoc :ping-events (dissoc (get-ping-events this) neighbour-id)))
 
 
+(defn upsert-indirect-ping
+  "Update existing or insert new active indirect ping event in map"
+  [^NodeObject this ^IndirectPingEvent indirect-ping-event]
+  (when-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
+    (throw (ex-info "Invalid indirect ping event data"
+             (->> indirect-ping-event (s/explain-data ::spec/indirect-ping-event) spec/problems))))
+  (let [indirect-id (.-neighbour_id indirect-ping-event)]
+    (d> :upsert-indirect-ping (get-id this) {:indirect-ping-event indirect-ping-event
+                                             :indirect-id         indirect-id})
+    (swap! (:*node this) assoc :indirect-ping-events
+      (assoc (get-indirect-ping-events this) indirect-id indirect-ping-event))))
+
+
+(defn delete-indirect-ping
+  "Delete active ping event from map"
+  [^NodeObject this indirect-id]
+  (d> :delete-indirect-ping (get-id this) {:indirect-id indirect-id})
+  (swap! (:*node this) assoc :indirect-ping-events (dissoc (get-indirect-ping-events this) indirect-id)))
+
+
+(defn upsert-probe
+  "Update existing or insert new active probe event in map.
+  `:probe-key` is used as a key in event map."
+  [^NodeObject this ^ProbeEvent probe-event]
+  (when-not (s/valid? ::spec/probe-event probe-event)
+    (throw (ex-info "Invalid probe event data" (->> probe-event (s/explain-data ::spec/probe-event) spec/problems))))
+  (d> :upsert-probe (get-id this) {:probe-event probe-event})
+  (swap! (:*node this) assoc :probe-events (assoc (get-probe-events this) (.-probe_key probe-event) probe-event))
+  (.-probe_key probe-event))
+
+
+(defn delete-probe
+  "Delete active probe event from map"
+  [^NodeObject this ^UUID probe-key]
+  (d> :delete-probe (get-id this) {:neighbour-id probe-key})
+  (swap! (:*node this) assoc :probe-events (dissoc (get-probe-events this) probe-key)))
+
+
 ;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -442,10 +513,8 @@
 ;;;;
 
 (defn new-ping-event
-  "Returns new ping event.
-  Params:
-  * `ptype` -  :direct or :indirect. Indirect ping is used for investigate suspect neighbours"
-  ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number & {:keys [ptype] :or {ptype :direct}}]
+  "Returns new ping event."
+  ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number]
   (let [ping-event (event/map->PingEvent {:cmd-type        (:ping event/code)
                                           :id              (get-id this)
                                           :host            (get-host this)
@@ -453,8 +522,7 @@
                                           :restart-counter (get-restart-counter this)
                                           :tx              (get-tx this)
                                           :neighbour-id    neighbour-id
-                                          :attempt-number  attempt-number
-                                          :ptype           ptype})]
+                                          :attempt-number  attempt-number})]
     (if-not (s/valid? ::spec/ping-event ping-event)
       (throw (ex-info "Invalid ping event" (spec/problems (s/explain-data ::spec/ping-event ping-event))))
       ping-event)))
@@ -496,13 +564,14 @@
 
 (defn new-probe-event
   "Returns new probe event"
-  ^ProbeEvent [^NodeObject this ^String neighbour-host ^long neighbour-port]
+  ^ProbeEvent [^NodeObject this ^String neighbour-host ^long neighbour-port payload]
   (let [probe-event (event/map->ProbeEvent {:cmd-type        (:probe event/code)
                                             :id              (get-id this)
                                             :host            (get-host this)
                                             :port            (get-port this)
                                             :restart-counter (get-restart-counter this)
                                             :tx              (get-tx this)
+                                            :payload         payload
                                             :neighbour-host  neighbour-host
                                             :neighbour-port  neighbour-port})]
     (if-not (s/valid? ::spec/probe-event probe-event)
@@ -525,7 +594,8 @@
                                              :restart-counter (get-restart-counter this)
                                              :tx              (get-tx this)
                                              :neighbour-id    (.-id e)
-                                             :neighbour-tx    (.-tx e)})]
+                                             :neighbour-tx    (.-tx e)
+                                             :payload         (.-payload e)})]
     (if-not (s/valid? ::spec/probe-ack-event ack-event)
       (throw (ex-info "Invalid probe ack event" (spec/problems (s/explain-data ::spec/probe-ack-event ack-event))))
       ack-event)))
@@ -656,32 +726,32 @@
   "Send one event to a neighbour.
   Event will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-    (send-events this [event] neighbour-host neighbour-port))
+   (send-events this [event] neighbour-host neighbour-port))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
-    (if-let [nb (get-neighbour this neighbour-id)]
-      (let [nb-host (.-host nb)
-            nb-port (.-port nb)]
-        (send-event this event nb-host nb-port))
-      (do
-        (d> :send-event-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
-        (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
+   (if-let [nb (get-neighbour this neighbour-id)]
+     (let [nb-host (.-host nb)
+           nb-port (.-port nb)]
+       (send-event this event nb-host nb-port))
+     (do
+       (d> :send-event-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+       (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
 (defn send-event-ae
   "Send one event with attached anti-entropy event to a neighbour.
   Events will be prepared, serialized and encrypted."
   ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-    (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port)
-    ;; increase tx because of new anti-entropy event
-    (inc-tx this))
+   (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port)
+   ;; increase tx because of new anti-entropy event
+   (inc-tx this))
   ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
-    (if-let [nb (get-neighbour this neighbour-id)]
-      (let [nb-host (.-host nb)
-            nb-port (.-port nb)]
-        (send-event-ae this event nb-host nb-port))
-      (do
-        (d> :send-event-ae-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
-        (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
+   (if-let [nb (get-neighbour this neighbour-id)]
+     (let [nb-host (.-host nb)
+           nb-port (.-port nb)]
+       (send-event-ae this event nb-host nb-port))
+     (do
+       (d> :send-event-ae-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+       (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
 (defn suitable-restart-counter?
@@ -752,10 +822,10 @@
 (defn get-oldest-neighbour
   "Returns the oldest neighbour. If `status-set` is omitted then use all statuses"
   ([^NodeObject this]
-    (get-oldest-neighbour this spec/status-set))
+   (get-oldest-neighbour this spec/status-set))
   ([^NodeObject this ^PersistentHashSet status-set]
-    (let [desired-nb (get-neighbours-with-status this status-set)]
-      (->> desired-nb (sort-by :updated-at) first))))
+   (let [desired-nb (get-neighbours-with-status this status-set)]
+     (->> desired-nb (sort-by :updated-at) first))))
 
 
 ;;;;
@@ -793,10 +863,36 @@
                                 :payload         {}
                                 :updated-at      (System/currentTimeMillis)})]
     (d> :probe-ack-event (get-id this) nb)
+
+    ;; if probe was used in indirect ping then send ack for initiator of indirect ping
+    (when-let [indirect-ping-event (get-indirect-ping-event this
+                                     (keyword (str (get-id this) "->" (.-id e))))]
+      (let [indirect-ack-event (event/map->AckEvent {:cmd-type        (:ack event/code)
+                                                     :id              (.-id e)
+                                                     :restart-counter (.-restart_counter e)
+                                                     :tx              (.-tx e)
+                                                     :neighbour-id    (:id indirect-ping-event)
+                                                     :neighbour-tx    (:tx indirect-ping-event)})]
+        (inc-tx this)
+        (d> :indirect-ack-event (get-id this) indirect-ack-event)
+        (send-event this indirect-ack-event (.-id indirect-ping-event))
+        (delete-indirect-ping this (keyword (str (get-id this) "->" (.-id e))))))
+
     (when (and (= (.-neighbour_id e) (get-id this))
             ;; we trust probe ack events only if our status not #{:suspect :alive}
             (not (#{:suspect :alive} (get-status this))))
       (upsert-neighbour this nb))))
+
+
+(defn- process-indirect-ack [this e]
+  (let [nb (get-neighbour this (.-id e))]
+    (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :indirect))
+    (delete-indirect-ping this (.-id e))
+    (when (= :suspect (:status nb))
+      (put-event this (new-alive-event this e))
+      (inc-tx this)
+      (d> :alive-event (get-id this) {:neighbour-id (.-id e) :previous-status :suspect}))
+    (d> :indirect-ack-event (get-id this) e)))
 
 
 (defmethod process-incoming-event AckEvent
@@ -823,7 +919,9 @@
 
       ;; do nothing if ack is not requested
       (nil? (get-ping-event this (:id e)))
-      (d> :ack-event-no-active-ping-error (get-id this) e)
+      (if (get-indirect-ping-event this (:id e))
+        (process-indirect-ack this e)
+        (d> :ack-event-no-active-ping-error (get-id this) e))
 
 
       :else (do
@@ -870,8 +968,16 @@
               (upsert-neighbour this ae-neighbour))))))))
 
 
+(defn- process-incoming-indirect-ping
+  "Process indirect ping. Internal function."
+  [^NodeObject this ^PingEvent e]
+  (upsert-indirect-ping this e)
+  (let [nb (get-neighbour this (.-neighbour_id e))]
+    (new-probe-event this (:host nb) (:port nb) (keyword (str (.-id e) "->" (.-neighbour_id e))))))
 
-(defmethod process-incoming-event PingEvent
+
+(defn- process-incoming-ping
+  "Process ping. Internal function."
   [^NodeObject this ^PingEvent e]
   (let [neighbour-id (:id e)
         nb           (get-neighbour this neighbour-id)]
@@ -898,6 +1004,8 @@
       (not (suitable-tx? this e))
       (d> :ping-event-bad-tx-error (get-id this) e)
 
+      ;; todo check host port from event and from nb map and if changed then update them in mb map
+
       ;; do not process events from not alive nodes
       (not (#{:alive :suspect} (:status nb)))
       (d> :ping-event-not-alive-neighbour-error (get-id this) e)
@@ -915,6 +1023,16 @@
           (put-event this (new-alive-event this e))
           (inc-tx this)                                     ;; we discovered new fact that neighbour is alive
           (d> :alive-event (get-id this) {:neighbour-id neighbour-id :previous-status current-status}))))))
+
+
+(defmethod process-incoming-event PingEvent
+  [^NodeObject this ^PingEvent e]
+  (cond
+    (= :direct (.-ptype e))
+    (process-incoming-ping this e)
+
+    (= :indirect (.-ptype e))
+    (process-incoming-indirect-ping this e)))
 
 
 
@@ -940,7 +1058,10 @@
           (inc-tx this)                                     ;; Every incoming event must increment tx on this node
           (d> :incoming-udp-processor (get-id this) {:event event})
           (process-incoming-event this event)))
-      (d> :incoming-udp-processor-error (get-id this) {:msg "Bad events vector structure" :events-vector events-vector}))))
+      (d> :incoming-udp-processor-error (get-id this) {:msg             "Bad events vector structure"
+                                                       :events-vector   events-vector
+                                                       :bad-udp-counter (:bad-udp-counter
+                                                                          (swap! *stat update :bad-udp-counter inc))}))))
 
 
 (defn node-process-fn
@@ -978,6 +1099,7 @@
       (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
     (when-not (s/valid? ::spec/node (get-value this))
       (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
+    (swap! *stat assoc :bad-udp-counter 0)
     (vthread/vfuture (node-process-fn this))
     (d> :start (get-id this) {})))
 
@@ -1002,10 +1124,10 @@
 
 
 (defn probe
-  "Probe other node.
+  "Probe other node. Payload may be any data which will return in probe ack event.
   If is responds then put other node to a neighbours table if cluster size is not exceeded."
-  [^NodeObject this ^String neighbour-host ^long neighbour-port]
-  (let [probe-event (new-probe-event this neighbour-host neighbour-port)]
+  [^NodeObject this ^String neighbour-host ^long neighbour-port payload]
+  (let [probe-event (new-probe-event this neighbour-host neighbour-port payload)]
     (inc-tx this)                                           ;; every new event should increase tx
     (d> :probe (get-id this) probe-event)
     (send-event this probe-event neighbour-host neighbour-port)))

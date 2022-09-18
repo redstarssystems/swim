@@ -7,7 +7,8 @@
     [org.rssys.encrypt :as e]
     [org.rssys.event :as event]
     [org.rssys.spec :as spec]
-    [org.rssys.swim :as sut])
+    [org.rssys.swim :as sut]
+    [matcho.core :as m])
   (:import
     (java.util
       UUID)
@@ -34,15 +35,17 @@
 
 
 (deftest safe-test
-  (is (= nil (sut/safe (/ 1 0))) "Any Exceptions should be prevented")
-  (is (= 1/2 (sut/safe (/ 1 2)))) "Any normal expression should be succeed")
+  (testing "Any Exceptions should be prevented"
+    (m/assert nil (sut/safe (/ 1 0))))
+  (testing "Any normal expression should be succeed"
+    (m/assert 1/2 (sut/safe (/ 1 2)))))
 
 
 (deftest calc-n-test
   (testing "How many nodes should we notify depending on N nodes in a cluster"
     (let [nodes-in-cluster [1 2 4 8 16 32 64 128 256 512 1024]
           result           (mapv sut/calc-n nodes-in-cluster)]
-      (is (= [0 1 2 3 4 5 6 7 8 9 10] result)))))
+      (m/assert [0 1 2 3 4 5 6 7 8 9 10] result))))
 
 
 (def values [1 128 "hello" nil :k {:a 1 :b true} [1234567890 1]])
@@ -58,16 +61,14 @@
   (testing "Deserialization works as expected on different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
-                       [-110 -93 126 35 39 -52 -128]
-                       [-110 -93 126 35 39 -91 104 101 108 108 111]
-                       [-110 -93 126 35 39 -64]
-                       [-110 -93 126 35 39 -93 126 58 107]
-                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                       [-110, -50, 73, -106, 2, -46, 1]))
+                      [-110 -93 126 35 39 -52 -128]
+                      [-110 -93 126 35 39 -91 104 101 108 108 111]
+                      [-110 -93 126 35 39 -64]
+                      [-110 -93 126 35 39 -93 126 58 107]
+                      [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                      [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
-      (match dvalues values))))
-
-
+      (m/assert values dvalues))))
 
 
 ;;;;;;;;;;
@@ -129,10 +130,9 @@
 (deftest new-cluster-test
   (testing "Create Cluster instance is successful"
     (let [result (sut/new-cluster cluster-data)]
-      (is (instance? Cluster result) "Should be Cluster instance")
-      (is (s/valid? ::spec/cluster result))
-      (is (= 3 (.-cluster_size result))))))
-
+      (m/assert Cluster (type result))
+      (m/assert ::spec/cluster result)
+      (m/assert 3 (.-cluster_size result)))))
 
 ;;;;
 
@@ -141,21 +141,23 @@
   (testing "Create NeighbourNode instance is successful"
     (let [result1 (sut/new-neighbour-node neighbour-data1)
           result2 (sut/new-neighbour-node #uuid "00000000-0000-0000-0000-000000000000" "127.0.0.1" 5379)]
-      (is (instance? NeighbourNode result1) "Should be NeighbourNode instance")
-      (is (instance? NeighbourNode result2) "Should be NeighbourNode instance")
-      (is (s/valid? ::spec/neighbour-node result1) "NeighbourNode should correspond to spec")
-      (is (s/valid? ::spec/neighbour-node result2) "NeighbourNode should correspond to spec")
+      (m/assert NeighbourNode (type result1))
+      (m/assert NeighbourNode (type result2))
+      (m/assert ::spec/neighbour-node result1)
+      (m/assert ::spec/neighbour-node result2)
       (testing "NeighbourNode has expected keys and values"
-        (match result1 neighbour-data1))
-      (match result2 {:id              #uuid "00000000-0000-0000-0000-000000000000"
-                      :host            "127.0.0.1"
-                      :port            5379
-                      :status          :unknown
-                      :access          :direct
-                      :restart-counter 0
-                      :tx              0
-                      :payload         {}
-                      :updated-at      nat-int?}))))
+        (m/assert neighbour-data1 result1))
+      (m/assert ^:matcho/strict
+        {:id              #uuid "00000000-0000-0000-0000-000000000000"
+         :host            "127.0.0.1"
+         :port            5379
+         :status          :unknown
+         :access          :direct
+         :restart-counter 0
+         :tx              0
+         :payload         {}
+         :updated-at      nat-int?}
+        result2))))
 
 
 ;;;;;
@@ -174,7 +176,8 @@
       (is (s/valid? ::spec/node (sut/get-value node-object)) "Node inside NodeObject has correct structure")
 
       (testing "Node object has correct structure"
-        (match (sut/get-value node-object)
+        (m/assert ::spec/node (sut/get-value node-object))
+        (m/assert ^:matcho/strict
           {:id                   #uuid "00000000-0000-0000-0000-000000000001"
            :host                 "127.0.0.1"
            :port                 5376
@@ -184,25 +187,25 @@
            :restart-counter      0
            :tx                   0
            :ping-events          {}
+           :indirect-ping-events {}
            :payload              {}
-           :outgoing-event-queue []
-           :ping-round-buffer    []
            :scheduler-pool       #(instance? MutablePool %)
-           :*udp-server          nil}))))
+           :*udp-server          nil
+           :outgoing-events      []
+           :ping-round-buffer    []
+           :probe-events         {}}
+          (sut/get-value node-object)))))
 
   (testing "Wrong node data is prohibited"
     (is (thrown-with-msg? Exception #"Invalid node data"
           (sut/new-node-object {:a 1} cluster)))))
 
 
-(sut/get-cluster (sut/new-node-object node-data1 cluster))
-
-
 (deftest getters-test
   (testing "getters"
     (let [this (sut/new-node-object node-data1 cluster)]
 
-      (match (sut/get-value this)
+      (m/assert ^:matcho/strict
         {:id                   #uuid "00000000-0000-0000-0000-000000000001"
          :host                 "127.0.0.1"
          :port                 5376
@@ -212,28 +215,31 @@
          :restart-counter      7
          :tx                   0
          :ping-events          {}
+         :indirect-ping-events {}
          :payload              {}
-         :outgoing-event-queue []
-         :ping-round-buffer    []
          :scheduler-pool       #(instance? MutablePool %)
-         :*udp-server          nil})
+         :*udp-server          nil
+         :outgoing-events      []
+         :ping-round-buffer    []
+         :probe-events         {}}
+        (sut/get-value this))
 
-      (match (sut/get-id this) #uuid "00000000-0000-0000-0000-000000000001")
-      (match (sut/get-host this) "127.0.0.1")
-      (match (sut/get-port this) 5376)
-      (match (sut/get-restart-counter this) 7)
-      (match (sut/get-tx this) 0)
-      (match (sut/get-cluster this) cluster)
-      (match (sut/get-cluster-size this) 3)
-      (match (sut/get-payload this) empty?)
+      (m/assert #uuid "00000000-0000-0000-0000-000000000001" (sut/get-id this))
+      (m/assert "127.0.0.1" (sut/get-host this))
+      (m/assert 5376 (sut/get-port this))
+      (m/assert 7 (sut/get-restart-counter this))
+      (m/assert 0 (sut/get-tx this))
+      (m/assert cluster (sut/get-cluster this))
+      (m/assert 3 (sut/get-cluster-size this))
+      (m/assert empty? (sut/get-payload this))
 
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
 
-      (match (sut/get-neighbours this)
-        {#uuid "00000000-0000-0000-0000-000000000002"
-         (dissoc (sut/new-neighbour-node neighbour-data1) :updated-at)})
+      (m/assert {#uuid "00000000-0000-0000-0000-000000000002"
+                 (dissoc (sut/new-neighbour-node neighbour-data1) :updated-at)}
+        (sut/get-neighbours this))
 
-      (match (sut/get-neighbour this #uuid "00000000-0000-0000-0000-000000000002")
+      (m/assert ^:matcho/strict
         {:id              #uuid "00000000-0000-0000-0000-000000000002"
          :host            "127.0.0.1"
          :port            5377
@@ -241,33 +247,96 @@
          :access          :direct
          :payload         {:tcp-port 4567}
          :restart-counter 3
-         :tx              0})
+         :tx              0
+         :updated-at      pos-int?}
+        (sut/get-neighbour this #uuid "00000000-0000-0000-0000-000000000002"))
 
-      (match (sut/get-status this) :stop)
-      (match (sut/get-outgoing-event-queue this) empty?)
+      (m/assert :stop (sut/get-status this))
+      (m/assert empty? (sut/get-outgoing-events this))
 
       (sut/upsert-ping this (event/empty-ping))
+      (sut/upsert-indirect-ping this (event/empty-indirect-ping))
 
-      (match (sut/get-ping-events this)
-        {#uuid"00000000-0000-0000-0000-000000000000"
+      (m/assert
+        {#uuid"00000000-0000-0000-0000-000000000001"
          {:cmd-type        0
           :id              #uuid"00000000-0000-0000-0000-000000000000"
           :host            "localhost"
           :port            1
           :restart-counter 0
           :tx              0
-          :neighbour-id    #uuid"00000000-0000-0000-0000-000000000000"
-          :attempt-number  1}})
+          :neighbour-id    #uuid"00000000-0000-0000-0000-000000000001"
+          :attempt-number  1}}
+        (sut/get-ping-events this))
 
-      (match (sut/get-ping-event this #uuid"00000000-0000-0000-0000-000000000000")
+      (m/assert
+        {#uuid "00000000-0000-0000-0000-000000000002"
+         {:cmd-type          14
+          :id                #uuid "00000000-0000-0000-0000-000000000000"
+          :host              "localhost"
+          :port              1
+          :restart-counter   0
+          :tx                0
+          :intermediate-host "localhost"
+          :intermediate-id   #uuid "00000000-0000-0000-0000-000000000001"
+          :intermediate-port 10
+          :neighbour-host    "localhost"
+          :neighbour-id      #uuid "00000000-0000-0000-0000-000000000002"
+          :neighbour-port    100
+          :attempt-number    1}}
+        (sut/get-indirect-ping-events this))
+
+      (m/assert
         {:cmd-type        0
          :id              #uuid"00000000-0000-0000-0000-000000000000"
          :host            "localhost"
          :port            1
          :restart-counter 0
          :tx              0
-         :neighbour-id    #uuid"00000000-0000-0000-0000-000000000000"
-         :attempt-number  1}))))
+         :neighbour-id    #uuid"00000000-0000-0000-0000-000000000001"
+         :attempt-number  1}
+        (sut/get-ping-event this #uuid"00000000-0000-0000-0000-000000000001"))
+
+      (m/assert
+        {:cmd-type        14
+         :id              #uuid"00000000-0000-0000-0000-000000000000"
+         :host            "localhost"
+         :port            1
+         :restart-counter 0
+         :tx              0
+         :neighbour-id    #uuid"00000000-0000-0000-0000-000000000002"
+         :attempt-number  1}
+        (sut/get-indirect-ping-event this #uuid "00000000-0000-0000-0000-000000000002"))
+
+      (m/assert [] (sut/get-ping-round-buffer this))
+
+      (sut/upsert-probe this (event/empty-probe))
+
+      (m/assert {#uuid"00000000-0000-0009-0000-000000000001"
+                 {:cmd-type        9
+                  :id              #uuid "00000000-0000-0000-0000-000000000000"
+                  :host            "localhost"
+                  :port            1
+                  :restart-counter 0
+                  :tx              0
+                  :neighbour-host  "localhost"
+                  :neighbour-port  1
+                  :probe-key       #uuid"00000000-0000-0009-0000-000000000001"}}
+        (sut/get-probe-events this))
+
+      (m/assert {:cmd-type        9
+                 :id              #uuid "00000000-0000-0000-0000-000000000000"
+                 :host            "localhost"
+                 :port            1
+                 :restart-counter 0
+                 :tx              0
+                 :neighbour-host  "localhost"
+                 :neighbour-port  1
+                 :probe-key       #uuid"00000000-0000-0009-0000-000000000001"}
+        (sut/get-probe-event this #uuid"00000000-0000-0009-0000-000000000001"))
+
+      (sut/delete-probe this #uuid"00000000-0000-0009-0000-000000000001")
+      (m/assert nil (sut/get-probe-event this #uuid"00000000-0000-0009-0000-000000000001")))))
 
 
 (deftest nodes-in-cluster-test
@@ -285,7 +354,7 @@
     (let [new-cluster (sut/new-cluster (assoc cluster-data :id (random-uuid) :name "cluster2"))
           this        (sut/new-node-object node-data1 cluster)]
       (sut/set-cluster this new-cluster)
-      (match (sut/get-cluster this) new-cluster)
+      (m/assert (sut/get-cluster this) new-cluster)
       (is (thrown-with-msg? Exception #"Invalid cluster data"
             (sut/set-cluster this (assoc cluster :id 1))))
       (testing "Cluster change allowed only in status :stop"
@@ -297,20 +366,28 @@
 (deftest set-cluster-size-test
   (testing "set cluster size"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-cluster-size this) 3)
+      (m/assert 3 (sut/get-cluster-size this))
       (sut/set-cluster-size this 5)
-      (match (sut/get-cluster-size this) 5)
+      (m/assert 5 (sut/get-cluster-size this))
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid cluster size"
               (sut/set-cluster-size this -1)))))))
 
 
+(deftest cluster-size-exceed?-test
+  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))]
+    (is (true? (sut/cluster-size-exceed? this)))
+    (sut/set-cluster-size this 3)
+    (is (false? (sut/cluster-size-exceed? this)))))
+
+
+
 (deftest set-status-test
   (testing "set status"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-status this) :stop)
-      (match (sut/set-status this :left))
-      (match (sut/get-status this) :left)
+      (m/assert :stop (sut/get-status this))
+      (sut/set-status this :left)
+      (m/assert :left (sut/get-status this))
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid node status"
               (sut/set-status this :wrong-value)))))))
@@ -319,20 +396,21 @@
 (deftest set-payload-test
   (testing "set payload"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-payload this) empty?)
+      (m/assert empty? (sut/get-payload this))
       (sut/set-payload this {:tcp-port 1234 :role "data node"})
-      (match (sut/get-payload this) {:tcp-port 1234 :role "data node"})
+      (m/assert {:tcp-port 1234 :role "data node"} (sut/get-payload this))
       (testing "too big payload cannot be set"
         (is (thrown-with-msg? Exception #"Size of payload is too big"
-              (sut/set-payload this {:long-string (apply str (repeat 1024 "a"))})))))))
+              (sut/set-payload this
+                {:long-string (apply str (repeat (:max-payload-size @sut/*config) "a"))})))))))
 
 
 (deftest set-restart-counter-test
   (testing "set restart counter"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-restart-counter this) 7)
+      (m/assert 7 (sut/get-restart-counter this))
       (sut/set-restart-counter this 42)
-      (match (sut/get-restart-counter this) 42)
+      (m/assert 42 (sut/get-restart-counter this))
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid restart counter data"
               (sut/set-restart-counter this -1)))))))
@@ -342,24 +420,25 @@
   (testing "increment tx"
     (let [new-cluster (sut/new-cluster (assoc cluster-data :id (random-uuid) :name "cluster2"))
           this        (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-tx this) 0)
+      (m/assert 0 (sut/get-tx this))
       (sut/inc-tx this)
-      (match (sut/get-tx this) 1))))
+      (m/assert 1 (sut/get-tx this)))))
 
 
 (deftest upsert-neighbour-test
   (testing "upsert neighbour"
     (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))]
-      (match (sut/get-neighbours this) empty?)
+      (m/assert empty? (sut/get-neighbours this))
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
-      (match (sut/get-neighbour this (:id neighbour-data1)) (dissoc neighbour-data1 :updated-at))
-      (match (count (sut/get-neighbours this)) 2)
+      (m/assert (dissoc neighbour-data1 :updated-at)
+        (sut/get-neighbour this (:id neighbour-data1)))
+      (m/assert 2 (count (sut/get-neighbours this)))
 
-      (testing "don't put to neighbours node with the same id as this have"
-        (match (count (sut/get-neighbours this)) 2)
+      (testing "don't put to neighbours with the same id as this node has"
+        (m/assert 2 (count (sut/get-neighbours this)))
         (sut/upsert-neighbour this neighbour-data3)
-        (match (count (sut/get-neighbours this)) 2))
+        (m/assert 2 (count (sut/get-neighbours this))))
 
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid neighbour node data"
@@ -368,8 +447,8 @@
         (let [nb        (sut/get-neighbour this (:id neighbour-data1))
               timestamp (:updated-at nb)
               port      (:port nb)]
-          (match timestamp pos-int?)
-          (match port pos-int?)
+          (m/assert pos-int? timestamp)
+          (m/assert pos-int? port)
           (sut/upsert-neighbour this (sut/new-neighbour-node (assoc neighbour-data1 :port 5370)))
           (let [modified-nb (sut/get-neighbour this (:id neighbour-data1))]
             (is (not= timestamp (:updated-at modified-nb)))
@@ -379,72 +458,71 @@
 (deftest delete-neighbour-test
   (testing "delete neighbour"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-neighbours this) empty?)
+      (m/assert empty? (sut/get-neighbours this))
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
       (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
-      (match (count (sut/get-neighbours this)) 2)
+      (m/assert 2 (count (sut/get-neighbours this)))
       (sut/delete-neighbour this (:id neighbour-data1))
-      (match (count (sut/get-neighbours this)) 1)
-      (match (sut/get-neighbour this (:id neighbour-data2)) (dissoc neighbour-data2 :updated-at)))))
+      (m/assert 1 (count (sut/get-neighbours this)))
+      (m/assert (dissoc neighbour-data2 :updated-at)
+        (sut/get-neighbour this (:id neighbour-data2))))))
 
 
-(deftest set-outgoing-event-queue-test
-  (testing "set outgoing event queue"
-    (let [new-event-queue [[(:left event/code) (random-uuid)]]
-          this            (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-outgoing-event-queue this) empty?)
-      (sut/set-outgoing-event-queue this new-event-queue)
-      (match (sut/get-outgoing-event-queue this) new-event-queue))))
+(deftest set-outgoing-events-test
+  (testing "set outgoing events"
+    (let [new-outgoing-events [[(:left event/code) (random-uuid)]]
+          this                (sut/new-node-object node-data1 cluster)]
+      (m/assert empty? (sut/get-outgoing-events this))
+      (sut/set-outgoing-events this new-outgoing-events)
+      (m/assert ^:matcho/strict
+        new-outgoing-events
+        (sut/get-outgoing-events this)))))
 
 
 (deftest put-event-test
   (testing "put event"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-outgoing-event-queue this) empty?)
+      (m/assert empty? (sut/get-outgoing-events this))
       (sut/put-event this (event/empty-ping))
       (sut/put-event this (event/empty-ack))
-      (match (sut/get-outgoing-event-queue this) [(event/empty-ping) (event/empty-ack)])
-      (match (count (sut/get-outgoing-event-queue this)) 2))))
+      (m/assert ^:matcho/strict
+        [(event/empty-ping) (event/empty-ack)]
+        (sut/get-outgoing-events this)))))
 
-
-(deftest take-event-test
-  (testing "take event"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-outgoing-event-queue this) empty?)
-      (sut/put-event this (event/empty-ping))
-      (sut/put-event this (event/empty-ack))
-      (match (sut/take-event this) (event/empty-ping))
-      (match (count (sut/get-outgoing-event-queue this)) 1)
-      (match (sut/take-event this) (event/empty-ack)))))
 
 
 (deftest take-events-test
   (testing "take events"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-outgoing-event-queue this) empty?)
+      (m/assert empty? (sut/get-outgoing-events this))
       (sut/put-event this (event/empty-ping))
       (sut/put-event this (event/empty-ack))
-      (match (count (sut/get-outgoing-event-queue this)) 2)
-      (match (sut/take-events this 2) [(event/empty-ping) (event/empty-ack)])
-      (match (count (sut/get-outgoing-event-queue this)) 0)))
+      (m/assert 2 (count (sut/get-outgoing-events this)))
+      (m/assert
+        [(event/empty-ping) (event/empty-ack)]
+        (sut/take-events this 2))
+      (m/assert 0 (count (sut/get-outgoing-events this)))))
   (testing "take all events"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-outgoing-event-queue this) empty?)
+      (m/assert empty? (sut/get-outgoing-events this))
       (sut/put-event this (event/empty-ping))
       (sut/put-event this (event/empty-ack))
-      (match (count (sut/get-outgoing-event-queue this)) 2)
-      (match (sut/take-events this) [(event/empty-ping) (event/empty-ack)])
-      (match (count (sut/get-outgoing-event-queue this)) 0))))
+      (m/assert 2 (count (sut/get-outgoing-events this)))
+      (m/assert
+        [(event/empty-ping) (event/empty-ack)]
+        (sut/take-events this))
+      (m/assert 0 (count (sut/get-outgoing-events this))))))
 
 
 (deftest upsert-ping-test
   (testing "upsert ping"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-ping-events this) empty?)
+      (m/assert empty? (sut/get-ping-events this))
       (sut/upsert-ping this (event/empty-ping))
-      (match (count (sut/get-ping-events this)) 1)
-      (match (sut/get-ping-events this) {#uuid "00000000-0000-0000-0000-000000000000"
-                                         (event/empty-ping)})
+      (m/assert 1 (count (sut/get-ping-events this)))
+      (m/assert
+        {#uuid "00000000-0000-0000-0000-000000000001" (event/empty-ping)}
+        (sut/get-ping-events this))
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid ping event data"
               (sut/upsert-ping this {:a :bad-value})))))))
@@ -453,15 +531,65 @@
 (deftest delete-ping-test
   (testing "delete ping"
     (let [this (sut/new-node-object node-data1 cluster)]
-      (match (sut/get-ping-events this) empty?)
+      (m/assert empty? (sut/get-ping-events this))
       (sut/upsert-ping this (event/empty-ping))
-      (match (count (sut/get-ping-events this)) 1)
-      (sut/delete-ping this #uuid "00000000-0000-0000-0000-000000000000")
-      (match (count (sut/get-ping-events this)) zero?))))
+      (m/assert 1 (count (sut/get-ping-events this)))
+      (sut/delete-ping this #uuid "00000000-0000-0000-0000-000000000001")
+      (m/assert zero? (count (sut/get-ping-events this))))))
 
+
+(deftest upsert-indirect-ping-test
+  (testing "upsert indirect ping"
+    (let [this (sut/new-node-object node-data1 cluster)]
+      (m/assert empty? (sut/get-indirect-ping-events this))
+      (sut/upsert-indirect-ping this (event/empty-indirect-ping))
+      (m/assert 1 (count (sut/get-indirect-ping-events this)))
+      (m/assert {#uuid"00000000-0000-0000-0000-000000000002" (event/empty-indirect-ping)}
+        (sut/get-indirect-ping-events this))
+      (testing "Wrong data is prohibited by spec"
+        (is (thrown-with-msg? Exception #"Invalid indirect ping event data"
+              (sut/upsert-indirect-ping this {:a :bad-value})))))))
+
+
+(deftest delete-indirect-ping-test
+  (testing "delete indirect ping"
+    (let [this (sut/new-node-object node-data1 cluster)]
+      (m/assert empty? (sut/get-indirect-ping-events this))
+      (sut/upsert-indirect-ping this (event/empty-indirect-ping))
+      (m/assert 1 (count (sut/get-indirect-ping-events this)))
+      (sut/delete-indirect-ping this #uuid"00000000-0000-0000-0000-000000000002")
+      (m/assert zero? (count (sut/get-indirect-ping-events this))))))
+
+
+(deftest upsert-probe-test
+  (testing "upsert probe"
+    (let [this (sut/new-node-object node-data1 cluster)]
+      (m/assert empty? (sut/get-probe-events this))
+      (sut/upsert-probe this (event/empty-probe))
+      (m/assert 1 (count (sut/get-probe-events this)))
+      (m/assert
+        {#uuid "00000000-0000-0009-0000-000000000001" (event/empty-probe)}
+        (sut/get-probe-events this))
+      (testing "Wrong data is prohibited by spec"
+        (is (thrown-with-msg? Exception #"Invalid probe event data"
+              (sut/upsert-probe this {:a :bad-value})))))))
+
+
+(deftest delete-probe-test
+  (testing "delete probe"
+    (let [this (sut/new-node-object node-data1 cluster)]
+      (m/assert empty? (sut/get-probe-events this))
+      (sut/upsert-probe this (event/empty-probe))
+      (m/assert 1 (count (sut/get-probe-events this)))
+      (sut/delete-probe this #uuid "00000000-0000-0009-0000-000000000001")
+      (m/assert zero? (count (sut/get-probe-events this))))))
+
+
+;;;;;;;;;;;;;;;;;
 
 ;;;;
-
+;; Event builders tests
+;;;;
 
 (deftest new-ping-event-test
   (let [this   (sut/new-node-object node-data1 cluster)
@@ -494,16 +622,16 @@
 
 (deftest new-probe-event-test
   (let [this        (sut/new-node-object node-data1 cluster)
-        probe-event (sut/new-probe-event this "127.0.0.1" 5376)]
+        probe-event (sut/new-probe-event this "127.0.0.1" 5376 123)]
     (is (= ProbeEvent (type probe-event)) "ProbeEvent has correct type")
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid probe event"
-            (sut/new-probe-event this "127.0.01" -1))))))
+            (sut/new-probe-event this "127.0.01" -1 123))))))
 
 
 (deftest new-probe-ack-event-test
   (let [this            (sut/new-node-object node-data1 cluster)
-        probe-event     (sut/new-probe-event this "127.0.0.1" 5376)
+        probe-event     (sut/new-probe-event this "127.0.0.1" 5376 123)
         probe-ack-event (sut/new-probe-ack-event this probe-event)]
     (is (= ProbeAckEvent (type probe-ack-event)) "ProbeAckEvent has correct type")
     (testing "Wrong data is prohibited by spec"
@@ -706,7 +834,7 @@
   (testing "node1 can send event to node2"
     (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
           node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
-          probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
+          probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2) 123)]
       (try
         (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
         (sut/start this empty-node-process-fn #(do [%1 %2]))
@@ -758,7 +886,7 @@
   (testing "node1 can send event to node2"
     (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
           node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
-          probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
+          probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2) 123)]
       (try
         (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
         (sut/start this empty-node-process-fn #(do [%1 %2]))
@@ -808,7 +936,7 @@
   (testing "node1 can send all events to node2 with anti-entropy data"
     (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
           node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
-          probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2))]
+          probe-event (sut/new-probe-event this (sut/get-host node2) (sut/get-port node2) 123)]
 
       (try
         (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
@@ -827,7 +955,7 @@
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/get-payload node2)
               [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event this))])
-            (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
+            (is (empty? (sut/get-outgoing-events this)) "After send outgoing queue should be empty")))
 
         ;; ************ this is for ping tests
         #_(testing "send all events using neighbour id"
@@ -843,7 +971,7 @@
               (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
               (match (sut/get-payload node2)
                 [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event this))])
-              (is (empty? (sut/get-outgoing-event-queue this)) "After send outgoing queue should be empty")))
+              (is (empty? (sut/get-outgoing-events this)) "After send outgoing queue should be empty")))
 
         #_(testing "Wrong neighbour id is prohibited"
             (is (thrown-with-msg? Exception #"Unknown neighbour id"
@@ -935,13 +1063,6 @@
     (match (dissoc nb3 :updated-at) (dissoc (sut/get-oldest-neighbour this #{:left}) :updated-at))))
 
 
-(deftest cluster-size-exceed?-test
-  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))]
-    (is (true? (sut/cluster-size-exceed? this)))
-    (sut/set-cluster-size this 3)
-    (is (false? (sut/cluster-size-exceed? this)))))
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -964,7 +1085,7 @@
               (fn [_ _ _ new-val]
                 (when (= 3 (:tx new-val))                   ;; wait for ack-probe from node2
                   (deliver *expecting-event (:payload new-val)))))
-            (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+            (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/nodes-in-cluster node1) 1)
             (testing "tx on node 1 is incremented correctly"
@@ -981,7 +1102,7 @@
               (fn [_ _ _ new-val]
                 (when-not (empty? (:neighbours new-val))
                   (deliver *expecting-event 1))))
-            (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+            (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
             (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
             (match (sut/nodes-in-cluster node1) 2)
             (match (:id (sut/get-neighbour node1 (sut/get-id node2))) (:id node-data2))
@@ -1013,9 +1134,9 @@
           (match (sut/nodes-in-cluster node1) 1)
           ;; change status to any :alive or :suspect to verify that neighbour will not added
           (sut/set-status node1 :alive)
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
           (sut/set-status node1 :suspect)
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
           (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
           (match (sut/nodes-in-cluster node1) 1)
           (catch Exception e
@@ -1227,7 +1348,7 @@
         (match
           [@*expecting-event @*expecting-event2 @*expecting-event3]
           [:put-event :alive-event :ack-event])
-        (match (-> node1 sut/get-outgoing-event-queue first type) AliveEvent) ;; we send new alive event
+        (match (-> node1 sut/get-outgoing-events first type) AliveEvent) ;; we send new alive event
         (match (count (sut/get-alive-neighbours node1)) 1)  ;; we set new :alive status
         (catch Exception e
           (println (ex-message e)))
@@ -1328,7 +1449,7 @@
                                (when (= cmd :ping-event-different-addressee-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                      ;; register error catcher
+        (add-tap error-catcher-fn)                          ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         ;; sending ping event to node 1 for different addressee (another id)
@@ -1340,7 +1461,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)                 ;; unregister error catcher
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1355,7 +1476,7 @@
                                (when (= cmd :ping-event-unknown-neighbour-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                  ;; register error catcher
+        (add-tap error-catcher-fn)                          ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         ;; sending ack event to node 1 from unknown neighbour
@@ -1367,7 +1488,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)             ;; unregister error catcher
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1431,7 +1552,7 @@
                                (when (= cmd :ping-event-bad-tx-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                  ;; register error catcher
+        (add-tap error-catcher-fn)                          ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :tx 999)))
@@ -1445,7 +1566,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)             ;; unregister error catcher
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1458,7 +1579,7 @@
                                (when (= cmd :ping-event-not-alive-neighbour-error)
                                  (deliver *expecting-error cmd))))]
       (try
-        (add-tap error-catcher-fn)                  ;; register error catcher
+        (add-tap error-catcher-fn)                          ;; register error catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :dead)))
@@ -1474,7 +1595,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap error-catcher-fn)             ;; unregister error catcher
+          (remove-tap error-catcher-fn)                     ;; unregister error catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1492,8 +1613,8 @@
                                 (when (= cmd :ack-event)
                                   (deliver *expecting-event2 cmd))))]
       (try
-        (add-tap event-catcher-fn)                  ;; register event catcher
-        (add-tap event-catcher-fn2)                 ;; register event catcher
+        (add-tap event-catcher-fn)                          ;; register event catcher
+        (add-tap event-catcher-fn2)                         ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :alive)))
@@ -1518,8 +1639,8 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap event-catcher-fn)             ;; unregister event catcher
-          (remove-tap event-catcher-fn2)            ;; unregister event catcher
+          (remove-tap event-catcher-fn)                     ;; unregister event catcher
+          (remove-tap event-catcher-fn2)                    ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2)))))
 
@@ -1543,9 +1664,9 @@
                                 (when (= cmd :alive-event)
                                   (deliver *expecting-event3 v))))]
       (try
-        (add-tap event-catcher-fn)                  ;; register event catcher
-        (add-tap event-catcher-fn2)                 ;; register event catcher
-        (add-tap event-catcher-fn3)                 ;; register event catcher
+        (add-tap event-catcher-fn)                          ;; register event catcher
+        (add-tap event-catcher-fn2)                         ;; register event catcher
+        (add-tap event-catcher-fn3)                         ;; register event catcher
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :alive)))
@@ -1579,9 +1700,9 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (remove-tap event-catcher-fn)             ;; unregister event catcher
-          (remove-tap event-catcher-fn2)            ;; unregister event catcher
-          (remove-tap event-catcher-fn3)            ;; unregister event catcher
+          (remove-tap event-catcher-fn)                     ;; unregister event catcher
+          (remove-tap event-catcher-fn2)                    ;; unregister event catcher
+          (remove-tap event-catcher-fn3)                    ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2))))))
 

@@ -2,6 +2,7 @@
   (:require
     [clojure.stacktrace :as trace]
     [hashp.core]
+    [bogus.core]
     [puget.printer :refer [cprint] :rename {cprint cprn}]))
 
 
@@ -15,6 +16,7 @@
 (defn run-dev
   []
   (add-tap t-prn>)
+
   (set! *warn-on-reflection* true))
 
 

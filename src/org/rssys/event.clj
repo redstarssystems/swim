@@ -62,7 +62,7 @@
                     :tx              0
                     :neighbour-host  "localhost"
                     :neighbour-port  1
-                    :probe-key       "probekey0"}))
+                    :probe-key       (UUID. 9 1)}))
 
 
 ;;;;
