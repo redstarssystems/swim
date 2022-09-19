@@ -62,7 +62,7 @@
 
 
 (def *stat
-  (atom {:bad-udp-counter 0                                 ;; how many UDP packet we received is bad
+  (atom {:bad-udp-counter 0                                 ;; how many UDP packet we received are bad
          }))
 
 
