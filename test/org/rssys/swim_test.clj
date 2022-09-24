@@ -575,7 +575,7 @@
       (sut/upsert-probe this (event/empty-probe))
       (m/assert 1 (count (sut/get-probe-events this)))
       (m/assert
-        {#uuid "00000000-0000-0009-0000-000000000001" (event/empty-probe)}
+        {#uuid "00000000-0000-0009-0000-000000000001" nil}
         (sut/get-probe-events this))
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid probe event data"
@@ -592,6 +592,34 @@
       (m/assert zero? (count (sut/get-probe-events this))))))
 
 
+(deftest upsert-probe-ack-test
+  (testing "upsert ack probe"
+    (let [this            (sut/new-node-object node-data1 cluster)
+          probe-event     (event/empty-probe)
+          probe-ack-event (sut/new-probe-ack-event this probe-event)
+          probe-key       (.-probe_key probe-event)]
+      (m/assert empty? (sut/get-probe-events this))
+      (sut/upsert-probe this (event/empty-probe))
+      (m/assert 1 (count (sut/get-probe-events this)))
+      (sut/upsert-probe-ack this probe-ack-event)
+      (m/assert
+        {probe-key
+         {:cmd-type        10
+          :id              #uuid "00000000-0000-0000-0000-000000000001"
+          :host            "127.0.0.1"
+          :port            5376
+          :restart-counter 7
+          :tx              0
+          :status          :stop
+          :neighbour-id    #uuid "00000000-0000-0000-0000-000000000000"
+          :neighbour-tx    0
+          :probe-key       #uuid "00000000-0000-0009-0000-000000000001"}}
+        (sut/get-probe-events this))
+      (testing "Wrong data is prohibited by spec"
+        (is (thrown-with-msg? Exception #"Invalid probe ack event data"
+              (sut/upsert-probe-ack this {:a :bad-value})))))))
+
+
 ;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -603,6 +631,7 @@
   (let [this        (sut/new-node-object node-data1 cluster)
         probe-event (sut/new-probe-event this "127.0.0.1" 5376)]
     (m/assert ProbeEvent (type probe-event))
+    (m/assert ::spec/probe-event probe-event)
     (m/assert uuid? (.-probe_key probe-event))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid probe event"
@@ -616,6 +645,7 @@
         probe-event     (sut/new-probe-event this "127.0.0.1" 5376)
         probe-ack-event (sut/new-probe-ack-event this probe-event)]
     (m/assert ProbeAckEvent (type probe-ack-event))
+    (m/assert ::spec/probe-ack-event probe-ack-event)
     (m/assert (.-probe_key probe-event) (.-probe_key probe-ack-event))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid probe ack event"
@@ -625,9 +655,10 @@
 ;;;;
 
 (deftest new-ping-event-test
-  (let [this   (sut/new-node-object node-data1 cluster)
-        result (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)]
-    (m/assert PingEvent (type result))
+  (let [this       (sut/new-node-object node-data1 cluster)
+        ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)]
+    (m/assert PingEvent (type ping-event))
+    (m/assert ::spec/ping-event ping-event)
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ping event"
             (sut/new-ping-event this :bad-value 42))))))
@@ -638,8 +669,9 @@
 (deftest new-ack-event-test
   (let [this       (sut/new-node-object node-data1 cluster)
         ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
-        result     (sut/new-ack-event this ping-event)]
-    (m/assert AckEvent (type result))
+        ack-event  (sut/new-ack-event this ping-event)]
+    (m/assert AckEvent (type ack-event))
+    (m/assert ::spec/ack-event ack-event)
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ack event"
             (sut/new-ack-event this (assoc ping-event :id :bad-value)))))))
@@ -660,6 +692,7 @@
 
       (let [indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)]
         (m/assert IndirectPingEvent (type indirect-ping-event))
+        (m/assert ::spec/indirect-ping-event indirect-ping-event)
         (m/assert {:intermediate-id   (:id intermediate)
                    :intermediate-host (:host intermediate)
                    :intermediate-port (:port intermediate)}
@@ -698,6 +731,7 @@
 
       (let [indirect-ack-event (sut/new-indirect-ack-event neighbour-this indirect-ping-event)]
         (m/assert IndirectAckEvent (type indirect-ack-event))
+        (m/assert ::spec/indirect-ack-event indirect-ack-event)
         (m/assert {:intermediate-id   (:id intermediate)
                    :intermediate-host (:host intermediate)
                    :intermediate-port (:port intermediate)}
@@ -725,6 +759,7 @@
         ack-event      (sut/new-ack-event neighbour-this ping-event)
         alive-event    (sut/new-alive-event this ack-event)]
     (m/assert AliveEvent (type alive-event))
+    (m/assert ::spec/alive-event alive-event)
     (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"
                :neighbour-tx (sut/get-tx neighbour-this)} alive-event)
     (testing "Wrong data is prohibited by spec"
@@ -739,6 +774,7 @@
         new-cluster-size 5
         ncs-event        (sut/new-cluster-size-event this new-cluster-size)]
     (m/assert NewClusterSizeEvent (type ncs-event))
+    (m/assert ::spec/new-cluster-size-event ncs-event)
     (m/assert {:old-cluster-size (.-cluster_size cluster)
                :new-cluster-size new-cluster-size}
       ncs-event)
@@ -755,10 +791,11 @@
         ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
         neighbour  (sut/new-neighbour-node neighbour-data1)
         _          (sut/upsert-neighbour this neighbour)
-        result     (sut/new-dead-event this (.-neighbour_id ping-event))]
-    (m/assert DeadEvent (type result))
+        dead-event (sut/new-dead-event this (.-neighbour_id ping-event))]
+    (m/assert DeadEvent (type dead-event))
+    (m/assert ::spec/dead-event dead-event)
     (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
-      result)
+      dead-event)
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid dead event"
             (sut/new-dead-event this (assoc ping-event :id :bad-value)))))))
@@ -767,11 +804,12 @@
 ;;;;
 
 (deftest new-anti-entropy-event-test
-  (let [this      (sut/new-node-object node-data1 cluster)
-        neighbour (sut/new-neighbour-node neighbour-data1)
-        _         (sut/upsert-neighbour this neighbour)
-        result    (sut/new-anti-entropy-event this)]
-    (m/assert AntiEntropy (type result))
+  (let [this               (sut/new-node-object node-data1 cluster)
+        neighbour          (sut/new-neighbour-node neighbour-data1)
+        _                  (sut/upsert-neighbour this neighbour)
+        anti-entropy-event (sut/new-anti-entropy-event this)]
+    (m/assert AntiEntropy (type anti-entropy-event))
+    (m/assert ::spec/anti-entropy-event anti-entropy-event)
     (m/assert {:anti-entropy-data [[#uuid "00000000-0000-0000-0000-000000000002"
                                     "127.0.0.1"
                                     5377
@@ -780,32 +818,34 @@
                                     3
                                     0
                                     {:tcp-port 4567}]]}
-      result)))
+      anti-entropy-event)))
 
 
 ;;;;
 
 (deftest new-join-event-test
-  (let [this   (sut/new-node-object node-data1 cluster)
-        result (sut/new-join-event this)]
-    (m/assert JoinEvent (type result))
+  (let [this       (sut/new-node-object node-data1 cluster)
+        join-event (sut/new-join-event this)]
+    (m/assert JoinEvent (type join-event))
+    (m/assert ::spec/join-event join-event)
     (m/assert {:cmd-type        (:join event/code)
                :id              (sut/get-id this)
                :restart-counter (sut/get-restart-counter this)
                :tx              (sut/get-tx this)}
-      result)))
+      join-event)))
 
 
 ;;;;
 
 (deftest new-suspect-event-test
-  (let [this      (sut/new-node-object node-data1 cluster)
-        neighbour (sut/new-neighbour-node neighbour-data1)
-        _         (sut/upsert-neighbour this neighbour)
-        result    (sut/new-suspect-event this (:id neighbour))]
-    (m/assert SuspectEvent (type result))
+  (let [this          (sut/new-node-object node-data1 cluster)
+        neighbour     (sut/new-neighbour-node neighbour-data1)
+        _             (sut/upsert-neighbour this neighbour)
+        suspect-event (sut/new-suspect-event this (:id neighbour))]
+    (m/assert SuspectEvent (type suspect-event))
+    (m/assert ::spec/suspect-event suspect-event)
     (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
-      result)
+      suspect-event)
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid suspect event data"
             (sut/new-suspect-event this :bad-value))))))
@@ -814,30 +854,32 @@
 ;;;;
 
 (deftest new-left-event-test
-  (let [this   (sut/new-node-object node-data1 cluster)
-        result (sut/new-left-event this)]
-    (m/assert LeftEvent (type result))
+  (let [this       (sut/new-node-object node-data1 cluster)
+        left-event (sut/new-left-event this)]
+    (m/assert LeftEvent (type left-event))
+    (m/assert ::spec/left-event left-event)
     (m/assert {:cmd-type        (:left event/code)
                :id              (sut/get-id this)
                :restart-counter (sut/get-restart-counter this)
                :tx              (sut/get-tx this)}
-      result)))
+      left-event)))
 
 
 ;;;;
 
 (deftest new-payload-event-test
-  (let [this        (sut/new-node-object node-data1 cluster)
-        new-payload {:a 1 :b [3]}
-        _           (sut/set-payload this new-payload)
-        result      (sut/new-payload-event this)]
-    (m/assert PayloadEvent (type result))
+  (let [this          (sut/new-node-object node-data1 cluster)
+        new-payload   {:a 1 :b [3]}
+        _             (sut/set-payload this new-payload)
+        payload-event (sut/new-payload-event this)]
+    (m/assert PayloadEvent (type payload-event))
+    (m/assert ::spec/payload-event payload-event)
     (m/assert {:cmd-type        (:payload event/code)
                :id              (sut/get-id this)
                :restart-counter (sut/get-restart-counter this)
                :tx              (sut/get-tx this)
                :payload         (sut/get-payload this)}
-      result)))
+      payload-event)))
 
 
 
@@ -1169,31 +1211,10 @@
 
             (remove-watch (:*node node2) :event-detect)))
 
-        ;; ************ this is for ping tests
-        #_(testing "send all events using neighbour id"
-            (let [*expecting-event (promise)]
-              (sut/put-event node1 probe-event)
-              (sut/put-event node1 (event/empty-ack))
-              (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-              (add-watch (:*node node2) :event-detect
-                (fn [_ _ _ new-val]
-                  (when-not (empty? (:payload new-val))
-                    (deliver *expecting-event (:payload new-val)))))
-              (sut/send-events node1 (sut/get-id node2))
-              (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-              (match (sut/get-payload node2)
-                [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event node1))])
-              (is (empty? (sut/get-outgoing-events node1)) "After send outgoing queue should be empty")))
-
-        #_(testing "Wrong neighbour id is prohibited"
-            (is (thrown-with-msg? Exception #"Unknown neighbour id"
-                  (sut/put-event node1 probe-event)
-                  (sut/send-events node1 (random-uuid)))))
-
         (testing "Too big UDP packet is prohibited"
           (let [config @sut/*config]                        ;; increase from 2 to 100
             (swap! sut/*config assoc :max-anti-entropy-items 100)
-            (dotimes [n 100]                          ;; fill too many neighbours
+            (dotimes [n 100]                                ;; fill too many neighbours
               (sut/upsert-neighbour node1 (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
 
             (is (thrown-with-msg? Exception #"UDP packet is too big"
@@ -1284,47 +1305,105 @@
 ;; SWIM business logic tests
 ;;;;
 
+
+(deftest probe-test
+  (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
+        node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))]
+    (try
+
+      (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+      (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+      (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
+        (testing "Probe should return probe key as UUID"
+          (m/assert UUID (type probe-key)))
+        (testing "Probe should insert probe key to the `probe-events` buffer"
+          (is (contains? (sut/get-probe-events node1) probe-key))))
+
+      (catch Exception e
+        (println (ex-message e)))
+      (finally
+        (sut/stop node1)
+        (sut/stop node2)))))
+
+
 (deftest ^:logic probe-probe-ack-test
   (testing "Probe -> ProbeAck logic"
     (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
           node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))]
       (try
+
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
 
-        (testing "After probe neighbour will not be added to neighbours map cause cluster size limit reached"
-          (let [before-tx1       (sut/get-tx node1)
-                before-tx2       (sut/get-tx node2)
-                *expecting-event (promise)]
+        (testing "Neighbour from Probe Ack should not added to neighbours map cause cluster size limit reached"
+          (let [*expecting-event (promise)
+                *expecting-error (promise)
+                error-catcher-fn (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :upsert-neighbour-cluster-size-exceeded-error)
+                                       (deliver *expecting-error cmd))))]
+
             (add-watch (:*node node1) :event-detect
               (fn [_ _ _ new-val]
-                (when (= 3 (:tx new-val))                   ;; wait for ack-probe from node2
-                  (deliver *expecting-event (:payload new-val)))))
-            (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
-            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-            (match (sut/nodes-in-cluster node1) 1)
-            (testing "tx on node 1 is incremented correctly"
-              (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
-            (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
-              (match (sut/get-tx node2) (+ 2 before-tx2)))))
+                (let [[_ probe-ack-event] (first (:probe-events new-val))]
+                  (when (not (nil? probe-ack-event))        ;; wait for probe-ack event from node2
+                    (deliver *expecting-event (:probe-events new-val))))))
 
-        (testing "After probe neighbour will be added to neighbours map cause cluster size limit is not reached"
+            (add-tap error-catcher-fn)
+
+            (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+
+            (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+            (m/dessert :timeout (deref *expecting-error *max-test-timeout* :timeout))
+            (m/assert 1 (sut/nodes-in-cluster node1))
+            (m/assert :upsert-neighbour-cluster-size-exceeded-error @*expecting-error)
+
+            (remove-watch (:*node node1) :event-detect)
+            (remove-tap error-catcher-fn)))
+
+        (testing "Probe Ack should not accepted cause probe request never send"
+          (let [probe-event      (sut/new-probe-event node1 (:host node-data2) (:port node-data2))
+                *expecting-error (promise)
+                error-catcher-fn (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :probe-ack-event-probe-never-send-error)
+                                       (deliver *expecting-error cmd))))]
+
+
+
+            (add-tap error-catcher-fn)
+
+            (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (:host node-data1) (:port node-data1))
+
+            (m/dessert :timeout (deref *expecting-error *max-test-timeout* :timeout))
+            (m/assert :probe-ack-event-probe-never-send-error @*expecting-error)
+
+            (remove-tap error-catcher-fn)))
+
+        (testing "Neighbour from Probe Ack should be added to neighbours map cause cluster size limit is not reached"
           (let [before-tx1       (sut/get-tx node1)
                 before-tx2       (sut/get-tx node2)
                 *expecting-event (promise)]
             (sut/set-cluster-size node1 3)                  ;; increase cluster size
+
             (add-watch (:*node node1) :event-detect
               (fn [_ _ _ new-val]
                 (when-not (empty? (:neighbours new-val))
                   (deliver *expecting-event 1))))
-            (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
-            (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-            (match (sut/nodes-in-cluster node1) 2)
-            (match (:id (sut/get-neighbour node1 (sut/get-id node2))) (:id node-data2))
+
+            (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+
+            (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+            (m/assert 2 (sut/nodes-in-cluster node1))
+            (m/assert (:id node-data2) (:id (sut/get-neighbour node1 (sut/get-id node2))))
+
             (testing "tx on node 1 is incremented correctly"
-              (match (sut/get-tx node1) (+ 2 before-tx1)))  ;; 1 - send probe, 2 - receive ack-probe
+              (m/assert (+ 2 before-tx1) (sut/get-tx node1))) ;; 1 - send probe, 2 - receive ack-probe
             (testing "tx on node 2 is incremented correctly" ;; 1 -receive probe, 2 - send ack-probe
-              (match (sut/get-tx node2) (+ 2 before-tx2)))))
+              (m/assert (+ 2 before-tx2) (sut/get-tx node2)))
+
+            (remove-watch (:*node node1) :event-detect)))
         (catch Exception e
           (println (ex-message e)))
         (finally
@@ -1349,9 +1428,9 @@
           (match (sut/nodes-in-cluster node1) 1)
           ;; change status to any :alive or :suspect to verify that neighbour will not added
           (sut/set-status node1 :alive)
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
           (sut/set-status node1 :suspect)
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2) 123)
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
           (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
           (match (sut/nodes-in-cluster node1) 1)
           (catch Exception e
@@ -1920,6 +1999,8 @@
           (remove-tap event-catcher-fn3)                    ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2))))))
+
+
 
 
 
