@@ -317,29 +317,12 @@
 
       (m/assert [] (sut/get-ping-round-buffer this))
 
-      (sut/upsert-probe this (event/empty-probe))
+      (sut/insert-probe this (event/empty-probe))
 
-      (m/assert {#uuid"00000000-0000-0009-0000-000000000001"
-                 {:cmd-type        9
-                  :id              #uuid "00000000-0000-0000-0000-000000000000"
-                  :host            "localhost"
-                  :port            1
-                  :restart-counter 0
-                  :tx              0
-                  :neighbour-host  "localhost"
-                  :neighbour-port  1
-                  :probe-key       #uuid"00000000-0000-0009-0000-000000000001"}}
+      (m/assert {#uuid"00000000-0000-0009-0000-000000000001" nil}
         (sut/get-probe-events this))
 
-      (m/assert {:cmd-type        9
-                 :id              #uuid "00000000-0000-0000-0000-000000000000"
-                 :host            "localhost"
-                 :port            1
-                 :restart-counter 0
-                 :tx              0
-                 :neighbour-host  "localhost"
-                 :neighbour-port  1
-                 :probe-key       #uuid"00000000-0000-0009-0000-000000000001"}
+      (m/assert nil
         (sut/get-probe-event this #uuid"00000000-0000-0009-0000-000000000001"))
 
       (sut/delete-probe this #uuid"00000000-0000-0009-0000-000000000001")
@@ -572,21 +555,21 @@
   (testing "upsert probe"
     (let [this (sut/new-node-object node-data1 cluster)]
       (m/assert empty? (sut/get-probe-events this))
-      (sut/upsert-probe this (event/empty-probe))
+      (sut/insert-probe this (event/empty-probe))
       (m/assert 1 (count (sut/get-probe-events this)))
       (m/assert
         {#uuid "00000000-0000-0009-0000-000000000001" nil}
         (sut/get-probe-events this))
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid probe event data"
-              (sut/upsert-probe this {:a :bad-value})))))))
+              (sut/insert-probe this {:a :bad-value})))))))
 
 
 (deftest delete-probe-test
   (testing "delete probe"
     (let [this (sut/new-node-object node-data1 cluster)]
       (m/assert empty? (sut/get-probe-events this))
-      (sut/upsert-probe this (event/empty-probe))
+      (sut/insert-probe this (event/empty-probe))
       (m/assert 1 (count (sut/get-probe-events this)))
       (sut/delete-probe this #uuid "00000000-0000-0009-0000-000000000001")
       (m/assert zero? (count (sut/get-probe-events this))))))
@@ -599,7 +582,7 @@
           probe-ack-event (sut/new-probe-ack-event this probe-event)
           probe-key       (.-probe_key probe-event)]
       (m/assert empty? (sut/get-probe-events this))
-      (sut/upsert-probe this (event/empty-probe))
+      (sut/insert-probe this (event/empty-probe))
       (m/assert 1 (count (sut/get-probe-events this)))
       (sut/upsert-probe-ack this probe-ack-event)
       (m/assert
@@ -647,6 +630,8 @@
     (m/assert ProbeAckEvent (type probe-ack-event))
     (m/assert ::spec/probe-ack-event probe-ack-event)
     (m/assert (.-probe_key probe-event) (.-probe_key probe-ack-event))
+    (testing "tx contains number of generated events on this node"
+      (m/assert 2 (sut/get-tx this)))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid probe ack event"
             (sut/new-probe-ack-event this (assoc probe-event :id :bad-value)))))))
@@ -659,6 +644,8 @@
         ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)]
     (m/assert PingEvent (type ping-event))
     (m/assert ::spec/ping-event ping-event)
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ping event"
             (sut/new-ping-event this :bad-value 42))))))
@@ -672,6 +659,8 @@
         ack-event  (sut/new-ack-event this ping-event)]
     (m/assert AckEvent (type ack-event))
     (m/assert ::spec/ack-event ack-event)
+    (testing "tx contains number of generated events on this node"
+      (m/assert 2 (sut/get-tx this)))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid ack event"
             (sut/new-ack-event this (assoc ping-event :id :bad-value)))))))
@@ -697,6 +686,10 @@
                    :intermediate-host (:host intermediate)
                    :intermediate-port (:port intermediate)}
           indirect-ping-event)
+
+        (testing "tx contains number of generated events on this node"
+          (m/assert 1 (sut/get-tx this)))
+
         (m/assert {:neighbour-id   (:id neighbour)
                    :neighbour-host (:host neighbour)
                    :neighbour-port (:port neighbour)}
@@ -727,6 +720,9 @@
         indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)
         neighbour-this      (sut/new-node-object node-data3 cluster)]
 
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
+
     (testing "Create normal indirect ack event"
 
       (let [indirect-ack-event (sut/new-indirect-ack-event neighbour-this indirect-ping-event)]
@@ -752,16 +748,16 @@
 (deftest new-alive-event-test
   (let [this           (sut/new-node-object node-data1 cluster)
         neighbour-this (sut/new-node-object node-data2 cluster)
-        _              (sut/inc-tx this)
-        _              (sut/inc-tx neighbour-this)
-        _              (sut/inc-tx neighbour-this)
         ping-event     (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
         ack-event      (sut/new-ack-event neighbour-this ping-event)
         alive-event    (sut/new-alive-event this ack-event)]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 2 (sut/get-tx this)))
     (m/assert AliveEvent (type alive-event))
     (m/assert ::spec/alive-event alive-event)
-    (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"
-               :neighbour-tx (sut/get-tx neighbour-this)} alive-event)
+    (testing "Alive event contains tx less by 1 than node has"
+      (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"
+                 :neighbour-tx (dec (sut/get-tx neighbour-this))} alive-event))
     (testing "Wrong data is prohibited by spec"
       (is (thrown-with-msg? Exception #"Invalid alive event"
             (sut/new-alive-event this (assoc ack-event :id :bad-value)))))))
@@ -773,6 +769,8 @@
   (let [this             (sut/new-node-object node-data1 cluster)
         new-cluster-size 5
         ncs-event        (sut/new-cluster-size-event this new-cluster-size)]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
     (m/assert NewClusterSizeEvent (type ncs-event))
     (m/assert ::spec/new-cluster-size-event ncs-event)
     (m/assert {:old-cluster-size (.-cluster_size cluster)
@@ -792,6 +790,8 @@
         neighbour  (sut/new-neighbour-node neighbour-data1)
         _          (sut/upsert-neighbour this neighbour)
         dead-event (sut/new-dead-event this (.-neighbour_id ping-event))]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 2 (sut/get-tx this)))
     (m/assert DeadEvent (type dead-event))
     (m/assert ::spec/dead-event dead-event)
     (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
@@ -808,6 +808,8 @@
         neighbour          (sut/new-neighbour-node neighbour-data1)
         _                  (sut/upsert-neighbour this neighbour)
         anti-entropy-event (sut/new-anti-entropy-event this)]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
     (m/assert AntiEntropy (type anti-entropy-event))
     (m/assert ::spec/anti-entropy-event anti-entropy-event)
     (m/assert {:anti-entropy-data [[#uuid "00000000-0000-0000-0000-000000000002"
@@ -826,12 +828,14 @@
 (deftest new-join-event-test
   (let [this       (sut/new-node-object node-data1 cluster)
         join-event (sut/new-join-event this)]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
     (m/assert JoinEvent (type join-event))
     (m/assert ::spec/join-event join-event)
     (m/assert {:cmd-type        (:join event/code)
                :id              (sut/get-id this)
                :restart-counter (sut/get-restart-counter this)
-               :tx              (sut/get-tx this)}
+               :tx              (dec (sut/get-tx this))}
       join-event)))
 
 
@@ -842,6 +846,8 @@
         neighbour     (sut/new-neighbour-node neighbour-data1)
         _             (sut/upsert-neighbour this neighbour)
         suspect-event (sut/new-suspect-event this (:id neighbour))]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
     (m/assert SuspectEvent (type suspect-event))
     (m/assert ::spec/suspect-event suspect-event)
     (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
@@ -856,12 +862,14 @@
 (deftest new-left-event-test
   (let [this       (sut/new-node-object node-data1 cluster)
         left-event (sut/new-left-event this)]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
     (m/assert LeftEvent (type left-event))
     (m/assert ::spec/left-event left-event)
     (m/assert {:cmd-type        (:left event/code)
                :id              (sut/get-id this)
                :restart-counter (sut/get-restart-counter this)
-               :tx              (sut/get-tx this)}
+               :tx              (dec (sut/get-tx this))}
       left-event)))
 
 
@@ -872,12 +880,14 @@
         new-payload   {:a 1 :b [3]}
         _             (sut/set-payload this new-payload)
         payload-event (sut/new-payload-event this)]
+    (testing "tx contains number of generated events on this node"
+      (m/assert 1 (sut/get-tx this)))
     (m/assert PayloadEvent (type payload-event))
     (m/assert ::spec/payload-event payload-event)
     (m/assert {:cmd-type        (:payload event/code)
                :id              (sut/get-id this)
                :restart-counter (sut/get-restart-counter this)
-               :tx              (sut/get-tx this)
+               :tx              (dec (sut/get-tx this))
                :payload         (sut/get-payload this)}
       payload-event)))
 
@@ -1203,7 +1213,7 @@
 
             (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
             (m/assert
-              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (sut/new-anti-entropy-event node1))]
+              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (update (sut/new-anti-entropy-event node1) :tx dec))]
               (sut/get-payload node2))
 
             (testing "After send outgoing queue should be empty"
@@ -1425,14 +1435,14 @@
           (sut/set-cluster-size node1 3)                    ;; increase cluster size
 
           ;; check we have only this node in cluster
-          (match (sut/nodes-in-cluster node1) 1)
-          ;; change status to any :alive or :suspect to verify that neighbour will not added
+          (m/assert 1 (sut/nodes-in-cluster node1))
+          ;; change status to any :alive or :suspect to verify that neighbour will be not added
           (sut/set-status node1 :alive)
           (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
           (sut/set-status node1 :suspect)
           (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-          (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-          (match (sut/nodes-in-cluster node1) 1)
+          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (m/assert 1 (sut/nodes-in-cluster node1))
           (catch Exception e
             (println (ex-message e)))
           (finally
@@ -1441,7 +1451,197 @@
             (sut/stop node2)))))))
 
 
-(deftest ^:logic ack-event-test
+(deftest ^:logic anti-entropy-test
+
+  (testing "Accept normal anti-entropy event from node1 on node2"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (let [ae-event         (sut/new-anti-entropy-event node1)
+              *expecting-event (promise)
+              event-catcher-fn (fn [v]
+                                 (when-let [cmd (:org.rssys.swim/cmd v)]
+                                   (when (= cmd :anti-entropy-event)
+                                     (deliver *expecting-event cmd))))]
+
+          (add-tap event-catcher-fn)
+
+          (m/assert 1 (count (sut/get-neighbours node2)))
+
+          ;; sending normal anti-entropy event to node 2
+          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+
+          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (m/assert 2 (count (sut/get-neighbours node2)))
+          (m/assert (dissoc neighbour-data2 :updated-at) (sut/get-neighbour node2 (:id neighbour-data2)))
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Do nothing if event from unknown node"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+
+        (let [ae-event         (sut/new-anti-entropy-event node1)
+              *expecting-event (promise)
+              error-catcher-fn (fn [v]
+                                 (when-let [cmd (:org.rssys.swim/cmd v)]
+                                   (when (= cmd :anti-entropy-event-unknown-neighbour-error)
+                                     (deliver *expecting-event cmd))))]
+
+          (add-tap error-catcher-fn)
+
+          (m/assert 0 (count (sut/get-neighbours node2)))
+
+          ;; sending normal anti-entropy event to node 2
+          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+
+          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (m/assert :anti-entropy-event-unknown-neighbour-error @*expecting-event)
+          (m/assert 0 (count (sut/get-neighbours node2)))
+
+          (remove-tap error-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Do nothing if event contains bad restart counter"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node
+                                         (assoc neighbour-data3 :restart-counter 999)))
+
+        (let [ae-event         (sut/new-anti-entropy-event node1)
+              *expecting-event (promise)
+              error-catcher-fn (fn [v]
+                                 (when-let [cmd (:org.rssys.swim/cmd v)]
+                                   (when (= cmd :anti-entropy-event-bad-restart-counter-error)
+                                     (deliver *expecting-event cmd))))]
+
+          (add-tap error-catcher-fn)
+
+          (m/assert 1 (count (sut/get-neighbours node2)))
+
+          ;; sending anti-entropy event to node 2 with outdated restart counter
+          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+
+          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (m/assert :anti-entropy-event-bad-restart-counter-error @*expecting-event)
+          (m/assert 1 (count (sut/get-neighbours node2)))
+
+          (remove-tap error-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Do nothing if event contains bad tx"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node
+                                      (assoc neighbour-data3 :tx 999)))
+
+        (let [ae-event         (sut/new-anti-entropy-event node1)
+              *expecting-event (promise)
+              error-catcher-fn (fn [v]
+                                 (when-let [cmd (:org.rssys.swim/cmd v)]
+                                   (when (= cmd :anti-entropy-event-bad-tx-error)
+                                     (deliver *expecting-event cmd))))]
+
+          (add-tap error-catcher-fn)
+
+          (m/assert 1 (count (sut/get-neighbours node2)))
+
+          ;; sending anti-entropy event to node 2 with outdated tx
+          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+
+          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (m/assert :anti-entropy-event-bad-tx-error @*expecting-event)
+          (m/assert 1 (count (sut/get-neighbours node2)))
+
+          (remove-tap error-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)))))
+
+  (testing "Do not process events from not alive nodes"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node
+                                      (assoc neighbour-data3 :status :stop)))
+
+        (let [ae-event         (sut/new-anti-entropy-event node1)
+              *expecting-event (promise)
+              error-catcher-fn (fn [v]
+                                 (when-let [cmd (:org.rssys.swim/cmd v)]
+                                   (when (= cmd :anti-entropy-event-not-alive-neighbour-error)
+                                     (deliver *expecting-event cmd))))]
+
+          (add-tap error-catcher-fn)
+
+          (m/assert 1 (count (sut/get-neighbours node2)))
+
+          ;; sending anti-entropy event to node 2 from not alive neighbour
+          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+
+          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (m/assert :anti-entropy-event-not-alive-neighbour-error @*expecting-event)
+          (m/assert 1 (count (sut/get-neighbours node2)))
+
+          (remove-tap error-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2))))))
+
+
+#_(deftest ^:logic ack-event-test
 
   (testing "Don't process ack event from unknown neighbour"
     (let [node1            (sut/new-node-object node-data1 cluster)
@@ -1652,86 +1852,10 @@
           (sut/stop node2))))))
 
 
-(deftest ^:logic anti-entropy-test
-
-  (testing "normal anti-entropy data from node1 is accepted on node2"
-    (let [node1            (sut/new-node-object node-data1 cluster)
-          node2            (sut/new-node-object node-data2 cluster)
-          *expecting-event (promise)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
-        (add-watch (:*node node2) :event-detect
-          (fn [_ _ _ new-val]
-            (when (= 2 (count (:neighbours new-val)))       ;; wait for anti-entropy on node2
-              (deliver *expecting-event (:neighbours new-val)))))
-        (match (count (sut/get-neighbours node2)) 1)
-        ;; sending normal anti-entropy event to node 2
-        (sut/inc-tx node1)
-        (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
-        ;; wait for event processing and event-catcher-fn
-        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-        (is (= 2 (count (sut/get-neighbours node2))))
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-  (testing "anti-entropy with actual incarnation is accepted on node2"
-    (let [node1            (sut/new-node-object node-data1 cluster)
-          node2            (sut/new-node-object node-data2 cluster)
-          *expecting-event (promise)]
-      (try
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :payload {})))
-        (add-watch (:*node node2) :event-detect
-          (fn [_ _ _ new-val]
-            (when (= 1 (count (:neighbours new-val)))       ;; wait for anti-entropy on node2
-              (deliver *expecting-event (:neighbours new-val)))))
-
-        ;; sending normal anti-entropy event to node 2
-        (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
-        ;; wait for event processing and event-catcher-fn
-        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-        (match (= (:payload neighbour-data2) (:payload (sut/get-neighbour node2 (:id neighbour-data2)))))
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-  (testing "anti-entropy with outdated incarnation is denied on node2"
-    (let [node1            (sut/new-node-object node-data1 cluster)
-          node2            (sut/new-node-object node-data2 cluster)
-          *expecting-event (promise)]
-      (try
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :payload {} :restart-counter 999)))
-        (add-watch (:*node node2) :event-detect
-          (fn [_ _ _ new-val]
-            (when (= 1 (count (:neighbours new-val)))       ;; wait for anti-entropy on node2
-              (deliver *expecting-event (:neighbours new-val)))))
-        ;; sending normal anti-entropy event to node 2
-        (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
-        ;; wait for event processing and event-catcher-fn
-        (not-match (deref *expecting-event *max-test-timeout* :timeout) :timeout)
-        (match (= {} (:payload (sut/get-neighbour node2 (:id neighbour-data2)))))
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2))))))
 
 
-(deftest ^:logic ping-event-test
+
+#_(deftest ^:logic ping-event-test
 
   (testing "Don't process ping event for different addressee"
     (let [node1            (sut/new-node-object node-data1 cluster)
