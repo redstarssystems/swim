@@ -1422,9 +1422,6 @@
           (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
           (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
 
-          (sut/get-tx node1)
-          (sut/get-tx node2)
-
           (sut/set-cluster-size node1 3)                      ;; increase cluster size
 
           (add-watch (:*node node1) :event-detect
@@ -1434,14 +1431,8 @@
 
           (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
 
-          (sut/get-tx node1)
-          (sut/get-tx node2)
-
           ;; wait for ack
           (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
-
-          (sut/get-tx node1)
-          (sut/get-tx node2)
 
           (testing "Neighbour from Probe Ack should be added to neighbours map cause cluster size limit is not reached"
             (m/assert 2 (sut/nodes-in-cluster node1))
@@ -1460,7 +1451,7 @@
             (sut/stop node1)
             (sut/stop node2)))))
 
-    (testing "Do not add neighbour to neighbours map if status is :alive or :suspect"
+    (testing "Do not add neighbour to neighbours map if our status is :alive or :suspect"
       (let [node1            (sut/new-node-object node-data1 (assoc cluster :cluster-size 3))
             node2            (sut/new-node-object node-data2 (assoc cluster :cluster-size 3))
             *expecting-event (promise)
