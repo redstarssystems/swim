@@ -1324,6 +1324,26 @@
       (m/assert false (sut/alive-neighbour? nb2))
       (m/assert false (sut/alive-neighbour? nb3)))))
 
+(deftest alive-node?-test
+  (testing "Result for nodes with alive statuses should be true"
+    (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
+          node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 99))]
+      (sut/set-status node1 :alive)
+      (sut/set-status node2 :suspect)
+      (m/assert true (sut/alive-node? node1))
+      (m/assert true (sut/alive-node? node2))))
+
+  (testing "Result for not alive nodes should be false"
+    (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
+          node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 99))
+          node3 (sut/new-node-object node-data3 (assoc cluster :cluster-size 99))]
+      (sut/set-status node1 :dead)
+      (sut/set-status node2 :left)
+      (sut/set-status node2 :stop)
+      (m/assert false (sut/alive-node? node1))
+      (m/assert false (sut/alive-node? node2))
+      (m/assert false (sut/alive-node? node3)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;

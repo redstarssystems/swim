@@ -1011,6 +1011,10 @@
   [^NeighbourNode nb]
   (boolean (#{:alive :suspect} (:status nb))))
 
+(defn alive-node?
+  "Returns true if given node has alive statuses."
+  [^NodeObject this]
+  (boolean (#{:alive :suspect} (get-status this))))
 
 ;;;;;;;;;;;;;;;;;;;;
 
@@ -1047,10 +1051,15 @@
     (send-event this probe-ack-event (.-host e) (.-port e))))
 
 
+(defn- expected-probe-event?
+  "Returns true if we send probe-event before, otherwise false"
+  [^NodeObject this ^ProbeAckEvent e]
+  (and (contains? (get-probe-events this) (.-probe_key e))    ;; check  we send probe-event before
+    (= (.-neighbour_id e) (get-id this))))                    ;; this probe-ack for this node
+
 (defmethod process-incoming-event ProbeAckEvent
   [^NodeObject this ^ProbeAckEvent e]
-  (let [probe-key (.-probe_key e)
-        nb
+  (let [nb
         (new-neighbour-node {:id              (.-id e)
                              :host            (.-host e)
                              :port            (.-port e)
@@ -1062,11 +1071,9 @@
                              :updated-at      (System/currentTimeMillis)})]
     (d> :probe-ack-event (get-id this) nb)
 
-    (if (and (contains? (get-probe-events this) probe-key) ;; check  we send probe-event before
-          (= (.-neighbour_id e) (get-id this)))           ;; this probe-ack for this node
+    (if (expected-probe-event? this e)
       (do (upsert-probe-ack this e)
-          (when (not (#{:suspect :alive} (get-status this)))
-            ;; we insert neighbour from  probe ack events only if our status not #{:suspect :alive}
+          (when (not (alive-node? this))
             (upsert-neighbour this nb)))
       (d> :probe-ack-event-probe-never-send-error (get-id this) e))))
 
@@ -1074,10 +1081,10 @@
 (defmethod process-incoming-event AntiEntropy
   [^NodeObject this ^AntiEntropy e]
   (let [neighbour-id (:id e)
-        nb           (get-neighbour this neighbour-id)]
+        nb           (or (get-neighbour this neighbour-id) :unknown-node)]
     (cond
-      ;; do nothing if event from unknown node
-      (nil? nb)
+
+      (= :unknown-node nb)
       (d> :anti-entropy-event-unknown-neighbour-error (get-id this) e)
 
       ;; do nothing if event with outdated restart counter
@@ -1089,7 +1096,7 @@
       (d> :anti-entropy-event-bad-tx-error (get-id this) e)
 
       ;; do not process events from not alive nodes
-      (not (#{:alive :suspect} (:status nb)))
+      (not (alive-neighbour? nb))
       (d> :anti-entropy-event-not-alive-neighbour-error (get-id this) e)
 
       :else
