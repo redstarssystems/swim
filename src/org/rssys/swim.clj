@@ -462,12 +462,14 @@
 
 
 (defn upsert-ping
-  "Update existing or insert new active ping event in map"
+  "Update existing or insert new active ping event in map.
+  Returns id of upserted ping event"
   [^NodeObject this ^PingEvent ping-event]
   (when-not (s/valid? ::spec/ping-event ping-event)
     (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::spec/ping-event) spec/problems))))
   (d> :upsert-ping (get-id this) {:ping-event ping-event})
-  (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) (:neighbour-id ping-event) ping-event)))
+  (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) (:neighbour-id ping-event) ping-event))
+  (:neighbour-id ping-event))
 
 
 (defn delete-ping
@@ -478,7 +480,8 @@
 
 
 (defn upsert-indirect-ping
-  "Update existing or insert new active indirect ping event in map"
+  "Update existing or insert new active indirect ping event in map.
+  Returns id of upserted indirect ping event"
   [^NodeObject this ^IndirectPingEvent indirect-ping-event]
   (when-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
     (throw (ex-info "Invalid indirect ping event data"
@@ -492,7 +495,8 @@
     (d> :upsert-indirect-ping (get-id this) {:indirect-ping-event indirect-ping-event'
                                              :indirect-id         indirect-id})
     (swap! (:*node this) assoc :indirect-ping-events
-      (assoc (get-indirect-ping-events this) indirect-id indirect-ping-event'))))
+      (assoc (get-indirect-ping-events this) indirect-id indirect-ping-event'))
+    indirect-id))
 
 
 (defn delete-indirect-ping
@@ -1011,15 +1015,18 @@
     (let [desired-nb (get-neighbours-with-status this status-set)]
       (->> desired-nb (sort-by :updated-at) first))))
 
+
 (defn alive-neighbour?
   "Returns true if neighbour has alive statuses."
   [^NeighbourNode nb]
   (boolean (#{:alive :suspect} (:status nb))))
 
+
 (defn alive-node?
   "Returns true if given node has alive statuses."
   [^NodeObject this]
   (boolean (#{:alive :suspect} (get-status this))))
+
 
 ;;;;;;;;;;;;;;;;;;;;
 
@@ -1059,8 +1066,8 @@
 (defn- expected-probe-event?
   "Returns true if we sent probe-event before, otherwise false"
   [^NodeObject this ^ProbeAckEvent e]
-  (and (contains? (get-probe-events this) (.-probe_key e))    ;; check  we send probe-event before
-    (= (.-neighbour_id e) (get-id this))))                    ;; this probe-ack for this node
+  (and (contains? (get-probe-events this) (.-probe_key e))  ;; check  we send probe-event before
+    (= (.-neighbour_id e) (get-id this))))                  ;; this probe-ack for this node
 
 (defmethod process-incoming-event ProbeAckEvent
   [^NodeObject this ^ProbeAckEvent e]
