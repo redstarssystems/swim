@@ -534,7 +534,7 @@
 
 
 (defn new-probe-event
-  "Returns new probe event"
+  "Returns new probe event. Increments tx of `this` node."
   ^ProbeEvent [^NodeObject this ^String neighbour-host ^long neighbour-port]
   (let [probe-event (event/map->ProbeEvent {:cmd-type        (:probe event/code)
                                             :id              (get-id this)
@@ -556,7 +556,7 @@
 
 
 (defn new-probe-ack-event
-  "Returns new probe ack event"
+  "Returns new probe ack event. Increments tx of `this` node."
   ^ProbeAckEvent [^NodeObject this ^ProbeEvent e]
   (let [ack-event (event/map->ProbeAckEvent {:cmd-type        (:probe-ack event/code)
                                              :id              (get-id this)
@@ -578,7 +578,7 @@
 
 
 (defn new-ping-event
-  "Returns new ping event."
+  "Returns new ping event. Increments tx of `this` node."
   ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number]
   (let [ping-event (event/map->PingEvent {:cmd-type        (:ping event/code)
                                           :id              (get-id this)
@@ -597,7 +597,7 @@
 ;;;;
 
 (defn new-ack-event
-  "Returns new Ack event"
+  "Returns new Ack event. Increments tx of `this` node."
   ^AckEvent [^NodeObject this ^ISwimEvent e]
   (let [ack-event (event/map->AckEvent {:cmd-type        (:ack event/code)
                                         :id              (get-id this)
@@ -616,7 +616,7 @@
 
 
 (defn new-indirect-ping-event
-  "Returns new indirect ping event."
+  "Returns new indirect ping event. Increments tx of `this` node."
   ^IndirectPingEvent [^NodeObject this ^UUID intermediate-id ^UUID neighbour-id attempt-number]
   (let [intermediate (get-neighbour this intermediate-id)
         neighbour    (get-neighbour this neighbour-id)]
@@ -653,7 +653,7 @@
 ;;;;
 
 (defn new-indirect-ack-event
-  "Returns new indirect ack event"
+  "Returns new indirect ack event. Increments tx of `this` node."
   ^IndirectAckEvent [^NodeObject this ^IndirectPingEvent e]
   (let [indirect-ack-event
         (event/map->IndirectAckEvent {:cmd-type          (:indirect-ack event/code)
@@ -680,7 +680,7 @@
 ;;;;
 
 (defn new-alive-event
-  "Returns new Alive event"
+  "Returns new Alive event. Increments tx of `this` node."
   ^AliveEvent [^NodeObject this ^ISwimEvent e]
   (let [alive-event
         (event/map->AliveEvent {:cmd-type                  (:alive event/code)
@@ -700,7 +700,7 @@
 ;;;;;
 
 (defn new-dead-event
-  "Returns new dead event"
+  "Returns new dead event. Increments tx of `this` node."
   ^DeadEvent [^NodeObject this ^UUID neighbour-id]
   (let [nb                 (get-neighbour this neighbour-id)
         nb-restart-counter (:restart-counter nb)
@@ -774,7 +774,7 @@
 
 
 (defn new-anti-entropy-event
-  "Returns anti-entropy event"
+  "Returns anti-entropy event. Increments tx of `this` node."
   ^AntiEntropy [^NodeObject this]
   (let [anti-entropy-data (build-anti-entropy-data this)
         ae-event          (event/map->AntiEntropy {:cmd-type          (:anti-entropy event/code)
@@ -791,7 +791,7 @@
 ;;;;
 
 (defn new-cluster-size-event
-  "Returns new NewClusterSizeEvent event.
+  "Returns new NewClusterSizeEvent event. Increments tx of `this` node.
   This event should be created before cluster size changed."
   ^NewClusterSizeEvent [^NodeObject this ^long new-cluster-size]
   (let [ncs-event (event/map->NewClusterSizeEvent {:cmd-type         (:new-cluster-size event/code)
@@ -810,7 +810,7 @@
 
 
 (defn new-join-event
-  "Returns new JoinEvent event."
+  "Returns new JoinEvent event. Increments tx of `this` node."
   ^JoinEvent [^NodeObject this]
   (let [join-event (event/map->JoinEvent {:cmd-type        (:join event/code)
                                           :id              (get-id this)
@@ -826,7 +826,7 @@
 ;;;;;
 
 (defn new-suspect-event
-  "Returns new suspect event"
+  "Returns new suspect event. Increments tx of `this` node."
   ^SuspectEvent [^NodeObject this ^UUID neighbour-id]
   (let [nb                 (get-neighbour this neighbour-id)
         nb-restart-counter (:restart-counter nb)
@@ -849,7 +849,7 @@
 ;;;;
 
 (defn new-left-event
-  "Returns new LeftEvent event."
+  "Returns new LeftEvent event. Increments tx of `this` node."
   ^LeftEvent [^NodeObject this]
   (let [e (event/map->LeftEvent {:cmd-type        (:left event/code)
                                  :id              (get-id this)
@@ -863,7 +863,7 @@
 
 
 (defn new-payload-event
-  "Returns new PayloadEvent event."
+  "Returns new PayloadEvent event. Increments tx of `this` node."
   ^PayloadEvent [^NodeObject this]
   (let [e (event/map->PayloadEvent {:cmd-type        (:payload event/code)
                                     :id              (get-id this)
