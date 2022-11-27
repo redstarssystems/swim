@@ -8,20 +8,20 @@
              com.cognitect/transit-clj {:mvn/version "1.0.329"}}
 
  :aliases   {
-             :repl     {:extra-deps  {nrepl/nrepl                {:mvn/version "0.9.0"}
+             :repl     {:extra-deps  {nrepl/nrepl                {:mvn/version "1.0.0"}
                                       healthsamurai/matcho       {:mvn/version "0.3.9"}
                                       criterium/criterium        {:mvn/version "0.4.6"}
-                                      mvxcvi/puget               {:mvn/version "1.3.2"}
+                                      mvxcvi/puget               {:mvn/version "1.3.4"}
                                       com.github.igrishaev/bogus {:mvn/version "0.1.9"}
-                                      hashp/hashp                {:mvn/version "0.2.1"}}
+                                      hashp/hashp                {:mvn/version "0.2.2"}}
                         :extra-paths ["dev/src" "resources" "test"]
                         :jvm-opts    ["--enable-preview"]
                         :main-opts   ["--main" "nrepl.cmdline"]}
 
              :test     {:extra-deps  {org.clojure/test.check        {:mvn/version "1.1.1"}
                                       healthsamurai/matcho          {:mvn/version "0.3.9"}
-                                      lambdaisland/kaocha           {:mvn/version "1.69.1069"}
-                                      lambdaisland/kaocha-cloverage {:mvn/version "1.0.75"}}
+                                      lambdaisland/kaocha           {:mvn/version "1.71.1119"}
+                                      lambdaisland/kaocha-cloverage {:mvn/version "1.1.89"}}
                         :extra-paths ["resources" "test" "test/resources"]
                         :jvm-opts    ["--enable-preview"]
                         :main-opts   ["--main" "kaocha.runner"]}
@@ -32,7 +32,7 @@
 
 
              ;; slf4j-nop is required to suppress warning "org.slf4j.impl.StaticLoggerBinder"
-             :outdated {:extra-deps {com.github.liquidz/antq {:mvn/version "2.0.889"}
-                                     org.slf4j/slf4j-nop     {:mvn/version "1.7.36"}}
+             :outdated {:extra-deps {com.github.liquidz/antq {:mvn/version "2.2.962"}
+                                     org.slf4j/slf4j-nop     {:mvn/version "2.0.5"}}
                         :main-opts  ["-m" "antq.core"]}
              }}
