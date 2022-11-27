@@ -1309,6 +1309,21 @@
     (m/assert (dissoc (sut/get-oldest-neighbour this #{:left}) :updated-at) (dissoc nb3 :updated-at))))
 
 
+(deftest alive-neighbour?-test
+  (testing "Result for neighbours with alive statuses should be true"
+    (let [nb1 (sut/new-neighbour-node neighbour-data1)
+          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :suspect))]
+      (m/assert true (sut/alive-neighbour? nb1))
+      (m/assert true (sut/alive-neighbour? nb2))))
+
+  (testing "Result for not alive neighbours should be false"
+    (let [nb1 (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
+          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead))
+          nb3 (sut/new-neighbour-node (assoc neighbour-data3 :status :stop))]
+      (m/assert false (sut/alive-neighbour? nb1))
+      (m/assert false (sut/alive-neighbour? nb2))
+      (m/assert false (sut/alive-neighbour? nb3)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -2154,6 +2169,8 @@
           (remove-tap event-catcher-fn3)                    ;; unregister event catcher
           (sut/stop node1)
           (sut/stop node2))))))
+
+
 
 
 

@@ -1006,6 +1006,11 @@
     (let [desired-nb (get-neighbours-with-status this status-set)]
       (->> desired-nb (sort-by :updated-at) first))))
 
+(defn alive-neighbour?
+  "Returns true if neighbour has alive statuses."
+  [^NeighbourNode nb]
+  (boolean (#{:alive :suspect} (:status nb))))
+
 
 ;;;;;;;;;;;;;;;;;;;;
 
