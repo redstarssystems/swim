@@ -1052,7 +1052,7 @@
 
 
 (defn- expected-probe-event?
-  "Returns true if we send probe-event before, otherwise false"
+  "Returns true if we sent probe-event before, otherwise false"
   [^NodeObject this ^ProbeAckEvent e]
   (and (contains? (get-probe-events this) (.-probe_key e))    ;; check  we send probe-event before
     (= (.-neighbour_id e) (get-id this))))                    ;; this probe-ack for this node
@@ -1081,21 +1081,18 @@
 (defmethod process-incoming-event AntiEntropy
   [^NodeObject this ^AntiEntropy e]
   (let [neighbour-id (:id e)
-        nb           (or (get-neighbour this neighbour-id) :unknown-node)]
+        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
     (cond
 
-      (= :unknown-node nb)
+      (= :unknown-neighbour nb)
       (d> :anti-entropy-event-unknown-neighbour-error (get-id this) e)
 
-      ;; do nothing if event with outdated restart counter
       (not (suitable-restart-counter? this e))
       (d> :anti-entropy-event-bad-restart-counter-error (get-id this) e)
 
-      ;; do nothing if event with outdated tx
       (not (suitable-tx? this e))
       (d> :anti-entropy-event-bad-tx-error (get-id this) e)
 
-      ;; do not process events from not alive nodes
       (not (alive-neighbour? nb))
       (d> :anti-entropy-event-not-alive-neighbour-error (get-id this) e)
 
