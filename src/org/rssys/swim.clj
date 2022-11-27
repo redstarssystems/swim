@@ -852,9 +852,9 @@
   "Returns new LeftEvent event."
   ^LeftEvent [^NodeObject this]
   (let [e (event/map->LeftEvent {:cmd-type        (:left event/code)
-                               :id              (get-id this)
-                               :restart-counter (get-restart-counter this)
-                               :tx              (get-tx this)})]
+                                 :id              (get-id this)
+                                 :restart-counter (get-restart-counter this)
+                                 :tx              (get-tx this)})]
     (inc-tx this)
     e))
 
@@ -866,10 +866,10 @@
   "Returns new PayloadEvent event."
   ^PayloadEvent [^NodeObject this]
   (let [e (event/map->PayloadEvent {:cmd-type        (:payload event/code)
-                                  :id              (get-id this)
-                                  :restart-counter (get-restart-counter this)
-                                  :tx              (get-tx this)
-                                  :payload         (get-payload this)})]
+                                    :id              (get-id this)
+                                    :restart-counter (get-restart-counter this)
+                                    :tx              (get-tx this)
+                                    :payload         (get-payload this)})]
     (inc-tx this)
     e))
 
@@ -998,7 +998,7 @@
 
 
 (defn get-oldest-neighbour
-  "Returns the oldest neighbour. If `status-set` is omitted then use all statuses"
+  "Returns the oldest neighbour by :updated-at attribute. If `status-set` is omitted then use all statuses"
   ([^NodeObject this]
     (get-oldest-neighbour this spec/status-set))
   ([^NodeObject this ^PersistentHashSet status-set]
@@ -1057,7 +1057,7 @@
     (d> :probe-ack-event (get-id this) nb)
 
     (if (and (contains? (get-probe-events this) probe-key) ;; check  we send probe-event before
-            (= (.-neighbour_id e) (get-id this)))           ;; this probe-ack for this node
+          (= (.-neighbour_id e) (get-id this)))           ;; this probe-ack for this node
       (do (upsert-probe-ack this e)
           (when (not (#{:suspect :alive} (get-status this)))
             ;; we insert neighbour from  probe ack events only if our status not #{:suspect :alive}
@@ -1098,6 +1098,8 @@
               (upsert-neighbour this ae-neighbour))))))))
 
 
+;;;;;;;;;;
+;; code below is not verified
 
 (defn- process-indirect-ack
   [this e]
@@ -1245,6 +1247,7 @@
                                                        :events-vector   events-vector
                                                        :bad-udp-counter (:bad-udp-counter
                                                                           (swap! *stat update :bad-udp-counter inc))}))))
+
 
 ;; TODO: run periodic process for clean probe ack events - remember uuid key for non empty maps. On next iteration remembered uuids should be cleaned.
 
