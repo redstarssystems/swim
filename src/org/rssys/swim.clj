@@ -790,6 +790,7 @@
 
 ;;;;
 
+;; TODO: where to check if new cluster size is less than active nodes in a cluster?
 (defn new-cluster-size-event
   "Returns new NewClusterSizeEvent event. Increments tx of `this` node.
   This event should be created before cluster size changed."
@@ -1092,10 +1093,10 @@
           (if (get-neighbour this (:id ae-neighbour))
             (when (suitable-incarnation? this ae-neighbour)
               (d> :anti-entropy-event (get-id this) ae-neighbour)
-              (upsert-neighbour this ae-neighbour))
-            (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to neighbour map
+              (upsert-neighbour this ae-neighbour))         ;; update existing neighbour
+            (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to a neighbours map
               (d> :anti-entropy-event (get-id this) ae-neighbour)
-              (upsert-neighbour this ae-neighbour))))))))
+              (upsert-neighbour this ae-neighbour))))))))   ;; add a new neighbour
 
 
 ;;;;;;;;;;
