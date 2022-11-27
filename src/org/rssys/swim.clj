@@ -280,10 +280,10 @@
 
 
 (defn get-indirect-ping-event
-  "Get active indirect ping event by keyword  if exist"
-  ^PingEvent
-  [^NodeObject this ^Keyword indirect-id]
-  (get (get-indirect-ping-events this) indirect-id))
+  "Get active indirect ping event by neighbour id if exist"
+  ^IndirectPingEvent
+  [^NodeObject this ^UUID neighbour-id]
+  (get (get-indirect-ping-events this) neighbour-id))
 
 
 (defn get-payload
@@ -483,11 +483,16 @@
   (when-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
     (throw (ex-info "Invalid indirect ping event data"
              (->> indirect-ping-event (s/explain-data ::spec/indirect-ping-event) spec/problems))))
-  (let [indirect-id (.-neighbour_id indirect-ping-event)]
-    (d> :upsert-indirect-ping (get-id this) {:indirect-ping-event indirect-ping-event
+  (let [indirect-id            (.-neighbour_id indirect-ping-event)
+        previous-indirect-ping (get-indirect-ping-event this indirect-id)
+        new-attempt-number     (if previous-indirect-ping
+                                 (inc (.-attempt_number previous-indirect-ping))
+                                 (.-attempt_number indirect-ping-event))
+        indirect-ping-event'   (assoc indirect-ping-event :attempt-number new-attempt-number)]
+    (d> :upsert-indirect-ping (get-id this) {:indirect-ping-event indirect-ping-event'
                                              :indirect-id         indirect-id})
     (swap! (:*node this) assoc :indirect-ping-events
-      (assoc (get-indirect-ping-events this) indirect-id indirect-ping-event))))
+      (assoc (get-indirect-ping-events this) indirect-id indirect-ping-event'))))
 
 
 (defn delete-indirect-ping
