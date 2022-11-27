@@ -467,9 +467,16 @@
   [^NodeObject this ^PingEvent ping-event]
   (when-not (s/valid? ::spec/ping-event ping-event)
     (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::spec/ping-event) spec/problems))))
-  (d> :upsert-ping (get-id this) {:ping-event ping-event})
-  (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) (:neighbour-id ping-event) ping-event))
-  (:neighbour-id ping-event))
+
+  (let [ping-id            (.-neighbour_id ping-event)
+        previous-ping      (get-ping-event this ping-id)
+        new-attempt-number (if previous-ping
+                             (inc (.-attempt_number previous-ping))
+                             (.-attempt_number ping-event))
+        ping-event'        (assoc ping-event :attempt-number new-attempt-number)]
+    (d> :upsert-ping (get-id this) {:ping-event ping-event'})
+    (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) ping-id ping-event'))
+    ping-id))
 
 
 (defn delete-ping

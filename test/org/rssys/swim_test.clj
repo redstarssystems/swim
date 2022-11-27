@@ -517,6 +517,13 @@
       (m/assert
         {#uuid "00000000-0000-0000-0000-000000000001" (event/empty-ping)}
         (sut/get-ping-events this))
+
+      (testing "Upsert ping event with same id will increment attempt number"
+        (sut/upsert-ping this (event/empty-ping))
+        (sut/upsert-ping this (event/empty-ping))
+        (m/assert {:attempt-number 3}
+          (sut/get-ping-event this #uuid"00000000-0000-0000-0000-000000000001")))
+
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid ping event data"
               (sut/upsert-ping this {:a :bad-value})))))))
@@ -544,11 +551,13 @@
       (m/assert 1 (count (sut/get-indirect-ping-events this)))
       (m/assert {#uuid"00000000-0000-0000-0000-000000000002" (event/empty-indirect-ping)}
         (sut/get-indirect-ping-events this))
-      (testing "Upsert indirect ping with same id will increment attempt number "
+
+      (testing "Upsert indirect ping event with same id will increment attempt number"
         (sut/upsert-indirect-ping this (event/empty-indirect-ping))
         (sut/upsert-indirect-ping this (event/empty-indirect-ping))
         (m/assert {:attempt-number 3}
           (sut/get-indirect-ping-event this #uuid"00000000-0000-0000-0000-000000000002")))
+
       (testing "Wrong data is prohibited by spec"
         (is (thrown-with-msg? Exception #"Invalid indirect ping event data"
               (sut/upsert-indirect-ping this {:a :bad-value})))))))
