@@ -402,21 +402,22 @@
 
 (defn upsert-neighbour
   "Update existing or insert new neighbour to neighbours map"
-  [^NodeObject this ^NeighbourNode neighbour-node]
+  [^NodeObject this neighbour-node]
   (when-not (s/valid? ::spec/neighbour-node neighbour-node)
     (throw (ex-info "Invalid neighbour node data"
              (->> neighbour-node (s/explain-data ::spec/neighbour-node) spec/problems))))
-  (when (cluster-size-exceed? this)
-    (d> :upsert-neighbour-cluster-size-exceeded-error (get-id this)
-      {:nodes-in-cluster (nodes-in-cluster this)
-       :cluster-size     (get-cluster-size this)})
-    (throw (ex-info "Cluster size exceeded" {:nodes-in-cluster (nodes-in-cluster this)
-                                             :cluster-size     (get-cluster-size this)})))
+  (let [neighbour-not-exist? (not (boolean (get-neighbour this (:id neighbour-node))))]
+    (when (and neighbour-not-exist? (cluster-size-exceed? this))
+     (d> :upsert-neighbour-cluster-size-exceeded-error (get-id this)
+       {:nodes-in-cluster (nodes-in-cluster this)
+        :cluster-size     (get-cluster-size this)})
+     (throw (ex-info "Cluster size exceeded" {:nodes-in-cluster (nodes-in-cluster this)
+                                              :cluster-size     (get-cluster-size this)}))))
   (when-not (= (get-id this) (:id neighbour-node))
     (d> :upsert-neighbour (get-id this) {:neighbour-node neighbour-node})
     (swap! (:*node this) assoc :neighbours (assoc
                                              (get-neighbours this)
-                                             (.-id neighbour-node)
+                                             (:id neighbour-node)
                                              (assoc neighbour-node :updated-at (System/currentTimeMillis))))))
 
 

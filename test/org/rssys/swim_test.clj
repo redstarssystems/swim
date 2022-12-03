@@ -442,7 +442,22 @@
           (sut/upsert-neighbour this (sut/new-neighbour-node (assoc neighbour-data1 :port 5370)))
           (let [modified-nb (sut/get-neighbour this (:id neighbour-data1))]
             (is (not= timestamp (:updated-at modified-nb)))
-            (is (not= port (:port modified-nb)))))))))
+            (is (not= port (:port modified-nb))))))))
+
+  (testing "upsert neighbour should success if node exists in a neighbours table"
+    (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 2))]
+      (m/assert empty? (sut/get-neighbours this))
+      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+      (m/assert 1 (count (sut/get-neighbours this)))
+
+      (testing "do not upsert new neighbour if cluster size exceeded"
+        (is (thrown-with-msg? Exception #"Cluster size exceeded"
+           (sut/upsert-neighbour this neighbour-data3))))
+
+      (testing "upsert existing neighbour should success"
+        (sut/upsert-neighbour this (assoc neighbour-data1 :restart-counter 4))
+        (m/assert {:restart-counter 4} (sut/get-neighbour this (:id neighbour-data1)))
+        (m/assert 1 (count (sut/get-neighbours this)))))))
 
 
 (deftest delete-neighbour-test
