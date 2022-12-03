@@ -1759,6 +1759,7 @@
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/set-status node3 :alive)                       ;; very important!
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
@@ -1830,7 +1831,7 @@
                                   :neighbour-port    5376
                                   :port              5378
                                   :restart-counter   7
-                                  :status            :left
+                                  :status            :alive
                                   :tx                1}}
             @*expecting-event)
 

@@ -1140,9 +1140,9 @@
   "Returns true if this node is intermediate for indirect ping/ack event, otherwise false"
   [^NodeObject this e]
   (and
-    (= (get-host this) (.-intermediate_host e))
-    (= (get-port this) (.-intermediate_port e))
-    (= (get-id this)   (.-intermediate_id e))))
+    (= (get-host this) (:intermediate-host e))
+    (= (get-port this) (:intermediate-port e))
+    (= (get-id this)   (:intermediate-id e))))
 
 
 (defmethod process-incoming-event IndirectAckEvent
@@ -1172,10 +1172,10 @@
       :else
       (do
         (d> :indirect-ack-event (get-id this) e)
-        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :indirect))
+        (upsert-neighbour this (assoc nb :tx (.-tx e) :status (.-status e) :access :indirect))
         (delete-indirect-ping this neighbour-id)
-        (put-event this (new-alive-event this e))
-        (d> :alive-event (get-id this) {:neighbour-id (.-id e) :previous-status :suspect :access :indirect})))))
+        (when (= :alive (.-status e))
+          (put-event this (new-alive-event this e)))))))
 
 
 ;;;;;;;;;;
