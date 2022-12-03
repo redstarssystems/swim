@@ -408,11 +408,11 @@
              (->> neighbour-node (s/explain-data ::spec/neighbour-node) spec/problems))))
   (let [neighbour-not-exist? (not (boolean (get-neighbour this (:id neighbour-node))))]
     (when (and neighbour-not-exist? (cluster-size-exceed? this))
-     (d> :upsert-neighbour-cluster-size-exceeded-error (get-id this)
-       {:nodes-in-cluster (nodes-in-cluster this)
-        :cluster-size     (get-cluster-size this)})
-     (throw (ex-info "Cluster size exceeded" {:nodes-in-cluster (nodes-in-cluster this)
-                                              :cluster-size     (get-cluster-size this)}))))
+      (d> :upsert-neighbour-cluster-size-exceeded-error (get-id this)
+        {:nodes-in-cluster (nodes-in-cluster this)
+         :cluster-size     (get-cluster-size this)})
+      (throw (ex-info "Cluster size exceeded" {:nodes-in-cluster (nodes-in-cluster this)
+                                               :cluster-size     (get-cluster-size this)}))))
   (when-not (= (get-id this) (:id neighbour-node))
     (d> :upsert-neighbour (get-id this) {:neighbour-node neighbour-node})
     (swap! (:*node this) assoc :neighbours (assoc
@@ -1126,6 +1126,56 @@
             (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to a neighbours map
               (d> :anti-entropy-event (get-id this) ae-neighbour)
               (upsert-neighbour this ae-neighbour))))))))   ;; add a new neighbour
+
+
+(defn- expected-indirect-ack-event?
+  "Returns true if we sent indirect-ping-event before, otherwise false"
+  [^NodeObject this ^IndirectAckEvent e]
+  (let [indirect-ping-request-exist? (boolean (get-indirect-ping-event this (:id e)))
+        receiver-this-node?          (= (.-neighbour_id e) (get-id this))]
+    (and indirect-ping-request-exist? receiver-this-node?)))
+
+
+(defn- intermediate-node?
+  "Returns true if this node is intermediate for indirect ping/ack event, otherwise false"
+  [^NodeObject this e]
+  (and
+    (= (get-host this) (.-intermediate_host e))
+    (= (get-port this) (.-intermediate_port e))
+    (= (get-id this)   (.-intermediate_id e))))
+
+
+(defmethod process-incoming-event IndirectAckEvent
+  [^NodeObject this ^IndirectAckEvent e]
+  (let [neighbour-id (:id e)
+        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+
+    (cond
+
+      (intermediate-node? this e)
+      (do
+        (d> :intermediate-node-indirect-ack-event (get-id this) e)
+        (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
+
+      (= :unknown-neighbour nb)
+      (d> :indirect-ack-event-unknown-neighbour-error (get-id this) e)
+
+      (not (suitable-restart-counter? this e))
+      (d> :indirect-ack-event-bad-restart-counter-error (get-id this) e)
+
+      (not (suitable-tx? this e))
+      (d> :indirect-ack-event-bad-tx-error (get-id this) e)
+
+      (not (expected-indirect-ack-event? this e))
+      (d> :indirect-ack-event-not-expected-error (get-id this) e)
+
+      :else
+      (do
+        (d> :indirect-ack-event (get-id this) e)
+        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :indirect))
+        (delete-indirect-ping this neighbour-id)
+        (put-event this (new-alive-event this e))
+        (d> :alive-event (get-id this) {:neighbour-id (.-id e) :previous-status :suspect :access :indirect})))))
 
 
 ;;;;;;;;;;
