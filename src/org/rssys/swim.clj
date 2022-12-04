@@ -1152,6 +1152,9 @@
 
     (cond
 
+      (not (alive-node? this))
+      (d> :indirect-ack-event-not-alive-node-error (get-id this) e)
+
       (intermediate-node? this e)
       (do
         (d> :intermediate-node-indirect-ack-event (get-id this) e)

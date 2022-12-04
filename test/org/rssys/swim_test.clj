@@ -1389,6 +1389,13 @@
 ;; SWIM business logic tests
 ;;;;
 
+(defmacro no-timeout-check
+  "Test check if attempt of (deref *p) has no timeout *max-test-timeout*.
+  If timeout occurred then :timeout value will be delivered to promise and test will not pass."
+  [*p]
+  `(when-not (m/dessert :timeout (deref ~*p *max-test-timeout* :timeout))
+     (deliver ~*p :timeout)))
+
 
 (deftest probe-test
   (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
@@ -1442,8 +1449,10 @@
 
           (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
 
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
-          (m/dessert :timeout (deref *expecting-error *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event)
+
+          (no-timeout-check *expecting-error)
+
           (m/assert 1 (sut/nodes-in-cluster node1))
           (m/assert :upsert-neighbour-cluster-size-exceeded-error @*expecting-error)
 
@@ -1474,7 +1483,8 @@
 
           (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (:host node-data1) (:port node-data1))
 
-          (m/dessert :timeout (deref *expecting-error *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-error)
+
           (m/assert :probe-ack-event-probe-never-send-error @*expecting-error)
 
           (remove-tap error-catcher-fn)
@@ -1506,7 +1516,7 @@
           (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
 
           ;; wait for ack
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event)
 
           (testing "Neighbour from Probe Ack should be added to neighbours map cause cluster size limit is not reached"
             (m/assert 2 (sut/nodes-in-cluster node1))
@@ -1546,7 +1556,9 @@
           (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
           (sut/set-status node1 :suspect)
           (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+
+          (no-timeout-check *expecting-event)
+
           (m/assert 1 (sut/nodes-in-cluster node1))
           (catch Exception e
             (println (ex-message e)))
@@ -1583,7 +1595,8 @@
           ;; sending normal anti-entropy event to node 2
           (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
 
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event)
+
           (m/assert 2 (count (sut/get-neighbours node2)))
           (m/assert (dissoc neighbour-data2 :updated-at) (sut/get-neighbour node2 (:id neighbour-data2)))
 
@@ -1619,7 +1632,8 @@
           ;; sending normal anti-entropy event to node 2
           (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
 
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event)
+
           (m/assert :anti-entropy-event-unknown-neighbour-error @*expecting-event)
           (m/assert 0 (count (sut/get-neighbours node2)))
 
@@ -1657,7 +1671,8 @@
           ;; sending anti-entropy event to node 2 with outdated restart counter
           (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
 
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event)
+
           (m/assert :anti-entropy-event-bad-restart-counter-error @*expecting-event)
           (m/assert 1 (count (sut/get-neighbours node2)))
 
@@ -1695,7 +1710,8 @@
           ;; sending anti-entropy event to node 2 with outdated tx
           (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
 
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event)
+
           (m/assert :anti-entropy-event-bad-tx-error @*expecting-event)
           (m/assert 1 (count (sut/get-neighbours node2)))
 
@@ -1733,7 +1749,8 @@
           ;; sending anti-entropy event to node 2 from not alive neighbour
           (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
 
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event)
+
           (m/assert :anti-entropy-event-not-alive-neighbour-error @*expecting-event)
           (m/assert 1 (count (sut/get-neighbours node2)))
 
@@ -1759,7 +1776,9 @@
         (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
         (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/set-status node3 :alive)                       ;; very important!
+        (sut/set-status node3 :alive)
+        (sut/set-status node2 :alive)
+        (sut/set-status node1 :alive)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
@@ -1813,8 +1832,9 @@
           ;; sending normal indirect ack event from node 3 to node 1 via node 2
           (sut/send-event node3 indirect-ack-event (sut/get-host node2) (sut/get-port node2))
 
-          (m/dessert :timeout (deref *expecting-event2 *max-test-timeout* :timeout))
-          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (no-timeout-check *expecting-event2)
+
+          (no-timeout-check *expecting-event)
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event
@@ -1839,7 +1859,8 @@
             (m/assert nil (sut/get-indirect-ping-event node1 neighbour-id)))
 
           (testing "put event about alive node is success"
-            (m/dessert :timeout (deref *expecting-event3 *max-test-timeout* :timeout))
+            (no-timeout-check *expecting-event3)
+
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :put-event
                :node-id            #uuid "00000000-0000-0000-0000-000000000001"
@@ -1866,6 +1887,548 @@
           (sut/stop node3)))))
 
   (testing "Do not process indirect ack event from unknown neighbour"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)
+          intermediate-id (sut/get-id node2)
+          neighbour-id    (sut/get-id node3)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/set-status node3 :alive)
+        (sut/set-status node2 :alive)
+        (sut/set-status node1 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
+              _                  (sut/upsert-indirect-ping node1 indirect-ping)
+              indirect-ack-event (sut/new-indirect-ack-event node3 indirect-ping)
+              *expecting-event   (promise)
+              event-catcher-fn   (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ack-event-unknown-neighbour-error)
+                                       (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          ;; remove node3 from known hosts
+          (sut/delete-neighbour node1 neighbour-id)
+
+          ;; sending indirect ack event from unknown node 3 to node 1 via node 2
+          (sut/send-event node3 indirect-ack-event (sut/get-host node2) (sut/get-port node2))
+
+          (no-timeout-check *expecting-event)
+
+          (m/assert ^:matcho/strict
+            {:org.rssys.swim/cmd :indirect-ack-event-unknown-neighbour-error
+             :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+             :data
+             {:attempt-number    1
+              :cmd-type          15
+              :host              "127.0.0.1"
+              :id                #uuid "00000000-0000-0000-0000-000000000003"
+              :intermediate-host "127.0.0.1"
+              :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+              :intermediate-port 5377
+              :neighbour-host    "127.0.0.1"
+              :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
+              :neighbour-port    5376
+              :port              5378
+              :restart-counter   7
+              :status            :alive
+              :tx                1}}
+            @*expecting-event)
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not accept indirect ack event on node1 from node3 with outdated restart counter"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)
+          intermediate-id (sut/get-id node2)
+          neighbour-id    (sut/get-id node3)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/set-status node3 :alive)
+        (sut/set-status node2 :alive)
+        (sut/set-status node1 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data2 :restart-counter 999)))
+
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
+              _                  (sut/upsert-indirect-ping node1 indirect-ping)
+              indirect-ack-event (sut/new-indirect-ack-event node3 indirect-ping)
+              *expecting-event   (promise)
+              event-catcher-fn   (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ack-event-bad-restart-counter-error)
+                                       (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          ;; sending outdated indirect ack event from node 3 to node 1 via node 2
+          (sut/send-event node3 indirect-ack-event (sut/get-host node2) (sut/get-port node2))
+
+          (no-timeout-check *expecting-event)
+
+          (m/assert ^:matcho/strict
+            {:org.rssys.swim/cmd :indirect-ack-event-bad-restart-counter-error
+             :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+             :data
+             {:attempt-number    1
+              :cmd-type          15
+              :host              "127.0.0.1"
+              :id                #uuid "00000000-0000-0000-0000-000000000003"
+              :intermediate-host "127.0.0.1"
+              :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+              :intermediate-port 5377
+              :neighbour-host    "127.0.0.1"
+              :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
+              :neighbour-port    5376
+              :port              5378
+              :restart-counter   7
+              :status            :alive
+              :tx                1}}
+            @*expecting-event)
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not accept indirect ack event on node1 from node3 with outdated tx"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)
+          intermediate-id (sut/get-id node2)
+          neighbour-id    (sut/get-id node3)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/set-status node3 :alive)
+        (sut/set-status node2 :alive)
+        (sut/set-status node1 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data2 :tx 999)))
+
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
+              _                  (sut/upsert-indirect-ping node1 indirect-ping)
+              indirect-ack-event (sut/new-indirect-ack-event node3 indirect-ping)
+              *expecting-event   (promise)
+              event-catcher-fn   (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ack-event-bad-tx-error)
+                                       (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          ;; sending outdated indirect ack event from node 3 to node 1 via node 2
+          (sut/send-event node3 indirect-ack-event (sut/get-host node2) (sut/get-port node2))
+
+          (no-timeout-check *expecting-event)
+
+          (m/assert ^:matcho/strict
+            {:org.rssys.swim/cmd :indirect-ack-event-bad-tx-error
+             :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+             :data
+             {:attempt-number    1
+              :cmd-type          15
+              :host              "127.0.0.1"
+              :id                #uuid "00000000-0000-0000-0000-000000000003"
+              :intermediate-host "127.0.0.1"
+              :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+              :intermediate-port 5377
+              :neighbour-host    "127.0.0.1"
+              :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
+              :neighbour-port    5376
+              :port              5378
+              :restart-counter   7
+              :status            :alive
+              :tx                1}}
+            @*expecting-event)
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not process indirect ack event if indirect ping never sent"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)
+          intermediate-id (sut/get-id node2)
+          neighbour-id    (sut/get-id node3)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/set-status node3 :alive)
+        (sut/set-status node2 :alive)
+        (sut/set-status node1 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
+              ;; here we omit put this ping into the indirect ping table on node1
+              indirect-ack-event (sut/new-indirect-ack-event node3 indirect-ping)
+              *expecting-event   (promise)
+              event-catcher-fn   (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ack-event-not-expected-error)
+                                       (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          ;; sending indirect ack event from node 3 to node 1 via node 2
+          (sut/send-event node3 indirect-ack-event (sut/get-host node2) (sut/get-port node2))
+
+          (no-timeout-check *expecting-event)
+
+          (m/assert ^:matcho/strict
+            {:org.rssys.swim/cmd :indirect-ack-event-not-expected-error
+             :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+             :data
+             {:attempt-number    1
+              :cmd-type          15
+              :host              "127.0.0.1"
+              :id                #uuid "00000000-0000-0000-0000-000000000003"
+              :intermediate-host "127.0.0.1"
+              :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+              :intermediate-port 5377
+              :neighbour-host    "127.0.0.1"
+              :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
+              :neighbour-port    5376
+              :port              5378
+              :restart-counter   7
+              :status            :alive
+              :tx                1}}
+            @*expecting-event)
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not process intermediate events if node is not alive"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)
+          intermediate-id (sut/get-id node2)
+          neighbour-id    (sut/get-id node3)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/set-status node3 :alive)
+        (sut/set-status node2 :left)
+        (sut/set-status node1 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
+              _                  (sut/upsert-indirect-ping node1 indirect-ping)
+              indirect-ack-event (sut/new-indirect-ack-event node3 indirect-ping)
+              *expecting-event   (promise)
+              event-catcher-fn   (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ack-event-not-alive-node-error)
+                                       (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          ;; sending normal indirect ack event from node 3 to node 1 via not alive node 2
+          (sut/send-event node3 indirect-ack-event (sut/get-host node2) (sut/get-port node2))
+
+          (no-timeout-check *expecting-event)
+
+          (m/assert ^:matcho/strict
+            {:org.rssys.swim/cmd :indirect-ack-event-not-alive-node-error
+             :node-id            #uuid "00000000-0000-0000-0000-000000000002"
+             :data               {:attempt-number    1
+                                  :cmd-type          15
+                                  :host              "127.0.0.1"
+                                  :id                #uuid "00000000-0000-0000-0000-000000000003"
+                                  :intermediate-host "127.0.0.1"
+                                  :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+                                  :intermediate-port 5377
+                                  :neighbour-host    "127.0.0.1"
+                                  :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
+                                  :neighbour-port    5376
+                                  :port              5378
+                                  :restart-counter   7
+                                  :status            :alive
+                                  :tx                1}}
+            @*expecting-event)
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not process indirect ack events if node is not alive"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)
+          intermediate-id (sut/get-id node2)
+          neighbour-id    (sut/get-id node3)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/set-status node3 :alive)
+        (sut/set-status node2 :alive)
+        (sut/set-status node1 :left)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
+              _                  (sut/upsert-indirect-ping node1 indirect-ping)
+              indirect-ack-event (sut/new-indirect-ack-event node3 indirect-ping)
+              *expecting-event   (promise)
+              event-catcher-fn   (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ack-event-not-alive-node-error)
+                                       (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          ;; sending normal indirect ack event from node 3 to node 1 via not alive node 2
+          (sut/send-event node3 indirect-ack-event (sut/get-host node2) (sut/get-port node2))
+
+          (no-timeout-check *expecting-event)
+
+          (m/assert ^:matcho/strict
+            {:org.rssys.swim/cmd :indirect-ack-event-not-alive-node-error
+             :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+             :data               {:attempt-number    1
+                                  :cmd-type          15
+                                  :host              "127.0.0.1"
+                                  :id                #uuid "00000000-0000-0000-0000-000000000003"
+                                  :intermediate-host "127.0.0.1"
+                                  :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+                                  :intermediate-port 5377
+                                  :neighbour-host    "127.0.0.1"
+                                  :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
+                                  :neighbour-port    5376
+                                  :port              5378
+                                  :restart-counter   7
+                                  :status            :alive
+                                  :tx                1}}
+            @*expecting-event)
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3))))))
+
+
+#_(deftest ^:logic indirect-ping-event-test
+
+  (testing "Accept normal indirect ping event on node3 from node1 via node2"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)
+          intermediate-id (sut/get-id node2)
+          neighbour-id    (sut/get-id node3)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
+              _                  (sut/upsert-indirect-ping node1 indirect-ping)
+
+              *expecting-event   (promise)
+              event-catcher-fn   (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ping-event)
+                                       (deliver *expecting-event v))))
+              *expecting-event2  (promise)
+              event-catcher-fn2  (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :intermediate-node-indirect-ping-event)
+                                       (deliver *expecting-event2 v))))
+              *expecting-event3  (promise)
+              event-catcher-fn3  (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (= cmd :indirect-ack-event)
+                                       (deliver *expecting-event3 v))))]
+
+          (add-tap event-catcher-fn)
+          (add-tap event-catcher-fn2)
+          (add-tap event-catcher-fn3)
+
+
+          ;; sending normal indirect ping event from node1 to node3 via node2
+          (sut/send-event node1 indirect-ping (sut/get-host node2) (sut/get-port node2))
+
+          (m/dessert :timeout (deref *expecting-event2 *max-test-timeout* :timeout))
+          (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
+          (m/dessert :timeout (deref *expecting-event3 *max-test-timeout* :timeout))
+
+          (testing "node2 should receive intermediate indirect ping event from node1 to node2"
+            (m/assert ^:matcho/strict
+              {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :org.rssys.swim/cmd :intermediate-node-indirect-ping-event
+               :data
+               {:attempt-number    1
+                :cmd-type          14
+                :host              "127.0.0.1"
+                :id                #uuid "00000000-0000-0000-0000-000000000001"
+                :intermediate-host "127.0.0.1"
+                :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+                :intermediate-port 5377
+                :neighbour-host    "127.0.0.1"
+                :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
+                :neighbour-port    5378
+                :port              5376
+                :restart-counter   8
+                :tx                1}}
+              @*expecting-event2))
+
+          (testing "node3 should receive indirect ping event from node1 via node2"
+            (m/assert ^:matcho/strict
+             {:org.rssys.swim/cmd :indirect-ping-event
+              :node-id            #uuid "00000000-0000-0000-0000-000000000003"
+              :data
+              {:attempt-number    1
+               :cmd-type          14
+               :host              "127.0.0.1"
+               :id                #uuid "00000000-0000-0000-0000-000000000001"
+               :intermediate-host "127.0.0.1"
+               :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+               :intermediate-port 5377
+               :neighbour-host    "127.0.0.1"
+               :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
+               :neighbour-port    5378
+               :port              5376
+               :restart-counter   8
+               :tx                1}}
+             @*expecting-event))
+
+          (testing "node3 should generate indirect ack event to node1 via node2"
+            (m/assert ^:matcho/strict
+              {:node-id            #uuid "00000000-0000-0000-0000-000000000003"
+               :org.rssys.swim/cmd :indirect-ack-event
+               :data
+               {:attempt-number    1
+                :cmd-type          15
+                :host              "127.0.0.1"
+                :id                #uuid "00000000-0000-0000-0000-000000000003"
+                :intermediate-host "127.0.0.1"
+                :intermediate-id   #uuid "00000000-0000-0000-0000-000000000002"
+                :intermediate-port 5377
+                :neighbour-host    "127.0.0.1"
+                :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
+                :neighbour-port    5376
+                :port              5378
+                :restart-counter   7
+                :status            :left
+                :tx                2}}
+              @*expecting-event3))
+
+          (remove-tap event-catcher-fn)
+          (remove-tap event-catcher-fn2)
+          (remove-tap event-catcher-fn3))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  #_#_#_#_(testing "Do not process indirect ack event from unknown neighbour"
     (let [node1           (sut/new-node-object node-data1 cluster)
           node2           (sut/new-node-object node-data2 cluster)
           node3           (sut/new-node-object node-data3 cluster)
