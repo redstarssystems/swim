@@ -15,12 +15,11 @@
 
 (defn run-dev
   []
-  (add-tap t-prn>)
-
-  (set! *warn-on-reflection* true))
+  (add-tap t-prn>))
 
 
 (comment
+  (set! *warn-on-reflection* true)
   (run-dev)
   (add-tap (bound-fn* puget.printer/cprint))
   (tap> {:org.rssys.swim/cmd true :a 1 :b "2"})

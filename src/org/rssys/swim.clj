@@ -1136,6 +1136,14 @@
     (and indirect-ping-request-exist? receiver-this-node?)))
 
 
+(defn- expected-ack-event?
+  "Returns true if we sent ping-event before, otherwise false"
+  [^NodeObject this ^AckEvent e]
+  (let [ping-request-exist? (boolean (get-ping-event this (:id e)))
+        receiver-this-node? (= (.-neighbour_id e) (get-id this))]
+    (and ping-request-exist? receiver-this-node?)))
+
+
 (defn- intermediate-node?
   "Returns true if this node is intermediate for indirect ping/ack event, otherwise false"
   [^NodeObject this e]
@@ -1181,59 +1189,77 @@
           (put-event this (new-alive-event this e)))))))
 
 
-;;;;;;;;;;
-;; code below is not verified
+(defmethod process-incoming-event IndirectPingEvent
+  [^NodeObject this ^IndirectPingEvent e]
+  (let [neighbour-id (:id e)
+        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
 
-(defn- process-indirect-ack
-  [this e]
-  (let [nb (get-neighbour this (.-id e))]
-    (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :indirect))
-    (delete-indirect-ping this (.-id e))
-    (when (= :suspect (:status nb))
-      (put-event this (new-alive-event this e))
-      (inc-tx this)
-      (d> :alive-event (get-id this) {:neighbour-id (.-id e) :previous-status :suspect}))
-    (d> :indirect-ack-event (get-id this) e)))
+    (cond
+
+      (not (alive-node? this))
+      (d> :indirect-ping-event-not-alive-node-error (get-id this) e)
+
+      (intermediate-node? this e)
+      (do
+        (d> :intermediate-node-indirect-ping-event (get-id this) e)
+        (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
+
+      (= :unknown-neighbour nb)
+      (d> :indirect-ping-event-unknown-neighbour-error (get-id this) e)
+
+      (not (suitable-restart-counter? this e))
+      (d> :indirect-ping-event-bad-restart-counter-error (get-id this) e)
+
+      (not (suitable-tx? this e))
+      (d> :indirect-ping-event-bad-tx-error (get-id this) e)
+
+      (not (= (get-id this) (.-neighbour_id e)))
+      (d> :indirect-ping-event-neighbour-id-mismatch-error (get-id this) e)
+
+      :else
+      (let [_                  (d> :indirect-ping-event (get-id this) e)
+            indirect-ack-event (new-indirect-ack-event this e)]
+        (d> :indirect-ack-event (get-id this) indirect-ack-event)
+        (send-event this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
 
 
 (defmethod process-incoming-event AckEvent
   [^NodeObject this ^AckEvent e]
   (let [neighbour-id (:id e)
-        nb           (get-neighbour this neighbour-id)]
+        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+
     (cond
 
-      ;; do nothing if event from unknown node
-      (nil? nb)
+      (not (alive-node? this))
+      (d> :ack-event-not-alive-node-error (get-id this) e)
+
+      (= :unknown-neighbour nb)
       (d> :ack-event-unknown-neighbour-error (get-id this) e)
 
-      ;; do nothing if event with outdated restart counter
+      (not (alive-neighbour? nb))
+      (d> :ack-event-not-alive-neighbour-error (get-id this) e)
+
       (not (suitable-restart-counter? this e))
       (d> :ack-event-bad-restart-counter-error (get-id this) e)
 
-      ;; do nothing if event with outdated tx
       (not (suitable-tx? this e))
       (d> :ack-event-bad-tx-error (get-id this) e)
 
-      ;; do not process events from not alive nodes
-      (not (#{:alive :suspect} (:status nb)))
-      (d> :ack-event-not-alive-neighbour-error (get-id this) e)
+      (not (expected-ack-event? this e))
+      (d> :ack-event-not-expected-error (get-id this) e)
 
-      ;; do nothing if ack is not requested
-      (nil? (get-ping-event this (:id e)))
-      (if (get-indirect-ping-event this (:id e))
-        (process-indirect-ack this e)
-        (d> :ack-event-no-active-ping-error (get-id this) e))
+      :else
+      (do
+        (d> :ack-event (get-id this) e)
+        (delete-ping this neighbour-id)
+        (when (= :suspect (:status nb))
+          (put-event this (new-alive-event this e)))
+        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))))))
 
 
-      :else (do
-              ;; here we work only with alive and suspect nodes
-              (delete-ping this neighbour-id)
-              (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))
-              (when (= :suspect (:status nb))
-                (put-event this (new-alive-event this e))
-                (inc-tx this)
-                (d> :alive-event (get-id this) {:neighbour-id neighbour-id :previous-status :suspect}))
-              (d> :ack-event (get-id this) e)))))
+;;;;;;;;;;
+;; code below is not verified
+
 
 
 (defn- process-incoming-indirect-ping
