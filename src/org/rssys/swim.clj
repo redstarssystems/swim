@@ -1137,7 +1137,8 @@
 
 
 (defn- expected-ack-event?
-  "Returns true if we sent ping-event before, otherwise false"
+  "Returns true if ack event corresponds to ping-event from this node,
+   otherwise false"
   [^NodeObject this ^AckEvent e]
   (let [ping-request-exist? (boolean (get-ping-event this (:id e)))
         receiver-this-node? (= (.-neighbour_id e) (get-id this))]
@@ -1257,76 +1258,44 @@
         (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))))))
 
 
-;;;;;;;;;;
-;; code below is not verified
-
-
-
-(defn- process-incoming-indirect-ping
-  "Process indirect ping. Internal function."
-  [^NodeObject this ^PingEvent e]
-  (upsert-indirect-ping this e)
-  (let [nb (get-neighbour this (.-neighbour_id e))]
-    (new-probe-event this (:host nb) (:port nb) (keyword (str (.-id e) "->" (.-neighbour_id e))))))
-
-
-(defn- process-incoming-ping
-  "Process ping. Internal function."
+(defmethod process-incoming-event PingEvent
   [^NodeObject this ^PingEvent e]
   (let [neighbour-id (:id e)
-        nb           (get-neighbour this neighbour-id)]
+        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+
     (cond
 
-      ;; if this id is not equal to addressee id then do nothing
-      (not= (get-id this) (.-neighbour_id e))
-      (d> :ping-event-different-addressee-error (get-id this) e)
+      (not (alive-node? this))
+      (d> :ping-event-not-alive-node-error (get-id this) e)
 
-      ;; do nothing if event from unknown node
-      (nil? nb)
+      (= :unknown-neighbour nb)
       (d> :ping-event-unknown-neighbour-error (get-id this) e)
 
-      ;; send dead event if outdated restart counter
-      (not (suitable-restart-counter? this e))
-      (let [dead-event (new-dead-event this e)]
-        (d> :ping-event-bad-restart-counter-error (get-id this) e)
-        ;; we don't put it to outgoing queue because it is known fact
-        (send-event this dead-event neighbour-id)
-        (inc-tx this)
-        (d> :ping-event-reply-dead-event (get-id this) dead-event))
+      (not (alive-neighbour? nb))
+      (do
+        (send-event this (new-dead-event this neighbour-id) neighbour-id)
+        (d> :ping-event-not-alive-neighbour-error (get-id this) e))
 
-      ;; do nothing if event with outdated tx
+      (not (suitable-restart-counter? this e))
+      (do
+        (send-event this (new-dead-event this neighbour-id) neighbour-id)
+        (d> :ping-event-bad-restart-counter-error (get-id this) e))
+
       (not (suitable-tx? this e))
       (d> :ping-event-bad-tx-error (get-id this) e)
 
-      ;; todo check host port from event and from nb map and if changed then update them in mb map
-
-      ;; do not process events from not alive nodes
-      (not (#{:alive :suspect} (:status nb)))
-      (d> :ping-event-not-alive-neighbour-error (get-id this) e)
+      (not (= (get-id this) (.-neighbour_id e)))
+      (d> :ping-event-neighbour-id-mismatch-error (get-id this) e)
 
       :else
-      ;; process ping event only for :alive :suspect statuses
-      (let [ack-event      (new-ack-event this e)
-            current-status (:status nb)]
-        (inc-tx this)                                       ;; every event on node increments tx
-        (d> :ping-event-ack-event (get-id this) ack-event)
-        (send-event this ack-event (.-host e) (.-port e))
-        ;; update tx field for neighbour, and set status as :alive
-        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))
-        (when (= :suspect current-status)
-          (put-event this (new-alive-event this e))
-          (inc-tx this)                                     ;; we discovered new fact that neighbour is alive
-          (d> :alive-event (get-id this) {:neighbour-id neighbour-id :previous-status current-status}))))))
-
-
-(defmethod process-incoming-event PingEvent
-  [^NodeObject this ^PingEvent e]
-  (cond
-    (= :direct (.-ptype e))
-    (process-incoming-ping this e)
-
-    (= :indirect (.-ptype e))
-    (process-incoming-indirect-ping this e)))
+      (do
+        (d> :ping-event (get-id this) e)
+        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :host (.-host e) :port (.-port e)))
+        (let [ack-event (new-ack-event this e)]
+          (send-event this ack-event neighbour-id)
+          (d> :ack-event (get-id this) ack-event))
+        (when (= :suspect (:status nb))
+          (put-event this (new-alive-event this e)))))))
 
 
 
