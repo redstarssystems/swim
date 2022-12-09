@@ -3303,7 +3303,8 @@
                                     (when (and
                                             (= cmd :upsert-neighbour)
                                             (= (sut/get-id node2) (:node-id v))
-                                            (= :alive (-> v :data :neighbour-node :status)))
+                                            (= :alive (-> v :data :neighbour-node :status))
+                                            (= 1 (-> v :data :neighbour-node :tx))) ;; there may be another events in tap> queue
                                       (deliver *expecting-event4 v))))]
 
           (add-tap event-catcher-fn)
