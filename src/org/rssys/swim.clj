@@ -73,6 +73,7 @@
   [cmd-kw node-id data]
   (when (:enable-diag-tap? @*config)
     (tap> {::cmd    cmd-kw
+           :ts      (System/currentTimeMillis)
            :node-id node-id
            :data    data})))
 
