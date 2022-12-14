@@ -730,12 +730,12 @@
 (defn new-dead-event
   "Returns new dead event. Increments tx of `this` node."
   (^DeadEvent [^NodeObject this ^UUID neighbour-id]
-    (let [nb                  (get-neighbour this neighbour-id)
-          nb-restart-counter  (:restart-counter nb)
-          nb-tx               (:tx nb)]
+    (let [nb                 (get-neighbour this neighbour-id)
+          nb-restart-counter (:restart-counter nb)
+          nb-tx              (:tx nb)]
       (new-dead-event this neighbour-id nb-restart-counter nb-tx)))
 
-  (^DeadEvent [^NodeObject this  neighbour-id  neighbour-restart-counter  neighbour-tx]
+  (^DeadEvent [^NodeObject this neighbour-id neighbour-restart-counter neighbour-tx]
     (let [dead-event
           (event/map->DeadEvent {:cmd-type                  (:dead event/code)
                                  :id                        (get-id this)
@@ -1171,7 +1171,7 @@
   (and
     (= (get-host this) (:intermediate-host e))
     (= (get-port this) (:intermediate-port e))
-    (= (get-id this)   (:intermediate-id e))))
+    (= (get-id this) (:intermediate-id e))))
 
 
 (defmethod process-incoming-event IndirectAckEvent
@@ -1343,7 +1343,7 @@
     (d> :join-event-bad-tx-error (get-id this) e)
 
     :else
-    (let [nb (new-neighbour-node (.-id e) (.-host e) (.-port e))
+    (let [nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
           alive-event (new-alive-event this e)]
       (d> :join-event (get-id this) e)
       (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :direct))
@@ -1351,51 +1351,58 @@
       (put-event this alive-event))))
 
 
-;;(defn itself-alive?
-;;  "Alive event from node about itself."
-;;  [^AliveEvent e]
-;;  (= (.-neighbour_id e) (.-id e)))
-;;
-;;(defmethod process-incoming-event AliveEvent
-;;  [^NodeObject this ^AliveEvent e]
-;;  (let [neighbour-id (:id e)
-;;        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
-;;
-;;    (cond
-;;
-;;      (not (alive-node? this))
-;;      (d> :alive-event-not-alive-node-error (get-id this) e)
-;;
-;;      (and (= :unknown-neighbour nb) (not (itself-alive? e)))
-;;      (d> :alive-event-unknown-neighbour-error (get-id this) e)
-;;
-;;      (and (not (alive-neighbour? nb)) (not (itself-alive? e)))
-;;      (d> :alive-event-not-alive-neighbour-error (get-id this) e)
-;;
-;;      (not (suitable-restart-counter? this e))
-;;      (d> :alive-event-bad-restart-counter-error (get-id this) e)
-;;
-;;      (not (suitable-tx? this e))
-;;      (d> :alive-event-bad-tx-error (get-id this) e)
-;;
-;;      :else
-;;      (let [sender-nb-id              (.-id e)
-;;            sender-nb-tx              (.-tx e)
-;;            sender-restart-counter    (.-restart_counter e)
-;;            alive-nb-id               (.-neighbour_id e)
-;;            alive-nb-tx               (.-neighbour_tx e)
-;;            alive-nb-restart-couunter (.-neighbour_restart_counter e)]
-;;        (d> :alive-event (get-id this) e)
-;;        (new-neighbour-node {})
-;;        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))
-;;        (put-event this e)))))
+(defn- alive-event-join-confirm?
+  "Check that status of `this` is join and alive event about `this` node."
+  [^NodeObject this ^AliveEvent e]
+  (and (= (.-neighbour_id e) (get-id this))
+    (= :join (get-status this))))
+
+
+(defmethod process-incoming-event AliveEvent
+  [^NodeObject this ^AliveEvent e]
+  (let [sender-nb (or (get-neighbour this (:id e)) :unknown-neighbour)
+        alive-nb  (get-neighbour this (.-neighbour_id e))]
+
+    (cond
+
+      (alive-event-join-confirm? this e)
+      (do
+        (d> :alive-event-join-confirmed (get-id this) e)
+        (set-status this :alive))
+
+      (not (alive-node? this))
+      (d> :alive-event-not-alive-node-error (get-id this) e)
+
+      (= :unknown-neighbour sender-nb)
+      (d> :alive-event-unknown-neighbour-error (get-id this) e)
+
+      (not (alive-neighbour? sender-nb))
+      (d> :alive-event-not-alive-neighbour-error (get-id this) e)
+
+      (not (suitable-restart-counter? this e))
+      (d> :alive-event-bad-restart-counter-error (get-id this) e)
+
+      (not (suitable-tx? this e))
+      (d> :alive-event-bad-tx-error (get-id this) e)
+
+      :else
+      (let [alive-nb-id              (.-neighbour_id e)
+            alive-nb-tx              (.-neighbour_tx e)
+            alive-nb-restart-counter (.-neighbour_restart_counter e)]
+        (d> :alive-event (get-id this) e)
+        (upsert-neighbour this (assoc sender-nb :tx (.-tx e)))
+        (if alive-nb
+          (upsert-neighbour this (assoc alive-nb-id :tx alive-nb-tx
+                                   :restart-counter alive-nb-restart-counter
+                                   :status :alive))
+          (d> :alive-event-unknown-alive-neighbour-error (get-id this) e))
+        (put-event this e)))))
 
 
 
 
 ;;NewClusterSizeEvent
 ;;DeadEvent
-;;JoinEvent
 ;;SuspectEvent
 ;;LeftEvent
 ;;PayloadEvent
