@@ -377,7 +377,8 @@
   [^NodeObject this ^Keyword new-status]
   (when-not (s/valid? ::spec/status new-status)
     (throw (ex-info "Invalid node status" (->> new-status (s/explain-data ::spec/status) spec/problems))))
-  (d> :set-status (get-id this) {:new-status new-status})
+  (d> :set-status (get-id this) {:old-status (get-status this)
+                                 :new-status new-status})
   (swap! (:*node this) assoc :status new-status))
 
 
