@@ -765,21 +765,27 @@
           (sut/map->JoinEvent {:cmd-type        2
                                :id              #uuid "00000000-0000-0000-0000-000000000001"
                                :restart-counter 5
-                               :tx              1})]
+                               :tx              1
+                               :host            "localhost"
+                               :port            5678})]
 
       (testing "Prepare JoinEvent to vector"
         (let [prepared-event (.prepare join-event)]
           (m/assert ^:matcho/strict [(:join sut/code)
                                      (.-id join-event)
                                      (.-restart_counter join-event)
-                                     (.-tx join-event)]
+                                     (.-tx join-event)
+                                     (.-host join-event)
+                                     (.-port join-event)]
             prepared-event)))
 
       (testing "Restore JoinEvent from vector"
         (let [v           [2
                            #uuid "00000000-0000-0000-0000-000000000001"
                            5
-                           1]
+                           1
+                           "localhost"
+                           5678]
               result-join (.restore (sut/empty-join) v)]
 
           (testing "Restored JoinEvent should be equals to original event"
@@ -793,14 +799,18 @@
               (.restore (sut/empty-join) [999
                                           #uuid "00000000-0000-0000-0000-000000000002"
                                           5
-                                          1])))))))
+                                          1
+                                          "localhost"
+                                          5678])))))))
 
 
 (deftest empty-join-test
   (m/assert ^:matcho/strict {:cmd-type        (:join sut/code)
                              :id              uuid?
                              :restart-counter nat-int?
-                             :tx              nat-int?}
+                             :tx              nat-int?
+                             :host            string?
+                             :port            nat-int?}
     (sut/empty-join)))
 
 

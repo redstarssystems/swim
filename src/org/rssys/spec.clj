@@ -106,7 +106,7 @@
                    ::anti-entropy-data]))
 
 
-(s/def ::join-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx]))
+(s/def ::join-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::host ::port]))
 
 
 ;; suspect node is a neighbour

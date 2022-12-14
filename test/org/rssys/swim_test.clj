@@ -246,6 +246,9 @@
                  (dissoc (sut/new-neighbour-node neighbour-data1) :updated-at)}
         (sut/get-neighbours this))
 
+      (m/assert true (sut/neighbour-exist? this #uuid "00000000-0000-0000-0000-000000000002"))
+      (m/assert false (sut/neighbour-exist? this #uuid "00000000-0000-0000-0000-000000000999"))
+
       (m/assert ^:matcho/strict
         {:id              #uuid "00000000-0000-0000-0000-000000000002"
          :host            "127.0.0.1"
@@ -872,7 +875,9 @@
     (m/assert {:cmd-type        (:join event/code)
                :id              (sut/get-id this)
                :restart-counter (sut/get-restart-counter this)
-               :tx              (dec (sut/get-tx this))}
+               :tx              (dec (sut/get-tx this))
+               :host            (sut/get-host this)
+               :port            (sut/get-port this)}
       join-event)))
 
 
@@ -1838,6 +1843,7 @@
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event
+             :ts                 pos-int?
              :node-id            #uuid "00000000-0000-0000-0000-000000000001"
              :data               {:attempt-number    1
                                   :cmd-type          15
@@ -1863,6 +1869,7 @@
 
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :put-event
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000001"
                :data               {:event
                                     {:cmd-type                  3
@@ -1931,6 +1938,7 @@
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event-unknown-neighbour-error
+             :ts                 pos-int?
              :node-id            #uuid "00000000-0000-0000-0000-000000000001"
              :data
              {:attempt-number    1
@@ -2000,6 +2008,7 @@
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event-bad-restart-counter-error
+             :ts                 pos-int?
              :node-id            #uuid "00000000-0000-0000-0000-000000000001"
              :data
              {:attempt-number    1
@@ -2069,6 +2078,7 @@
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event-bad-tx-error
+             :ts                 pos-int?
              :node-id            #uuid "00000000-0000-0000-0000-000000000001"
              :data
              {:attempt-number    1
@@ -2138,6 +2148,7 @@
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event-not-expected-error
+             :ts                 pos-int?
              :node-id            #uuid "00000000-0000-0000-0000-000000000001"
              :data
              {:attempt-number    1
@@ -2207,6 +2218,7 @@
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event-not-alive-node-error
+             :ts                 pos-int?
              :node-id            #uuid "00000000-0000-0000-0000-000000000002"
              :data               {:attempt-number    1
                                   :cmd-type          15
@@ -2275,6 +2287,7 @@
 
           (m/assert ^:matcho/strict
             {:org.rssys.swim/cmd :indirect-ack-event-not-alive-node-error
+             :ts                 pos-int?
              :node-id            #uuid "00000000-0000-0000-0000-000000000001"
              :data               {:attempt-number    1
                                   :cmd-type          15
@@ -2362,6 +2375,7 @@
           (testing "node2 should receive intermediate indirect ping event from node1 to node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :intermediate-node-indirect-ping-event
                :data
                {:attempt-number    1
@@ -2382,6 +2396,7 @@
           (testing "node3 should receive indirect ping event from node1 via node2"
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :indirect-ping-event
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000003"
                :data
                {:attempt-number    1
@@ -2402,6 +2417,7 @@
           (testing "node3 should generate indirect ack event to node1 via node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000003"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :indirect-ack-event
                :data
                {:attempt-number    1
@@ -2476,6 +2492,7 @@
           (testing "node3 should receive indirect ping event from node1 via node2 but not process it"
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :indirect-ping-event-not-alive-node-error
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000003"
                :data
                {:attempt-number    1
@@ -2547,6 +2564,7 @@
           (testing "node2 should receive indirect ping event from node1 but not resend it to node3"
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :indirect-ping-event-not-alive-node-error
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000002"
                :data
                {:attempt-number    1
@@ -2619,6 +2637,7 @@
           (testing "node3 should not process indirect ping event from unknown node1"
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :indirect-ping-event-unknown-neighbour-error
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000003"
                :data
                {:attempt-number    1
@@ -2689,6 +2708,7 @@
           (testing "node3 should not process indirect ping event with outdated restart counter"
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :indirect-ping-event-bad-restart-counter-error
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000003"
                :data
                {:attempt-number    1
@@ -2758,6 +2778,7 @@
           (testing "node3 should not process indirect ping event with outdated tx"
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :indirect-ping-event-bad-tx-error
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000003"
                :data
                {:attempt-number    1
@@ -2830,6 +2851,7 @@
           (testing "node3 should not process indirect ping event with different node id"
             (m/assert ^:matcho/strict
               {:org.rssys.swim/cmd :indirect-ping-event-neighbour-id-mismatch-error
+               :ts                 pos-int?
                :node-id            #uuid "00000000-0000-0000-0000-000000000003"
                :data
                {:attempt-number    1
@@ -2901,6 +2923,7 @@
           (testing "node1 should receive ack event from node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event
                :data
                {:attempt-number  1
@@ -2918,6 +2941,7 @@
           (testing "node1 should generate alive event about suspect node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :put-event
                :data
                {:event
@@ -2975,6 +2999,7 @@
           (testing "node1 should not process ack event from node2 if node1 is not alive"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event-not-alive-node-error
                :data
                {:attempt-number  1
@@ -3028,6 +3053,7 @@
           (testing "node1 should not accept ack event from unknown node"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event-unknown-neighbour-error
                :data
                {:attempt-number  1
@@ -3081,6 +3107,7 @@
           (testing "node1 should not accept ack event from not alive node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event-not-alive-neighbour-error
                :data
                {:attempt-number  1
@@ -3134,6 +3161,7 @@
           (testing "node1 should not accept ack event from not alive node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event-bad-restart-counter-error
                :data
                {:attempt-number  1
@@ -3187,6 +3215,7 @@
           (testing "node1 should not accept ack event from not alive node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event-bad-tx-error
                :data
                {:attempt-number  1
@@ -3241,6 +3270,7 @@
           (testing "node1 should not accept not requested ack event"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event-not-expected-error
                :data
                {:attempt-number  1
@@ -3322,6 +3352,7 @@
           (testing "node2 should receive ping event from node1"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ping-event
                :data
                {:attempt-number 1
@@ -3337,6 +3368,7 @@
           (testing "node2 should generate ack event for node1"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ack-event
                :data
                {:attempt-number 1
@@ -3351,6 +3383,7 @@
           (testing "node2 should generate and put alive event about node1"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :put-event
                :data
                {:event
@@ -3360,13 +3393,14 @@
                  :neighbour-restart-counter 8
                  :neighbour-tx              1
                  :restart-counter           6
-                 :tx                        3}
-                :tx 4}}
+                 :tx                        4}
+                :tx 5}}
               @*expecting-event3))
 
           (testing "node2 should update neighbour info about node1"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :upsert-neighbour
                :data
                {:neighbour-node
@@ -3424,6 +3458,7 @@
           (testing "node2 should not accept ping event if its statuses are not alive"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ping-event-not-alive-node-error
                :data
                {:attempt-number 1
@@ -3476,6 +3511,7 @@
           (testing "node2 should not accept ping event from unknown neigbour"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ping-event-unknown-neighbour-error
                :data
                {:attempt-number 1
@@ -3539,6 +3575,7 @@
           (testing "node2 should receive ping event from node1"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ping-event-not-alive-neighbour-error
                :data
                {:attempt-number 1
@@ -3555,14 +3592,15 @@
           (testing "node1 should receive dead event from node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :incoming-udp-processor
                :data
                {:event
                 {:cmd-type                  6
                  :id                        #uuid "00000000-0000-0000-0000-000000000002"
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 7
-                 :neighbour-tx              0
+                 :neighbour-restart-counter 8
+                 :neighbour-tx              1
                  :restart-counter           6
                  :tx                        2}}}
               @*expecting-event2))
@@ -3619,6 +3657,7 @@
           (testing "node2 should not accept ping event with outdated restart counter"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ping-event-bad-restart-counter-error
                :data
                {:attempt-number 1
@@ -3635,14 +3674,15 @@
           (testing "node1 should receive dead event from node2"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :incoming-udp-processor
                :data
                {:event
                 {:cmd-type                  6
                  :id                        #uuid "00000000-0000-0000-0000-000000000002"
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 999
-                 :neighbour-tx              0
+                 :neighbour-restart-counter 8
+                 :neighbour-tx              1
                  :restart-counter           6
                  :tx                        2}}}
               @*expecting-event2))
@@ -3689,6 +3729,7 @@
           (testing "node2 should not accept ping event with outdated tx"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ping-event-bad-tx-error
                :data
                {:attempt-number 1
@@ -3745,6 +3786,7 @@
           (testing "node2 should not accept ping event for other node"
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000002"
+               :ts                 pos-int?
                :org.rssys.swim/cmd :ping-event-neighbour-id-mismatch-error
                :data
                {:attempt-number 1
@@ -3766,6 +3808,467 @@
           (sut/stop node2))))))
 
 
+(deftest join-test
+
+  (testing "Join to cluster on node1"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/set-status node1 :left)
+        (sut/set-status node2 :alive)
+        (sut/set-status node3 :dead)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+
+        (let [current-restart-counter (sut/get-restart-counter node1)
+              *expecting-event  (promise)
+              event-catcher-fn  (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and
+                                            (= cmd :set-status)
+                                            (= (:id node-data1) (-> v :node-id))
+                                            (= :join (-> v :data :new-status)))
+                                      (deliver *expecting-event v))))
+              *expecting-event2 (promise)
+              event-catcher-fn2 (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (= cmd :join)
+                                      (deliver *expecting-event2 v))))]
+
+          (add-tap event-catcher-fn)
+          (add-tap event-catcher-fn2)
+
+          (testing "After join, join-fn should return true"
+            (m/assert true (sut/join node1)))
+
+          (testing "After join, restart counter should be increased"
+            (m/assert (inc current-restart-counter) (sut/get-restart-counter node1)))
+
+          (testing "Node1 should have join status"
+            (no-timeout-check *expecting-event))
+
+          (no-timeout-check *expecting-event2)
+
+          (testing "node1 should notify alive node2 but not dead node3"
+            (m/assert ^:matcho/strict
+              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
+               :org.rssys.swim/cmd :join
+               :data
+               {:notified-neighbours [#uuid "00000000-0000-0000-0000-000000000002"]}}
+              @*expecting-event2))
+
+          (testing "Already joined node1 on repeat join should do nothing"
+            (m/assert nil (sut/join node1)))
+
+          (remove-tap event-catcher-fn)
+          (remove-tap event-catcher-fn2))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3))))))
+
+
+(deftest ^:logic join-event-test
+
+  (testing "Process join event from node1 on node2 or node3"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/set-status node1 :left)
+        (sut/set-status node2 :alive)
+        (sut/set-status node3 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :left)))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc neighbour-data3 :status :left)))
+
+        (let [*expecting-event  (promise)
+              event-catcher-fn  (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and              ;; node2
+                                            (= cmd :join-event)
+                                            (= (:id node-data2) (-> v :node-id)))
+                                      (deliver *expecting-event v))))
+              event-catcher-fn2 (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and              ;; node3
+                                            (= cmd :join-event)
+                                            (= (:id node-data3) (-> v :node-id)))
+                                      (deliver *expecting-event v))))
+              *expecting-event3 (promise)
+              event-catcher-fn3 (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and
+                                            (= cmd :upsert-neighbour)
+                                            (= :alive (-> v :data :neighbour-node :status))
+                                            (= (:id node-data1) (-> v :data :neighbour-node :id)))
+                                      (deliver *expecting-event3 v))))
+              *expecting-event4 (promise)
+              event-catcher-fn4 (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and
+                                            (= cmd :put-event)
+                                            (= 3 (-> v :data :event :cmd-type)))
+                                      (deliver *expecting-event4 v))))
+              *expecting-event5 (promise)
+              event-catcher-fn5 (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and
+                                            (= cmd :incoming-udp-processor)
+                                            (= #uuid "00000000-0000-0000-0000-000000000001"
+                                              (:node-id v))
+                                            (= 3 (-> v :data :event :cmd-type)))
+                                      (deliver *expecting-event5 v))))]
+
+          (add-tap event-catcher-fn)
+          (add-tap event-catcher-fn2)
+          (add-tap event-catcher-fn3)
+          (add-tap event-catcher-fn4)
+          (add-tap event-catcher-fn5)
+
+          (sut/join node1)
+
+          (testing "Join Event should happen on node2 or on node3"
+            (no-timeout-check *expecting-event))
+
+          (no-timeout-check *expecting-event3)
+          (no-timeout-check *expecting-event4)
+          (no-timeout-check *expecting-event5)
+
+          (testing "node2 or node3 should upsert new alive node1 into its table"
+            (m/assert ^:matcho/strict
+              {:node-id            uuid?
+               :org.rssys.swim/cmd :upsert-neighbour
+               :data
+               {:neighbour-node
+                {:access          :direct
+                 :host            "127.0.0.1"
+                 :id              #uuid "00000000-0000-0000-0000-000000000001"
+                 :payload         {}
+                 :port            5376
+                 :restart-counter 0
+                 :status          :alive
+                 :tx              1
+                 :updated-at      pos-int?}}
+               :ts                 pos-int?}
+              @*expecting-event3))
+
+          (testing "node1 should get alive event from node2 or node3"
+            (m/assert ^:matcho/strict
+              {:data
+               {:event
+                {:cmd-type                  3
+                 :id                        uuid?
+                 :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
+                 :neighbour-restart-counter 9
+                 :neighbour-tx              1
+                 :restart-counter           pos-int?
+                 :tx                        2}}
+               :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
+               :org.rssys.swim/cmd :incoming-udp-processor}
+              @*expecting-event5))
+
+
+          (remove-tap event-catcher-fn)
+          (remove-tap event-catcher-fn2)
+          (remove-tap event-catcher-fn3)
+          (remove-tap event-catcher-fn4)
+          (remove-tap event-catcher-fn5))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not process join event on not alive node"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/set-status node1 :left)
+        (sut/set-status node2 :dead)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :left)))
+
+        (let [*expecting-event  (promise)
+              event-catcher-fn  (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and
+                                            (= cmd :join-event-not-alive-node-error)
+                                            (= (:id node-data2) (-> v :node-id)))
+                                      (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          (sut/join node1)
+
+          (testing "Join Event should not happen on not alive node2"
+            (no-timeout-check *expecting-event))
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not process join event from the dead node"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/set-status node1 :left)
+        (sut/set-status node2 :alive)
+        (sut/set-status node3 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :restart-counter 999)))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc neighbour-data3 :restart-counter 999)))
+
+        (let [*expecting-event  (promise)
+              event-catcher-fn  (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (= cmd  :join-event-bad-restart-counter-error)
+                                      (deliver *expecting-event v))))
+              *expecting-event2 (promise)
+              event-catcher-fn2 (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and
+                                            (= cmd :incoming-udp-processor)
+                                            (= 6 (-> v :data :event :cmd-type)))
+                                      (deliver *expecting-event2 v))))]
+
+          (add-tap event-catcher-fn)
+          (add-tap event-catcher-fn2)
+
+          (sut/join node1)
+
+          (no-timeout-check *expecting-event)
+
+          (no-timeout-check *expecting-event2)
+
+          (testing "node2 or node3 should not process join event with outdated restart counter"
+            (m/assert ^:matcho/strict
+              {:data
+               {:cmd-type        2
+                :host            "127.0.0.1"
+                :id              #uuid "00000000-0000-0000-0000-000000000001"
+                :port            5376
+                :restart-counter 9
+                :tx              1}
+               :node-id            uuid?
+               :ts                 pos-int?
+               :org.rssys.swim/cmd :join-event-bad-restart-counter-error}
+              @*expecting-event))
+
+          (testing "node2 or node3 should send dead event to node with outdated restart counter"
+            (m/assert ^:matcho/strict
+              {:data
+               {:event
+                {:cmd-type                  6
+                 :id                        uuid?
+                 :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
+                 :neighbour-restart-counter 9
+                 :neighbour-tx              1
+                 :restart-counter           pos-int?
+                 :tx                        2}}
+               :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
+               :org.rssys.swim/cmd :incoming-udp-processor}
+              @*expecting-event2))
+
+          (remove-tap event-catcher-fn)
+          (remove-tap event-catcher-fn2))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not process join event if cluster size exceeded and new node is not in the table of known nodes"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/set-status node1 :left)
+        (sut/set-status node2 :alive)
+        (sut/set-status node3 :alive)
+
+        (sut/set-cluster-size node2 2)
+        (sut/set-cluster-size node3 2)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+
+        (let [*expecting-event  (promise)
+              event-catcher-fn  (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (= cmd  :join-event-cluster-size-exceeded-error)
+                                      (deliver *expecting-event v))))
+              *expecting-event2 (promise)
+              event-catcher-fn2 (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (and
+                                            (= cmd :incoming-udp-processor)
+                                            (= 6 (-> v :data :event :cmd-type)))
+                                      (deliver *expecting-event2 v))))]
+
+          (add-tap event-catcher-fn)
+          (add-tap event-catcher-fn2)
+
+          (sut/join node1)
+
+          (no-timeout-check *expecting-event)
+
+          (no-timeout-check *expecting-event2)
+
+          (testing "node2 or node3 should not accept join event if cluster size exceeded"
+            (m/assert ^:matcho/strict
+              {:data
+               {:cmd-type        2
+                :host            "127.0.0.1"
+                :id              #uuid "00000000-0000-0000-0000-000000000001"
+                :port            5376
+                :restart-counter 9
+                :tx              1}
+               :node-id            uuid?
+               :ts                 pos-int?
+               :org.rssys.swim/cmd :join-event-cluster-size-exceeded-error}
+              @*expecting-event))
+
+          (testing "node2 or node3 should send dead event to a new node if cluster size exceeded"
+            (m/assert ^:matcho/strict
+              {:data
+               {:event
+                {:cmd-type                  6
+                 :id                        uuid?
+                 :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
+                 :neighbour-restart-counter 9
+                 :neighbour-tx              1
+                 :restart-counter           pos-int?
+                 :tx                        2}}
+               :node-id            #uuid "00000000-0000-0000-0000-000000000001"
+               :ts                 pos-int?
+               :org.rssys.swim/cmd :incoming-udp-processor}
+              @*expecting-event2))
+
+          (remove-tap event-catcher-fn)
+          (remove-tap event-catcher-fn2))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3)))))
+
+  (testing "Do not process join event with outdated tx"
+    (let [node1           (sut/new-node-object node-data1 cluster)
+          node2           (sut/new-node-object node-data2 cluster)
+          node3           (sut/new-node-object node-data3 cluster)]
+      (try
+
+        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+
+        (sut/set-status node1 :left)
+        (sut/set-status node2 :alive)
+        (sut/set-status node3 :alive)
+
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :tx 999)))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc neighbour-data3 :tx 999)))
+
+        (let [*expecting-event  (promise)
+              event-catcher-fn  (fn [v]
+                                  (when-let [cmd (:org.rssys.swim/cmd v)]
+                                    (when (= cmd  :join-event-bad-tx-error)
+                                      (deliver *expecting-event v))))]
+
+          (add-tap event-catcher-fn)
+
+          (sut/join node1)
+
+          (no-timeout-check *expecting-event)
+
+          (testing "node2 or node3 should not process join event with outdated tx"
+            (m/assert ^:matcho/strict
+              {:data
+               {:cmd-type        2
+                :host            "127.0.0.1"
+                :id              #uuid "00000000-0000-0000-0000-000000000001"
+                :port            5376
+                :restart-counter 9
+                :tx              1}
+               :node-id            uuid?
+               :ts                 pos-int?
+               :org.rssys.swim/cmd :join-event-bad-tx-error}
+              @*expecting-event))
+
+          (remove-tap event-catcher-fn))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (sut/stop node1)
+          (sut/stop node2)
+          (sut/stop node3))))))
 
 
 

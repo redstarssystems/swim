@@ -248,6 +248,13 @@
   (get (.-neighbours (get-value this)) id))
 
 
+(defn neighbour-exist?
+  "Returns true if neighbour exist, otherwise false"
+  ^Boolean
+  [^NodeObject this ^UUID id]
+  (boolean (get-neighbour this id)))
+
+
 (defn get-restart-counter
   "Get node restart counter"
   ^long
@@ -402,7 +409,9 @@
 
 
 (defn upsert-neighbour
-  "Update existing or insert new neighbour to neighbours map"
+  "Update existing or insert new neighbour to neighbours map.
+  Do nothing if `this` id equals to `neighbour-node` id.
+  Returns void."
   [^NodeObject this neighbour-node]
   (when-not (s/valid? ::spec/neighbour-node neighbour-node)
     (throw (ex-info "Invalid neighbour node data"
@@ -719,23 +728,27 @@
 
 (defn new-dead-event
   "Returns new dead event. Increments tx of `this` node."
-  ^DeadEvent [^NodeObject this ^UUID neighbour-id]
-  (let [nb                 (get-neighbour this neighbour-id)
-        nb-restart-counter (:restart-counter nb)
-        nb-tx              (:tx nb)
-        dead-event
-        (event/map->DeadEvent {:cmd-type                  (:dead event/code)
-                               :id                        (get-id this)
-                               :restart-counter           (get-restart-counter this)
-                               :tx                        (get-tx this)
-                               :neighbour-id              neighbour-id
-                               :neighbour-restart-counter nb-restart-counter
-                               :neighbour-tx              nb-tx})]
-    (inc-tx this)
-    (if-not (s/valid? ::spec/dead-event dead-event)
-      (throw (ex-info "Invalid dead event"
-               (spec/problems (s/explain-data ::spec/dead-event dead-event))))
-      dead-event)))
+  (^DeadEvent [^NodeObject this ^UUID neighbour-id]
+    (let [nb                  (get-neighbour this neighbour-id)
+          nb-restart-counter  (:restart-counter nb)
+          nb-tx               (:tx nb)]
+      (new-dead-event this neighbour-id nb-restart-counter nb-tx)))
+
+  (^DeadEvent [^NodeObject this  neighbour-id  neighbour-restart-counter  neighbour-tx]
+    (let [dead-event
+          (event/map->DeadEvent {:cmd-type                  (:dead event/code)
+                                 :id                        (get-id this)
+                                 :restart-counter           (get-restart-counter this)
+                                 :tx                        (get-tx this)
+                                 :neighbour-id              neighbour-id
+                                 :neighbour-restart-counter neighbour-restart-counter
+                                 :neighbour-tx              neighbour-tx})]
+      (inc-tx this)
+      (if-not (s/valid? ::spec/dead-event dead-event)
+        (throw (ex-info "Invalid dead event"
+                 (spec/problems (s/explain-data ::spec/dead-event dead-event))))
+        dead-event))))
+
 
 
 ;;;;
@@ -834,7 +847,9 @@
   (let [join-event (event/map->JoinEvent {:cmd-type        (:join event/code)
                                           :id              (get-id this)
                                           :restart-counter (get-restart-counter this)
-                                          :tx              (get-tx this)})]
+                                          :tx              (get-tx this)
+                                          :host            (get-host this)
+                                          :port            (get-port this)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/join-event join-event)
       (throw (ex-info "Invalid join event data"
@@ -1025,16 +1040,19 @@
       (->> desired-nb (sort-by :updated-at) first))))
 
 
+(def alive-status-set #{:alive :suspect})
+
+
 (defn alive-neighbour?
   "Returns true if neighbour has alive statuses."
   [^NeighbourNode nb]
-  (boolean (#{:alive :suspect} (:status nb))))
+  (boolean (alive-status-set (:status nb))))
 
 
 (defn alive-node?
   "Returns true if given node has alive statuses."
   [^NodeObject this]
-  (boolean (#{:alive :suspect} (get-status this))))
+  (boolean (alive-status-set (get-status this))))
 
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -1222,7 +1240,7 @@
       (let [_                  (d> :indirect-ping-event (get-id this) e)
             indirect-ack-event (new-indirect-ack-event this e)]
         (d> :indirect-ack-event (get-id this) indirect-ack-event)
-        (send-event this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
+        (send-event-ae this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
 
 
 (defmethod process-incoming-event AckEvent
@@ -1274,12 +1292,12 @@
 
       (not (alive-neighbour? nb))
       (do
-        (send-event this (new-dead-event this neighbour-id) neighbour-id)
+        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-not-alive-neighbour-error (get-id this) e))
 
       (not (suitable-restart-counter? this e))
       (do
-        (send-event this (new-dead-event this neighbour-id) neighbour-id)
+        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-bad-restart-counter-error (get-id this) e))
 
       (not (suitable-tx? this e))
@@ -1293,10 +1311,93 @@
         (d> :ping-event (get-id this) e)
         (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :host (.-host e) :port (.-port e)))
         (let [ack-event (new-ack-event this e)]
-          (send-event this ack-event neighbour-id)
+          (send-event-ae this ack-event neighbour-id)
           (d> :ack-event (get-id this) ack-event))
         (when (= :suspect (:status nb))
           (put-event this (new-alive-event this e)))))))
+
+
+(defmethod process-incoming-event JoinEvent
+  [^NodeObject this ^JoinEvent e]
+  (cond
+
+    (not (alive-node? this))
+    (d> :join-event-not-alive-node-error (get-id this) e)
+
+    (and (neighbour-exist? this (.-id e))
+      (not (suitable-restart-counter? this e)))
+    (do
+      (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
+      (d> :join-event-bad-restart-counter-error (get-id this) e))
+
+    (and
+      (not (neighbour-exist? this (.-id e)))
+      (cluster-size-exceed? this))
+    (do
+      (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
+      (d> :join-event-cluster-size-exceeded-error (get-id this) e))
+
+    (and (neighbour-exist? this (.-id e))
+      (not (suitable-tx? this e)))
+    (d> :join-event-bad-tx-error (get-id this) e)
+
+    :else
+    (let [nb (new-neighbour-node (.-id e) (.-host e) (.-port e))
+          alive-event (new-alive-event this e)]
+      (d> :join-event (get-id this) e)
+      (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :direct))
+      (send-event-ae this alive-event (.-id e))
+      (put-event this alive-event))))
+
+
+;;(defn itself-alive?
+;;  "Alive event from node about itself."
+;;  [^AliveEvent e]
+;;  (= (.-neighbour_id e) (.-id e)))
+;;
+;;(defmethod process-incoming-event AliveEvent
+;;  [^NodeObject this ^AliveEvent e]
+;;  (let [neighbour-id (:id e)
+;;        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+;;
+;;    (cond
+;;
+;;      (not (alive-node? this))
+;;      (d> :alive-event-not-alive-node-error (get-id this) e)
+;;
+;;      (and (= :unknown-neighbour nb) (not (itself-alive? e)))
+;;      (d> :alive-event-unknown-neighbour-error (get-id this) e)
+;;
+;;      (and (not (alive-neighbour? nb)) (not (itself-alive? e)))
+;;      (d> :alive-event-not-alive-neighbour-error (get-id this) e)
+;;
+;;      (not (suitable-restart-counter? this e))
+;;      (d> :alive-event-bad-restart-counter-error (get-id this) e)
+;;
+;;      (not (suitable-tx? this e))
+;;      (d> :alive-event-bad-tx-error (get-id this) e)
+;;
+;;      :else
+;;      (let [sender-nb-id              (.-id e)
+;;            sender-nb-tx              (.-tx e)
+;;            sender-restart-counter    (.-restart_counter e)
+;;            alive-nb-id               (.-neighbour_id e)
+;;            alive-nb-tx               (.-neighbour_tx e)
+;;            alive-nb-restart-couunter (.-neighbour_restart_counter e)]
+;;        (d> :alive-event (get-id this) e)
+;;        (new-neighbour-node {})
+;;        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))
+;;        (put-event this e)))))
+
+
+
+
+;;NewClusterSizeEvent
+;;DeadEvent
+;;JoinEvent
+;;SuspectEvent
+;;LeftEvent
+;;PayloadEvent
 
 
 
@@ -1328,7 +1429,8 @@
                                                                           (swap! *stat update :bad-udp-counter inc))}))))
 
 
-;; TODO: run periodic process for clean probe ack events - remember uuid key for non empty maps. On next iteration remembered uuids should be cleaned.
+;; TODO: run periodic process for clean probe ack events - remember uuid key for non empty maps.
+;; On next iteration remembered uuids should be cleaned.
 
 (defn node-process-fn
   [^NodeObject this]
@@ -1382,26 +1484,37 @@
     (.-probe_key probe-event)))
 
 
-
+;; TODO: stop process of periodic event send from buffer
+;; TODO: stop process of periodic clean neighbour table from old nodes
 (defn leave
   "Leave the cluster"
-  [^NodeObject this]
-  ;;TODO
-  )
+  [^NodeObject this])
 
 
-;; TODO:
-;; How to clean neighbour table from old nodes?
-;;
 
-
+;; FIXME: start process of periodic event send from buffer
+;; FIXME: start process of periodic clean neighbour table from old nodes
 (defn join
-  "Join this node to the cluster"
+  "Join this node to the cluster:
+  0. Check status belongs to not alive statuses or join
+  1. Increase restart counter
+  2. Set status for this node as :alive.
+  3. Notify known alive neighbours for this node
+  Returns true if join complete or nil if already has join or alive status"
   [^NodeObject this]
-  ;;TODO
-  )
-
-
+  (when-not (or (alive-node? this) (= :join (get-status this)))
+    (set-restart-counter this (inc (get-restart-counter this)))
+    (let [n            (calc-n (get-cluster-size this))
+          join-event   (new-join-event this)
+          alive-nb-ids (mapv :id (get-alive-neighbours this))
+          notify-ids   (take n (shuffle alive-nb-ids))]
+      (set-status this :join)
+      (when (seq notify-ids)
+        (run!
+          (fn [nb-id] (send-event this join-event nb-id))
+          notify-ids))
+      (d> :join (get-id this) {:notified-neighbours (vec notify-ids)})
+      true)))
 
 
 
