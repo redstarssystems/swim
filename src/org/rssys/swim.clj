@@ -439,6 +439,16 @@
   (swap! (:*node this) assoc :neighbours (dissoc (get-neighbours this) neighbour-id)))
 
 
+(defn delete-neighbours
+  "Delete all neighbours from neighbours map.
+  Returns number of deleted neighbours."
+  [^NodeObject this]
+  (let [nb-count (count (get-neighbours this))]
+    (swap! (:*node this) assoc :neighbours {})
+    (d> :delete-neighbours (get-id this) {:deleted-num nb-count})
+    nb-count))
+
+
 (defn set-outgoing-events
   "Set outgoing events to new value"
   [^NodeObject this new-outgoing-events]
@@ -1502,27 +1512,51 @@
 
 ;; FIXME: start process of periodic event send from buffer
 ;; FIXME: start process of periodic clean neighbour table from old nodes
+;; TODO: what if join takes too much time or udp packet with join is lost?
 (defn join
-  "Join this node to the cluster:
-  0. Check status belongs to not alive statuses or join
-  1. Increase restart counter
-  2. Set status for this node as :alive.
-  3. Notify known alive neighbours for this node
+  "Join this node to the cluster.
+   If status is already :alive or :join then do nothing and exit.
+
+   Increase restart counter.
+
+   If cluster size > 1:
+    1. Set status for this node as :join.
+    2. Notify known alive neighbours for this node
+
+   If cluster size = 1:
+    0. Delete all neighbours info
+    1. Set status for this node as :alive and become single node in the cluster
+
   Returns true if join complete or nil if already has join or alive status"
   [^NodeObject this]
   (when-not (or (alive-node? this) (= :join (get-status this)))
+
     (set-restart-counter this (inc (get-restart-counter this)))
-    (let [n            (calc-n (get-cluster-size this))
-          join-event   (new-join-event this)
-          alive-nb-ids (mapv :id (get-alive-neighbours this))
-          notify-ids   (take n (shuffle alive-nb-ids))]
-      (set-status this :join)
-      (when (seq notify-ids)
-        (run!
-          (fn [nb-id] (send-event this join-event nb-id))
-          notify-ids))
-      (d> :join (get-id this) {:notified-neighbours (vec notify-ids)})
-      true)))
+
+    (let [cluster-size (get-cluster-size this)]
+      (cond
+
+        (= 1 cluster-size)
+        (do
+          (set-status this :join)
+          (d> :join (get-id this) {:cluster-size cluster-size})
+          (delete-neighbours this)
+          (set-status this :alive)
+          true)
+
+        (> cluster-size 1)
+        (let [n            (calc-n cluster-size)
+              join-event   (new-join-event this)
+              alive-nb-ids (mapv :id (get-alive-neighbours this))
+              nb-random-ids   (take n (shuffle alive-nb-ids))]
+          (set-status this :join)
+          (when (seq nb-random-ids)
+            (run!
+              (fn [nb-id] (send-event this join-event nb-id))
+              nb-random-ids))
+          (d> :join (get-id this) {:cluster-size cluster-size
+                                   :notified-neighbours (vec nb-random-ids)})
+          true)))))
 
 
 

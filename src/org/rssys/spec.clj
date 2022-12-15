@@ -26,7 +26,7 @@
 (s/def ::nspace (s/or :symbol symbol? :keyword keyword? :string string?)) ;; cluster namespace
 (s/def ::secret-token string?)                              ;; string token for secret key gen to access to cluster
 (s/def ::secret-key ::object)                               ;; 256-bit SecretKey generated from secret token
-(s/def ::cluster-size nat-int?)                             ;; number of nodes in the cluster
+(s/def ::cluster-size pos-int?)                             ;; number of nodes in the cluster
 (s/def ::cluster (s/keys :req-un [::id ::name ::desc ::secret-token ::nspace ::tags] :opt-un [::secret-key ::cluster-size]))
 (s/def ::probe-key any?)                                    ;; unique key for probe <--> probe-ack
 
