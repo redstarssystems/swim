@@ -264,20 +264,22 @@
 
 
 (defrecord AliveEvent [cmd-type id restart-counter tx
-                       neighbour-id neighbour-restart-counter neighbour-tx]
+                       neighbour-id neighbour-restart-counter neighbour-tx
+                       neighbour-host neighbour-port]
 
            ISwimEvent
 
            (prepare [^AliveEvent e]
              [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e)
-              (.-neighbour_id e) (.-neighbour_restart_counter e) (.-neighbour_tx e)])
+              (.-neighbour_id e) (.-neighbour_restart_counter e) (.-neighbour_tx e)
+              (.-neighbour_host e) (.-neighbour_port e)])
 
            (restore [^AliveEvent _ v]
              (if (and
                    (vector? v)
-                   (= 7 (count v))
+                   (= 9 (count v))
                    (every? true? (map #(%1 %2) [#(= % (:alive code)) uuid? nat-int? nat-int?
-                                                uuid? nat-int? nat-int?] v)))
+                                                uuid? nat-int? nat-int? string? pos-int?] v)))
                (apply ->AliveEvent v)
                (throw (ex-info "AliveEvent vector has invalid structure" {:alive-vec v})))))
 
@@ -291,7 +293,9 @@
                     :tx                        0
                     :neighbour-id              (UUID. 0 1)
                     :neighbour-restart-counter 0
-                    :neighbour-tx              0}))
+                    :neighbour-tx              0
+                    :neighbour-host            "localhost"
+                    :neighbour-port            1}))
 
 
 ;;;;

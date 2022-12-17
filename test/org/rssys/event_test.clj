@@ -500,7 +500,9 @@
                                 :tx                        0
                                 :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
                                 :neighbour-restart-counter 7
-                                :neighbour-tx              42})]
+                                :neighbour-tx              42
+                                :neighbour-host            "localhost"
+                                :neighbour-port            1})]
 
       (testing "Prepare AliveEvent to vector"
         (let [prepared-event (.prepare alive-event)]
@@ -510,7 +512,9 @@
                                      (.-tx alive-event)
                                      #uuid "00000000-0000-0000-0000-000000000001"
                                      7
-                                     42]
+                                     42
+                                     "localhost"
+                                     1]
             prepared-event)))
 
       (testing "Restore AliveEvent from vector"
@@ -520,7 +524,9 @@
                             0
                             #uuid "00000000-0000-0000-0000-000000000001"
                             7
-                            42]
+                            42
+                            "localhost"
+                            1]
               result-alive (.restore (sut/empty-alive) v)]
 
           (testing "Restored AliveEvent should be equals to original event"
@@ -537,7 +543,9 @@
                                            0
                                            #uuid "00000000-0000-0000-0000-000000000001"
                                            7
-                                           42])))))))
+                                           42
+                                           "localhost"
+                                           1])))))))
 
 
 (deftest empty-alive-test
@@ -547,7 +555,9 @@
                              :tx                        nat-int?
                              :neighbour-id              uuid?
                              :neighbour-restart-counter nat-int?
-                             :neighbour-tx              nat-int?}
+                             :neighbour-tx              nat-int?
+                             :neighbour-host            string?
+                             :neighbour-port            pos-int?}
     (sut/empty-alive)))
 
 

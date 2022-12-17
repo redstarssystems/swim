@@ -720,14 +720,17 @@
 (defn new-alive-event
   "Returns new Alive event. Increments tx of `this` node."
   ^AliveEvent [^NodeObject this ^ISwimEvent e]
-  (let [alive-event
+  (let [nb (get-neighbour this (:id e))
+        alive-event
         (event/map->AliveEvent {:cmd-type                  (:alive event/code)
                                 :id                        (get-id this)
                                 :restart-counter           (get-restart-counter this)
                                 :tx                        (get-tx this)
                                 :neighbour-id              (:id e)
                                 :neighbour-restart-counter (:restart-counter e)
-                                :neighbour-tx              (:tx e)})]
+                                :neighbour-tx              (:tx e)
+                                :neighbour-host            (:host nb)
+                                :neighbour-port            (:port nb)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/alive-event alive-event)
       (throw (ex-info "Invalid alive event"
@@ -1359,10 +1362,10 @@
     (d> :join-event-bad-tx-error (get-id this) e)
 
     :else
-    (let [nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
+    (let [_           (d> :join-event (get-id this) e)
+          nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
+          _           (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :direct))
           alive-event (new-alive-event this e)]
-      (d> :join-event (get-id this) e)
-      (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :direct))
       (send-event-ae this alive-event (.-id e))
       (put-event this alive-event))))
 
@@ -1376,8 +1379,7 @@
 
 (defmethod process-incoming-event AliveEvent
   [^NodeObject this ^AliveEvent e]
-  (let [sender-nb (or (get-neighbour this (:id e)) :unknown-neighbour)
-        alive-nb  (get-neighbour this (.-neighbour_id e))]
+  (let [sender-nb (or (get-neighbour this (:id e)) :unknown-neighbour)]
 
     (cond
 
@@ -1402,16 +1404,17 @@
       (d> :alive-event-bad-tx-error (get-id this) e)
 
       :else
-      (let [alive-nb-id              (.-neighbour_id e)
+      (let [_                        (d> :alive-event (get-id this) e)
+            alive-nb-id              (.-neighbour_id e)
             alive-nb-tx              (.-neighbour_tx e)
-            alive-nb-restart-counter (.-neighbour_restart_counter e)]
-        (d> :alive-event (get-id this) e)
+            alive-nb-restart-counter (.-neighbour_restart_counter e)
+            alive-nb-host            (.-neighbour_host e)
+            alive-nb-port            (.-neighbour_port e)
+            new-alive-nb (new-neighbour-node alive-nb-id alive-nb-host alive-nb-port)]
         (upsert-neighbour this (assoc sender-nb :tx (.-tx e)))
-        (if alive-nb
-          (upsert-neighbour this (assoc alive-nb-id :tx alive-nb-tx
-                                   :restart-counter alive-nb-restart-counter
-                                   :status :alive))
-          (d> :alive-event-unknown-alive-neighbour-error (get-id this) e))
+        (upsert-neighbour this (assoc new-alive-nb :tx alive-nb-tx
+                                 :status :alive :access :direct
+                                 :restart-counter alive-nb-restart-counter))
         (put-event this e)))))
 
 
@@ -1509,7 +1512,7 @@
 
 
 ;; TODO: stop process of periodic event send from buffer
-;; TODO: stop process of periodic clean neighbour table from old nodes
+;; TODO: stop process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
 (defn leave
   "Leave the cluster"
   [^NodeObject this])
@@ -1517,7 +1520,7 @@
 
 
 ;; FIXME: start process of periodic event send from buffer
-;; FIXME: start process of periodic clean neighbour table from old nodes
+;; FIXME: start process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
 ;; TODO: what if join takes too much time or udp packet with join is lost?
 (defn join
   "Join this node to the cluster.

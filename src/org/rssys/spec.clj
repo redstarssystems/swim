@@ -87,7 +87,8 @@
 ;; alive node is a neighbour
 (s/def ::alive-event
   (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                   ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
+                   ::neighbour-id ::neighbour-restart-counter ::neighbour-tx
+                   ::neighbour-host ::neighbour-port]))
 
 
 (s/def ::new-cluster-size-event
