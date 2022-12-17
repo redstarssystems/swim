@@ -860,9 +860,11 @@
   (let [this               (sut/new-node-object node-data1 cluster)
         neighbour          (sut/new-neighbour-node neighbour-data1)
         _                  (sut/upsert-neighbour this neighbour)
-        anti-entropy-event (sut/new-anti-entropy-event this)]
+        _                  (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
+        anti-entropy-event (sut/new-anti-entropy-event this)
+        anti-entropy-event2 (sut/new-anti-entropy-event this {:neighbour-id (:id neighbour-data1)})]
     (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
+      (m/assert 2 (sut/get-tx this)))
     (m/assert AntiEntropy (type anti-entropy-event))
     (m/assert ::spec/anti-entropy-event anti-entropy-event)
     (m/assert {:anti-entropy-data [[#uuid "00000000-0000-0000-0000-000000000002"
@@ -872,8 +874,12 @@
                                     0
                                     3
                                     0
-                                    {:tcp-port 4567}]]}
-      anti-entropy-event)))
+                                    {:tcp-port 4567}]]
+               :cmd-type 8
+               :id #uuid "00000000-0000-0000-0000-000000000001"
+               :restart-counter 7
+               :tx 1}
+      anti-entropy-event2)))
 
 
 ;;;;

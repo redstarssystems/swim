@@ -769,14 +769,15 @@
   Field :updated-at is omitted.
   Returns vector of values"
   [^NeighbourNode nb]
-  [(:id nb)
-   (:host nb)
-   (:port nb)
-   ((:status nb) event/code)
-   (if (= :direct (:access nb)) 0 1)
-   (:restart-counter nb)
-   (:tx nb)
-   (:payload nb)])
+  (when (instance? NeighbourNode nb)
+    [(:id nb)
+     (:host nb)
+     (:port nb)
+     ((:status nb) event/code)
+     (if (= :direct (:access nb)) 0 1)
+     (:restart-counter nb)
+     (:tx nb)
+     (:payload nb)]))
 
 
 (defn vec->neighbour
@@ -802,23 +803,28 @@
   To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
   if node has older data.
   Returns vector of known neighbors size of `num` if any or empty vector.
-  Any item in returned vector is vectorized NeighbourNode."
-  [^NodeObject this & {:keys [num] :or {num (:max-anti-entropy-items @*config)}}]
-  (or
-    (some->>
-      (get-neighbours this)
-      vals
-      shuffle
-      (take num)
-      (map neighbour->vec)
-      vec)
-    []))
+  Any item in returned vector is vectorized NeighbourNode.
+  If key :neighbour-id present then returns anti-entropy data for this neighbour only"
+  [^NodeObject this & {:keys [num neighbour-id] :or {num (:max-anti-entropy-items @*config)}}]
+  (if neighbour-id
+    (if-let [ae-data (neighbour->vec (get-neighbour this neighbour-id))]
+      [ae-data]
+      [])
+    (or
+      (some->>
+        (get-neighbours this)
+        vals
+        shuffle
+        (take num)
+        (map neighbour->vec)
+        vec)
+      [])))
 
 
 (defn new-anti-entropy-event
   "Returns anti-entropy event. Increments tx of `this` node."
-  ^AntiEntropy [^NodeObject this]
-  (let [anti-entropy-data (build-anti-entropy-data this)
+  ^AntiEntropy [^NodeObject this & {:keys [num neighbour-id] :as ks}]
+  (let [anti-entropy-data (build-anti-entropy-data this ks)
         ae-event          (event/map->AntiEntropy {:cmd-type          (:anti-entropy event/code)
                                                    :id                (get-id this)
                                                    :restart-counter   (get-restart-counter this)
