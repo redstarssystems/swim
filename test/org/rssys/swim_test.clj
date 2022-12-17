@@ -4532,7 +4532,6 @@
 
             (no-timeout-check *expecting-event2)
 
-
             (remove-tap event-catcher-fn)
             (remove-tap event-catcher-fn2)))
 

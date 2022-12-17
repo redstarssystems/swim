@@ -1405,16 +1405,11 @@
 
       :else
       (let [_                        (d> :alive-event (get-id this) e)
-            alive-nb-id              (.-neighbour_id e)
-            alive-nb-tx              (.-neighbour_tx e)
-            alive-nb-restart-counter (.-neighbour_restart_counter e)
-            alive-nb-host            (.-neighbour_host e)
-            alive-nb-port            (.-neighbour_port e)
-            new-alive-nb (new-neighbour-node alive-nb-id alive-nb-host alive-nb-port)]
+            new-alive-nb (new-neighbour-node (.-neighbour_id e) (.-neighbour_host e) (.-neighbour_port e))]
         (upsert-neighbour this (assoc sender-nb :tx (.-tx e)))
-        (upsert-neighbour this (assoc new-alive-nb :tx alive-nb-tx
+        (upsert-neighbour this (assoc new-alive-nb :tx (.-neighbour_tx e)
                                  :status :alive :access :direct
-                                 :restart-counter alive-nb-restart-counter))
+                                 :restart-counter (.-neighbour_restart_counter e)))
         (put-event this e)))))
 
 
