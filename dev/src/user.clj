@@ -25,6 +25,10 @@
   (tap> {:org.rssys.swim/cmd true :a 1 :b "2"})
 
   (remove-tap t-prn>)
+
+  (require 'kaocha.repl)
+  (kaocha.repl/run 'org.rssys.swim-test)
+  (kaocha.repl/run 'org.rssys.event-test)
   )
 
 
