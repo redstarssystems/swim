@@ -1075,6 +1075,59 @@
   (boolean (alive-status-set (get-status this))))
 
 
+(defn set-nb-tx
+  "Update :tx field for neighbour in neighbours map.
+  If new tx value is less or equals to current :tx value then do nothing.
+  If neighbour not exist then do nothing.
+  Returns void."
+  [^NodeObject this ^UUID neighbour-id ^long new-tx]
+  (when-let [nb (get-neighbour this neighbour-id)]
+    (when (> new-tx (.-tx nb))
+      (upsert-neighbour this (assoc nb :tx new-tx)))))
+
+
+(defn set-nb-restart-counter
+  "Set :restart-counter field for neighbour in neighbours map.
+  If new restart counter value is less or equals to current :restart-counter value then do nothing.
+  If neighbour not exist then do nothing.
+  Returns void."
+  [^NodeObject this ^UUID neighbour-id ^long new-restart-counter]
+  (when-let [nb (get-neighbour this neighbour-id)]
+    (when (> new-restart-counter (.-restart_counter nb))
+      (upsert-neighbour this (assoc nb :restart-counter new-restart-counter)))))
+
+
+(defn set-nb-status
+  "Set :status field for neighbour in neighbours map.
+  Status should be one of: #{:stop :join :alive :suspect :left :dead :unknown}
+  If neighbour not exist then do nothing.
+  Returns void."
+  [^NodeObject this ^UUID neighbour-id ^Keyword status]
+  (when-let [nb (get-neighbour this neighbour-id)]
+    (upsert-neighbour this (assoc nb :status status))))
+
+(defn- set-nb-status-alive [^NodeObject this ^UUID neighbour-id]
+  (set-nb-status this neighbour-id :alive))
+
+
+(defn set-nb-direct-access
+  "Set :direct access for neighbour in neighbours map.
+  If neighbour not exist then do nothing.
+  Returns void."
+  [^NodeObject this ^UUID neighbour-id]
+  (when-let [nb (get-neighbour this neighbour-id)]
+    (upsert-neighbour this (assoc nb :access :direct))))
+
+
+(defn set-nb-indirect-access
+  "Set :indirect access for neighbour in neighbours map.
+  If neighbour not exist then do nothing.
+  Returns void."
+  [^NodeObject this ^UUID neighbour-id]
+  (when-let [nb (get-neighbour this neighbour-id)]
+    (upsert-neighbour this (assoc nb :access :indirect))))
+
+
 ;;;;;;;;;;;;;;;;;;;;
 
 ;;;;
@@ -1139,11 +1192,11 @@
 
 (defmethod process-incoming-event AntiEntropy
   [^NodeObject this ^AntiEntropy e]
-  (let [neighbour-id (:id e)
-        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
     (cond
 
-      (= :unknown-neighbour nb)
+      (= :unknown-neighbour sender)
       (d> :anti-entropy-event-unknown-neighbour-error (get-id this) e)
 
       (not (suitable-restart-counter? this e))
@@ -1152,7 +1205,7 @@
       (not (suitable-tx? this e))
       (d> :anti-entropy-event-bad-tx-error (get-id this) e)
 
-      (not (alive-neighbour? nb))
+      (not (alive-neighbour? sender))
       (d> :anti-entropy-event-not-alive-neighbour-error (get-id this) e)
 
       :else
@@ -1164,7 +1217,8 @@
               (upsert-neighbour this ae-neighbour))         ;; update existing neighbour
             (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to a neighbours map
               (d> :anti-entropy-event (get-id this) ae-neighbour)
-              (upsert-neighbour this ae-neighbour))))))))   ;; add a new neighbour
+              (upsert-neighbour this ae-neighbour))))       ;; add a new neighbour
+        (set-nb-tx this sender-id (.-tx e))))))
 
 
 (defn- expected-indirect-ack-event?
@@ -1195,8 +1249,8 @@
 
 (defmethod process-incoming-event IndirectAckEvent
   [^NodeObject this ^IndirectAckEvent e]
-  (let [neighbour-id (:id e)
-        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
     (cond
 
@@ -1208,7 +1262,7 @@
         (d> :intermediate-node-indirect-ack-event (get-id this) e)
         (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
 
-      (= :unknown-neighbour nb)
+      (= :unknown-neighbour sender)
       (d> :indirect-ack-event-unknown-neighbour-error (get-id this) e)
 
       (not (suitable-restart-counter? this e))
@@ -1223,16 +1277,18 @@
       :else
       (do
         (d> :indirect-ack-event (get-id this) e)
-        (upsert-neighbour this (assoc nb :tx (.-tx e) :status (.-status e) :access :indirect))
-        (delete-indirect-ping this neighbour-id)
+        (set-nb-tx this sender-id (.-tx e))
+        (set-nb-indirect-access this sender-id)
+        (set-nb-status this sender-id (.-status e))
+        (delete-indirect-ping this sender-id)
         (when (= :alive (.-status e))
           (put-event this (new-alive-event this e)))))))
 
 
 (defmethod process-incoming-event IndirectPingEvent
   [^NodeObject this ^IndirectPingEvent e]
-  (let [neighbour-id (:id e)
-        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
     (cond
 
@@ -1244,7 +1300,7 @@
         (d> :intermediate-node-indirect-ping-event (get-id this) e)
         (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
 
-      (= :unknown-neighbour nb)
+      (= :unknown-neighbour sender)
       (d> :indirect-ping-event-unknown-neighbour-error (get-id this) e)
 
       (not (suitable-restart-counter? this e))
@@ -1259,24 +1315,24 @@
       :else
       (let [_                  (d> :indirect-ping-event (get-id this) e)
             indirect-ack-event (new-indirect-ack-event this e)]
+        (set-nb-tx this sender-id (.-tx e))
         (d> :indirect-ack-event (get-id this) indirect-ack-event)
         (send-event-ae this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
 
 
 (defmethod process-incoming-event AckEvent
   [^NodeObject this ^AckEvent e]
-  (let [neighbour-id (:id e)
-        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
-
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
     (cond
 
       (not (alive-node? this))
       (d> :ack-event-not-alive-node-error (get-id this) e)
 
-      (= :unknown-neighbour nb)
+      (= :unknown-neighbour sender)
       (d> :ack-event-unknown-neighbour-error (get-id this) e)
 
-      (not (alive-neighbour? nb))
+      (not (alive-neighbour? sender))
       (d> :ack-event-not-alive-neighbour-error (get-id this) e)
 
       (not (suitable-restart-counter? this e))
@@ -1291,10 +1347,11 @@
       :else
       (do
         (d> :ack-event (get-id this) e)
-        (delete-ping this neighbour-id)
-        (when (= :suspect (:status nb))
+        (delete-ping this sender-id)
+        (when (= :suspect (:status sender))
           (put-event this (new-alive-event this e)))
-        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive))))))
+        (set-nb-tx this sender-id (.-tx e))
+        (set-nb-status-alive this sender-id)))))
 
 
 (defmethod process-incoming-event PingEvent
@@ -1329,7 +1386,9 @@
       :else
       (do
         (d> :ping-event (get-id this) e)
-        (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :host (.-host e) :port (.-port e)))
+        (upsert-neighbour this (assoc nb :host (.-host e) :port (.-port e)))
+        (set-nb-tx this neighbour-id (.-tx e))
+        (set-nb-status-alive this neighbour-id)
         (let [ack-event (new-ack-event this e)]
           (send-event-ae this ack-event neighbour-id)
           (d> :ack-event (get-id this) ack-event))
@@ -1364,7 +1423,10 @@
     :else
     (let [_           (d> :join-event (get-id this) e)
           nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
-          _           (upsert-neighbour this (assoc nb :tx (.-tx e) :status :alive :access :direct))
+          _           (upsert-neighbour this nb)
+          _           (set-nb-tx this (.-id e) (.-tx e))
+          _           (set-nb-status-alive this (.-id e))
+          _           (set-nb-direct-access this (.-id e))
           alive-event (new-alive-event this e)]
       (send-event-ae this alive-event (.-id e))
       (put-event this alive-event))))
@@ -1404,12 +1466,15 @@
       (d> :alive-event-bad-tx-error (get-id this) e)
 
       :else
-      (let [_                        (d> :alive-event (get-id this) e)
-            new-alive-nb (new-neighbour-node (.-neighbour_id e) (.-neighbour_host e) (.-neighbour_port e))]
-        (upsert-neighbour this (assoc sender-nb :tx (.-tx e)))
-        (upsert-neighbour this (assoc new-alive-nb :tx (.-neighbour_tx e)
-                                 :status :alive :access :direct
-                                 :restart-counter (.-neighbour_restart_counter e)))
+      (let [_            (d> :alive-event (get-id this) e)
+            alive-id     (.-neighbour_id e)
+            new-alive-nb (new-neighbour-node alive-id (.-neighbour_host e) (.-neighbour_port e))]
+        (set-nb-tx this sender-nb (.-tx e))
+        (upsert-neighbour this new-alive-nb)
+        (set-nb-tx this alive-id (.-neighbour_tx e))
+        (set-nb-status-alive this alive-id)
+        (set-nb-direct-access this alive-id)
+        (set-nb-restart-counter this alive-id (.-neighbour_restart_counter e))
         (put-event this e)))))
 
 
@@ -1549,16 +1614,16 @@
           true)
 
         (> cluster-size 1)
-        (let [n            (calc-n cluster-size)
-              join-event   (new-join-event this)
-              alive-nb-ids (mapv :id (get-alive-neighbours this))
-              nb-random-ids   (take n (shuffle alive-nb-ids))]
+        (let [n             (calc-n cluster-size)
+              join-event    (new-join-event this)
+              alive-nb-ids  (mapv :id (get-alive-neighbours this))
+              nb-random-ids (take n (shuffle alive-nb-ids))]
           (set-status this :join)
           (when (seq nb-random-ids)
             (run!
               (fn [nb-id] (send-event this join-event nb-id))
               nb-random-ids))
-          (d> :join (get-id this) {:cluster-size cluster-size
+          (d> :join (get-id this) {:cluster-size        cluster-size
                                    :notified-neighbours (vec nb-random-ids)})
           true)))))
 
