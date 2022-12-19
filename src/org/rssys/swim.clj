@@ -57,13 +57,13 @@
          :max-ping-without-ack-before-suspect 2             ;; How many pings without ack before node became suspect
          :max-ping-without-ack-before-dead    4             ;; How many pings without ack before node considered as dead
 
-         :ping-heartbeat-ms                   300           ;; Send ping+events to neighbours every N ms
-         }))
+         ;; Send ping+events to neighbours every N ms
+         :ping-heartbeat-ms                   300}))
 
 
 (def *stat
-  (atom {:bad-udp-counter 0                                 ;; how many UDP packet we received are bad
-         }))
+  (atom {;; how many UDP packet we received are bad
+         :bad-udp-counter 0}))
 
 
 (defn d>
@@ -1106,7 +1106,9 @@
   (when-let [nb (get-neighbour this neighbour-id)]
     (upsert-neighbour this (assoc nb :status status))))
 
-(defn- set-nb-status-alive [^NodeObject this ^UUID neighbour-id]
+
+(defn- set-nb-status-alive
+  [^NodeObject this ^UUID neighbour-id]
   (set-nb-status this neighbour-id :alive))
 
 
@@ -1548,7 +1550,6 @@
   [^NodeObject this node-process-fn incoming-data-processor-fn]
   (when (= (get-status this) :stop)
     (set-status this :left)
-    (set-restart-counter this (inc (get-restart-counter this)))
     (swap! (:*node this) assoc :tx 1)
     (let [{:keys [host port]} (get-value this)]
       (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))

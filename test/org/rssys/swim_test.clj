@@ -1948,7 +1948,7 @@
                :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                :neighbour-port    5378
                :port              5376
-               :restart-counter   8
+               :restart-counter   7
                :tx                1}
               (sut/get-indirect-ping-event node1 neighbour-id)))
 
@@ -1974,7 +1974,7 @@
                                   :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
                                   :neighbour-port    5376
                                   :port              5378
-                                  :restart-counter   7
+                                  :restart-counter   6
                                   :status            :alive
                                   :tx                1}}
             @*expecting-event)
@@ -1993,9 +1993,9 @@
                                     {:cmd-type                  3
                                      :id                        #uuid "00000000-0000-0000-0000-000000000001"
                                      :neighbour-id              #uuid "00000000-0000-0000-0000-000000000003"
-                                     :neighbour-restart-counter 7
+                                     :neighbour-restart-counter 6
                                      :neighbour-tx              1
-                                     :restart-counter           8
+                                     :restart-counter           7
                                      :tx                        3}
                                     :tx 4}}
               @*expecting-event3))
@@ -2070,7 +2070,7 @@
               :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
               :neighbour-port    5376
               :port              5378
-              :restart-counter   7
+              :restart-counter   6
               :status            :alive
               :tx                1}}
             @*expecting-event)
@@ -2140,7 +2140,7 @@
               :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
               :neighbour-port    5376
               :port              5378
-              :restart-counter   7
+              :restart-counter   6
               :status            :alive
               :tx                1}}
             @*expecting-event)
@@ -2210,7 +2210,7 @@
               :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
               :neighbour-port    5376
               :port              5378
-              :restart-counter   7
+              :restart-counter   6
               :status            :alive
               :tx                1}}
             @*expecting-event)
@@ -2280,7 +2280,7 @@
               :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
               :neighbour-port    5376
               :port              5378
-              :restart-counter   7
+              :restart-counter   6
               :status            :alive
               :tx                1}}
             @*expecting-event)
@@ -2349,7 +2349,7 @@
                                   :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
                                   :neighbour-port    5376
                                   :port              5378
-                                  :restart-counter   7
+                                  :restart-counter   6
                                   :status            :alive
                                   :tx                1}}
             @*expecting-event)
@@ -2418,7 +2418,7 @@
                                   :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
                                   :neighbour-port    5376
                                   :port              5378
-                                  :restart-counter   7
+                                  :restart-counter   6
                                   :status            :alive
                                   :tx                1}}
             @*expecting-event)
@@ -2507,7 +2507,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event2))
 
@@ -2528,7 +2528,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event))
 
@@ -2549,7 +2549,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-port    5376
                 :port              5378
-                :restart-counter   7
+                :restart-counter   6
                 :status            :alive
                 :tx                2}}
               @*expecting-event3))
@@ -2624,7 +2624,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event))
 
@@ -2696,7 +2696,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event))
 
@@ -2769,7 +2769,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event))
 
@@ -2840,7 +2840,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event))
 
@@ -2910,7 +2910,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event))
 
@@ -2983,7 +2983,7 @@
                 :neighbour-id      #uuid "00000000-0000-0000-0000-000000000999"
                 :neighbour-port    5378
                 :port              5376
-                :restart-counter   8
+                :restart-counter   7
                 :tx                1}}
               @*expecting-event))
 
@@ -3049,7 +3049,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              1}}
               @*expecting-event))
 
@@ -3066,9 +3066,9 @@
                 {:cmd-type                  3
                  :id                        #uuid "00000000-0000-0000-0000-000000000001"
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000002"
-                 :neighbour-restart-counter 6
+                 :neighbour-restart-counter 5
                  :neighbour-tx              1
-                 :restart-counter           8
+                 :restart-counter           7
                  :tx                        3}
                 :tx 4}}
               @*expecting-event2))
@@ -3125,7 +3125,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              1}}
               @*expecting-event))
 
@@ -3179,7 +3179,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              1}}
               @*expecting-event))
 
@@ -3233,7 +3233,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              1}}
               @*expecting-event))
 
@@ -3287,7 +3287,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              1}}
               @*expecting-event))
 
@@ -3341,7 +3341,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              1}}
               @*expecting-event))
 
@@ -3396,7 +3396,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              1}}
               @*expecting-event))
 
@@ -3479,7 +3479,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
                 :port            5376
-                :restart-counter 8
+                :restart-counter 7
                 :tx              1}}
               @*expecting-event))
 
@@ -3494,7 +3494,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000002"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-tx    1
-                :restart-counter 6
+                :restart-counter 5
                 :tx              2}}
               @*expecting-event2))
 
@@ -3508,9 +3508,9 @@
                 {:cmd-type                  3
                  :id                        #uuid "00000000-0000-0000-0000-000000000002"
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 8
+                 :neighbour-restart-counter 7
                  :neighbour-tx              1
-                 :restart-counter           6
+                 :restart-counter           5
                  :tx                        4}
                 :tx 5}}
               @*expecting-event3))
@@ -3585,7 +3585,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
                 :port            5376
-                :restart-counter 8
+                :restart-counter 7
                 :tx              1}}
               @*expecting-event))
 
@@ -3638,7 +3638,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
                 :port            5376
-                :restart-counter 8
+                :restart-counter 7
                 :tx              1}}
               @*expecting-event))
 
@@ -3702,7 +3702,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
                 :port            5376
-                :restart-counter 8
+                :restart-counter 7
                 :tx              1}}
               @*expecting-event))
 
@@ -3717,9 +3717,9 @@
                 {:cmd-type                  6
                  :id                        #uuid "00000000-0000-0000-0000-000000000002"
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 8
+                 :neighbour-restart-counter 7
                  :neighbour-tx              1
-                 :restart-counter           6
+                 :restart-counter           5
                  :tx                        2}}}
               @*expecting-event2))
 
@@ -3784,7 +3784,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
                 :port            5376
-                :restart-counter 8
+                :restart-counter 7
                 :tx              1}}
               @*expecting-event))
 
@@ -3799,9 +3799,9 @@
                 {:cmd-type                  6
                  :id                        #uuid "00000000-0000-0000-0000-000000000002"
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 8
+                 :neighbour-restart-counter 7
                  :neighbour-tx              1
-                 :restart-counter           6
+                 :restart-counter           5
                  :tx                        2}}}
               @*expecting-event2))
 
@@ -3856,7 +3856,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000002"
                 :port            5376
-                :restart-counter 8
+                :restart-counter 7
                 :tx              1}}
               @*expecting-event))
 
@@ -3913,7 +3913,7 @@
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :neighbour-id    #uuid "00000000-0000-0000-0000-000000000999"
                 :port            5376
-                :restart-counter 8
+                :restart-counter 7
                 :tx              1}}
               @*expecting-event))
 
@@ -4174,7 +4174,7 @@
                 {:cmd-type                  3
                  :id                        uuid?
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 9
+                 :neighbour-restart-counter 8
                  :neighbour-tx              1
                  :restart-counter           pos-int?
                  :tx                        2}}
@@ -4287,7 +4287,7 @@
                 :host            "127.0.0.1"
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :port            5376
-                :restart-counter 9
+                :restart-counter 8
                 :tx              1}
                :node-id            uuid?
                :ts                 pos-int?
@@ -4301,7 +4301,7 @@
                 {:cmd-type                  6
                  :id                        uuid?
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 9
+                 :neighbour-restart-counter 8
                  :neighbour-tx              1
                  :restart-counter           pos-int?
                  :tx                        2}}
@@ -4371,7 +4371,7 @@
                 :host            "127.0.0.1"
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :port            5376
-                :restart-counter 9
+                :restart-counter 8
                 :tx              1}
                :node-id            uuid?
                :ts                 pos-int?
@@ -4385,7 +4385,7 @@
                 {:cmd-type                  6
                  :id                        uuid?
                  :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-restart-counter 9
+                 :neighbour-restart-counter 8
                  :neighbour-tx              1
                  :restart-counter           pos-int?
                  :tx                        2}}
@@ -4444,7 +4444,7 @@
                 :host            "127.0.0.1"
                 :id              #uuid "00000000-0000-0000-0000-000000000001"
                 :port            5376
-                :restart-counter 9
+                :restart-counter 8
                 :tx              1}
                :node-id            uuid?
                :ts                 pos-int?
@@ -4515,7 +4515,7 @@
                {:cmd-type                  3
                 :id                        uuid?
                 :neighbour-id              #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-restart-counter 9
+                :neighbour-restart-counter 8
                 :neighbour-tx              1
                 :restart-counter           pos-int?
                 :tx                        pos-int?}
@@ -4592,7 +4592,7 @@
                                                 (= v (:id node-data3))))
 
                  :neighbour-id              (:id node-data1)
-                 :neighbour-restart-counter 9
+                 :neighbour-restart-counter 8
                  :neighbour-tx              1
                  :restart-counter           pos-int?
                  :tx                        2}
