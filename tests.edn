@@ -1,13 +1,14 @@
 #kaocha/v1
     {:kaocha/fail-fast?                  true
      :kaocha/color?                      true
-     :kaocha/reporter                    [kaocha.report.progress/report]
+     ;;  :kaocha/reporter                    [kaocha.report.progress/report]
+     :kaocha/reporter                    [kaocha.report/documentation]
 
      :kaocha.plugin.randomize/randomize? true
      :kaocha.plugin.profiling/count      3
      :kaocha.plugin.profiling/profiling? true
 
-     :capture-output?                    true
+     :capture-output?                    false
 
      ; junit format report
      :kaocha.plugin.junit-xml/target-file "target/junit.xml"
