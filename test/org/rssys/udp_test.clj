@@ -1,6 +1,7 @@
 (ns org.rssys.udp-test
   (:require
     [clojure.test :refer [deftest is testing]]
+    [matcho.core :as m]
     [matcho.core :refer [match]]
     [org.rssys.udp :as sut])
   (:import
@@ -14,7 +15,7 @@
 
 
 (defn test-udp-server
-  "Creates and run UDP server.
+  "Create and run UDP server.
   It reads only one packet and then closes socket.
   Waits until packet arrives or timeout expired if set one.
   If data-promise is present then deliver data to a promise.
@@ -41,7 +42,7 @@
 
 
 (deftest send-packet-test
-  (testing "UDP packet send success"
+  (testing "send UDP packet"
     (let [host                  "localhost"
           port                  (+ 10000 (rand-int 50000))
           *data-promise         (promise)
@@ -53,8 +54,12 @@
                                 :*data-promise         *data-promise
                                 :*server-ready-promise *server-ready-promise}))
       @*server-ready-promise                                ;; wait until server is ready
-      (is (= (.length message) (sut/send-packet (.getBytes message) host port)))
-      (is (= (String. ^bytes (deref *data-promise)) message)))))
+
+      (testing "should return length of sent bytes"
+        (m/assert (.length message) (sut/send-packet (.getBytes message) host port)))
+
+      (testing "received data and original message should be the same"
+        (m/assert message (String. ^bytes (deref *data-promise)))))))
 
 
 (deftest start-test
@@ -70,14 +75,23 @@
       (sut/send-packet (.getBytes ^String m) host port)
       (Thread/sleep 10))
     (let [*stop-result (sut/stop *server)]
-      (is (= messages @*results) "All sent messages are equal to received messages")
-      (is (>= (sut/packets-received *server) (count messages)) "Number of received packets should be more or equal to sent messages")
-      (testing "Server map structure is returned as expected."
-        (match @*server {:host                string?
-                         :port                number?
-                         :start-time          #(instance? Instant %)
-                         :max-packet-size     number?
-                         :server-state        :stopped
-                         :continue?           boolean?
-                         :server-packet-count pos?}))
-      (is (= (sut/server-value *stop-result) :stopped) "Server is stopped successfully."))))
+
+      (testing "all received messages should be equal to original messages"
+        (m/assert messages @*results))
+
+      (testing "number of received packets should be >= sent messages"
+        (is (>= (sut/packets-received *server) (count messages))))
+
+      (testing "server map should have correct structure"
+        (m/assert ^:matcho/strict
+          {:host                string?
+           :port                number?
+           :start-time          #(instance? Instant %)
+           :max-packet-size     number?
+           :server-state        :stopped
+           :continue?           boolean?
+           :server-packet-count pos?}
+          @*server))
+
+      (testing "should stop server"
+        (m/assert :stopped (sut/server-value *stop-result))))))
