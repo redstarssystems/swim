@@ -3,13 +3,14 @@
     [clojure.spec.alpha :as s]
     [clojure.string :as string]
     [clojure.test :refer [deftest is testing]]
-    [matcho.core :refer [match not-match]]
     [matcho.core :as m]
     [org.rssys.encrypt :as e]
     [org.rssys.event :as event]
     [org.rssys.spec :as spec]
     [org.rssys.swim :as sut])
   (:import
+    (clojure.lang
+      IMeta)
     (java.util
       UUID)
     (org.rssys.domain
@@ -41,14 +42,14 @@
 
 
 (deftest safe-test
-  (testing "Any Exceptions should be prevented"
+  (testing "should prevent any exceptions"
     (m/assert nil (sut/safe (/ 1 0))))
-  (testing "Any normal expression should be succeed"
+  (testing "should return value for any normal expression"
     (m/assert 1/2 (sut/safe (/ 1 2)))))
 
 
 (deftest calc-n-test
-  (testing "How many nodes should every node notify depending on N nodes in a cluster"
+  (testing "should calculate correct number of nodes for notification depending on cluster size"
     (let [nodes-in-cluster [1 2 4 8 16 32 64 128 256 512 1024]
           result           (mapv sut/calc-n nodes-in-cluster)]
       (m/assert [0 1 2 3 4 5 6 7 8 9 10] result))))
@@ -58,13 +59,18 @@
 
 
 (deftest serialize-test
-  (let [svalues (->> values (map sut/serialize))]
-    (is (every? bytes? svalues) "Serialized value is a bytes array")
-    (is (= [6 7 11 6 9 11 7] (mapv count svalues)) "Serialized value has expected length")))
+  (testing "serialization of different types"
+    (let [svalues (->> values (map sut/serialize))]
+
+      (testing "should produce a byte array for every serialized value"
+        (is (every? bytes? svalues)))
+
+      (testing "should produce output with expected size for every serialized value"
+        (m/assert [6 7 11 6 9 11 7] (mapv count svalues))))))
 
 
 (deftest deserialize-test
-  (testing "Deserialization works as expected on different types"
+  (testing "Deserialization of different types"
     (let [bvalues (map byte-array
                     '([-110 -93 126 35 39 1]
                        [-110 -93 126 35 39 -52 -128]
@@ -74,7 +80,8 @@
                        [-126 -93 126 58 97 1 -93 126 58 98 -61]
                        [-110, -50, 73, -106, 2, -46, 1]))
           dvalues (mapv sut/deserialize bvalues)]
-      (m/assert values dvalues))))
+      (testing "should produce output equals to initial values"
+        (m/assert values dvalues)))))
 
 
 ;;;;;;;;;;
@@ -134,37 +141,48 @@
 
 
 (deftest new-cluster-test
-  (testing "Create Cluster instance is successful"
+  (testing "Create Cluster instance"
     (let [result (sut/new-cluster cluster-data)]
-      (m/assert Cluster (type result))
-      (m/assert ::spec/cluster result)
-      (m/assert 3 (.-cluster_size result)))))
+
+      (testing "should produce correct type"
+        (m/assert Cluster (type result)))
+
+      (testing "should produce correct structure"
+        (m/assert ::spec/cluster result))
+
+      (testing "should have expected cluster size"
+        (m/assert 3 (.-cluster_size result))))))
 
 
 ;;;;
 
 
 (deftest new-neighbour-node-test
-  (testing "Create NeighbourNode instance is successful"
+  (testing "Create new neighbour node"
     (let [result1 (sut/new-neighbour-node neighbour-data1)
           result2 (sut/new-neighbour-node #uuid "00000000-0000-0000-0000-000000000000" "127.0.0.1" 5379)]
-      (m/assert NeighbourNode (type result1))
-      (m/assert NeighbourNode (type result2))
-      (m/assert ::spec/neighbour-node result1)
-      (m/assert ::spec/neighbour-node result2)
-      (testing "NeighbourNode has expected keys and values"
-        (m/assert neighbour-data1 result1))
-      (m/assert ^:matcho/strict
-        {:id              #uuid "00000000-0000-0000-0000-000000000000"
-         :host            "127.0.0.1"
-         :port            5379
-         :status          :unknown
-         :access          :direct
-         :restart-counter 0
-         :tx              0
-         :payload         {}
-         :updated-at      nat-int?}
-        result2))))
+
+      (testing "should produce NeighbourNode instance"
+        (m/assert NeighbourNode (type result1))
+        (m/assert NeighbourNode (type result2)))
+
+      (testing "should produce output with correct structure"
+        (m/assert ::spec/neighbour-node result1)
+        (m/assert ::spec/neighbour-node result2))
+
+      (testing "should produce expected values"
+        (m/assert neighbour-data1 result1)
+        (m/assert ^:matcho/strict
+          {:id              #uuid "00000000-0000-0000-0000-000000000000"
+           :host            "127.0.0.1"
+           :port            5379
+           :status          :unknown
+           :access          :direct
+           :restart-counter 0
+           :tx              0
+           :payload         {}
+           :updated-at      nat-int?}
+          result2)))))
 
 
 ;;;;;
@@ -173,17 +191,21 @@
 
 
 (deftest new-node-object-test
-  (testing "Create NodeObject instance is successful"
-    (let [node-object (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000001"
-                                            :host "127.0.0.1"
-                                            :port 5376}
-                        cluster)]
+  (testing "Create new node"
+    (let [node-object
+          (sut/new-node-object
+            {:id   #uuid "00000000-0000-0000-0000-000000000001"
+             :host "127.0.0.1"
+             :port 5376}
+            cluster)]
 
-      (is (instance? NodeObject node-object) "Should be NodeObject instance")
-      (is (s/valid? ::spec/node (sut/get-value node-object)) "Node inside NodeObject has correct structure")
+      (testing "should produce NodeObject instance"
+        (is (instance? NodeObject node-object)))
 
-      (testing "Node object has correct structure"
-        (m/assert ::spec/node (sut/get-value node-object))
+      (testing "should produce output with correct structure"
+        (m/assert ::spec/node (sut/get-value node-object)))
+
+      (testing "should produce expected values"
         (m/assert ^:matcho/strict
           {:id                   #uuid "00000000-0000-0000-0000-000000000001"
            :host                 "127.0.0.1"
@@ -203,13 +225,13 @@
            :probe-events         {}}
           (sut/get-value node-object)))))
 
-  (testing "Wrong node data is prohibited"
+  (testing "should catch invalid node data"
     (is (thrown-with-msg? Exception #"Invalid node data"
           (sut/new-node-object {:a 1} cluster)))))
 
 
 (deftest getters-test
-  (testing "getters"
+  (testing "Getters"
     (let [this (sut/new-node-object node-data1 cluster)]
 
       (m/assert ^:matcho/strict
@@ -262,7 +284,7 @@
         (sut/get-neighbour this #uuid "00000000-0000-0000-0000-000000000002"))
 
       (m/assert :stop (sut/get-status this))
-      (m/assert empty? (sut/get-outgoing-events this))
+      (m/assert [] (sut/get-outgoing-events this))
 
       (sut/upsert-ping this (event/empty-ping))
       (sut/upsert-indirect-ping this (event/empty-indirect-ping))
@@ -279,7 +301,7 @@
           :attempt-number  1}}
         (sut/get-ping-events this))
 
-      (m/assert
+      (m/assert ^:matcho/strict
         {#uuid "00000000-0000-0000-0000-000000000002"
          {:cmd-type          14
           :id                #uuid "00000000-0000-0000-0000-000000000000"
@@ -333,36 +355,48 @@
 
 
 (deftest nodes-in-cluster-test
-  (let [this (sut/new-node-object node-data1 cluster)
-        nb   (sut/new-neighbour-node neighbour-data1)]
-    (testing "In cluster only this node"
-      (is (= 1 (sut/nodes-in-cluster this)) "Should be cluster with one node"))
-    (testing "In cluster this node and one neighbour"
-      (sut/upsert-neighbour this nb)
-      (is (= 2 (sut/nodes-in-cluster this)) "Should be cluster with two nodes"))))
+  (testing "Calculate nodes in the cluster"
+    (let [this (sut/new-node-object node-data1 cluster)
+          nb   (sut/new-neighbour-node neighbour-data1)]
+
+      (testing "should return one node"
+        (m/assert 1 (sut/nodes-in-cluster this)))
+
+      (testing "should return two nodes"
+        (sut/upsert-neighbour this nb)
+        (m/assert 2 (sut/nodes-in-cluster this))))))
 
 
 (deftest set-cluster-test
-  (testing "set cluster"
+  (testing "Set new cluster"
     (let [new-cluster (sut/new-cluster (assoc cluster-data :id (random-uuid) :name "cluster2"))
           this        (sut/new-node-object node-data1 cluster)]
-      (sut/set-cluster this new-cluster)
-      (m/assert (sut/get-cluster this) new-cluster)
-      (is (thrown-with-msg? Exception #"Invalid cluster data"
-            (sut/set-cluster this (assoc cluster :id 1))))
-      (testing "Cluster change allowed only in status :stop"
+
+      (testing "should set new cluster value for node"
+        (sut/set-cluster this new-cluster)
+        (m/assert (sut/get-cluster this) new-cluster))
+
+      (testing "should catch invalid data"
+        (is (thrown-with-msg? Exception #"Invalid cluster data"
+              (sut/set-cluster this (assoc cluster :id 1)))))
+
+      (testing "should prevent cluster change in all statuses except :stop"
         (is (thrown-with-msg? Exception #"Node is not stopped"
               (sut/set-status this :left)
               (sut/set-cluster this new-cluster)))))))
 
 
 (deftest set-cluster-size-test
-  (testing "set cluster size"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert 3 (sut/get-cluster-size this))
-      (sut/set-cluster-size this 5)
-      (m/assert 5 (sut/get-cluster-size this))
-      (testing "Wrong data is prohibited by spec"
+  (testing "Set cluster size"
+    (let [this (sut/new-node-object node-data1 cluster)
+          new-cluster-size 5]
+
+      (testing "should set cluster size to a new value"
+        (m/dessert new-cluster-size (sut/get-cluster-size this))
+        (sut/set-cluster-size this new-cluster-size)
+        (m/assert new-cluster-size (sut/get-cluster-size this)))
+
+      (testing "should catch invalid cluster size"
         (is (thrown-with-msg? Exception #"Invalid cluster size"
               (sut/set-cluster-size this -1)))
         (is (thrown-with-msg? Exception #"Invalid cluster size"
@@ -370,262 +404,316 @@
 
 
 (deftest cluster-size-exceed?-test
-  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))]
-    (is (true? (sut/cluster-size-exceed? this)))
-    (sut/set-cluster-size this 3)
-    (is (false? (sut/cluster-size-exceed? this)))))
+
+  (testing "cluster size check"
+    (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))]
+
+      (testing "should detect cluster size exceed"
+        (m/assert true? (sut/cluster-size-exceed? this)))
+
+      (testing "should detect cluster size not exceed"
+        (sut/set-cluster-size this 3)
+        (m/assert false? (sut/cluster-size-exceed? this))))))
 
 
 
 (deftest set-status-test
   (testing "set status"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert :stop (sut/get-status this))
-      (sut/set-status this :left)
-      (m/assert :left (sut/get-status this))
-      (testing "Wrong data is prohibited by spec"
+    (let [this (sut/new-node-object node-data1 cluster)
+          new-status :left]
+
+      (testing "should set node status to a new value"
+        (m/dessert new-status (sut/get-status this))
+        (sut/set-status this new-status)
+        (m/assert new-status (sut/get-status this)))
+
+      (testing "should catch invalid node status"
         (is (thrown-with-msg? Exception #"Invalid node status"
               (sut/set-status this :wrong-value)))))))
 
 
 (deftest set-payload-test
-  (testing "set payload"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-payload this))
-      (sut/set-payload this {:tcp-port 1234 :role "data node"})
-      (m/assert {:tcp-port 1234 :role "data node"} (sut/get-payload this))
-      (testing "too big payload cannot be set"
-        (is (thrown-with-msg? Exception #"Size of payload is too big"
+  (testing "Set payload"
+    (let [this        (sut/new-node-object node-data1 cluster)
+          new-payload {:tcp-port 1234 :role "data node"}]
+
+      (testing "should set new payload value"
+        (m/dessert new-payload (sut/get-payload this))
+        (sut/set-payload this new-payload)
+        (m/assert new-payload (sut/get-payload this)))
+
+      (testing "should rise an exception if payload size is too big "
+        (is (thrown-with-msg? Exception #"Payload size is too big"
               (sut/set-payload this
                 {:long-string (apply str (repeat (:max-payload-size @sut/*config) "a"))})))))))
 
 
 (deftest set-restart-counter-test
   (testing "set restart counter"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert 7 (sut/get-restart-counter this))
-      (sut/set-restart-counter this 42)
-      (m/assert 42 (sut/get-restart-counter this))
-      (testing "Wrong data is prohibited by spec"
+    (let [this (sut/new-node-object node-data1 cluster)
+          new-restart-counter 42]
+
+      (testing "should set a new value"
+        (m/dessert new-restart-counter (sut/get-restart-counter this))
+        (sut/set-restart-counter this new-restart-counter)
+        (m/assert new-restart-counter (sut/get-restart-counter this)))
+
+      (testing "should catch invalid values"
         (is (thrown-with-msg? Exception #"Invalid restart counter data"
               (sut/set-restart-counter this -1)))))))
 
 
 (deftest inc-tx-test
   (testing "increment tx"
-    (let [new-cluster (sut/new-cluster (assoc cluster-data :id (random-uuid) :name "cluster2"))
-          this        (sut/new-node-object node-data1 cluster)]
-      (m/assert 0 (sut/get-tx this))
-      (sut/inc-tx this)
-      (m/assert 1 (sut/get-tx this)))))
+    (let [this        (sut/new-node-object node-data1 cluster)
+          current-tx (sut/get-tx this)]
+
+      (testing "should set a new tx value (+1)"
+        (sut/inc-tx this)
+        (m/assert (inc current-tx) (sut/get-tx this))))))
 
 
 (deftest upsert-neighbour-test
   (testing "upsert neighbour"
     (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))]
-      (m/assert empty? (sut/get-neighbours this))
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
-      (m/assert (dissoc neighbour-data1 :updated-at)
-        (sut/get-neighbour this (:id neighbour-data1)))
-      (m/assert 2 (count (sut/get-neighbours this)))
 
-      (testing "don't put to neighbours with the same id as this node has"
+      (testing "should insert two neighbours"
+        (m/assert empty? (sut/get-neighbours this))
+        (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
         (m/assert 2 (count (sut/get-neighbours this)))
-        (sut/upsert-neighbour this neighbour-data3)
-        (m/assert 2 (count (sut/get-neighbours this))))
+        (m/assert {(:id neighbour-data1) (dissoc neighbour-data1 :updated-at)
+                   (:id neighbour-data2) (dissoc neighbour-data2 :updated-at)}
+          (sut/get-neighbours this)))
 
-      (testing "Wrong data is prohibited by spec"
+      (testing "should reject neighbour with the same id as this node id"
+        (m/assert 2 (count (sut/get-neighbours this)))
+        (m/assert (sut/get-id this) (:id neighbour-data3))
+        (sut/upsert-neighbour this neighbour-data3)
+        (m/assert 2 (count (sut/get-neighbours this)))
+        (m/assert {(:id neighbour-data1) (dissoc neighbour-data1 :updated-at)
+                   (:id neighbour-data2) (dissoc neighbour-data2 :updated-at)}
+          (sut/get-neighbours this)))
+
+      (testing "should catch invalid neighbour data"
         (is (thrown-with-msg? Exception #"Invalid neighbour node data"
               (sut/upsert-neighbour this {:a :bad-value}))))
-      (testing "Update timestamp after every neighbour update"
-        (let [nb        (sut/get-neighbour this (:id neighbour-data1))
-              timestamp (:updated-at nb)
-              port      (:port nb)]
-          (m/assert pos-int? timestamp)
-          (m/assert pos-int? port)
-          (sut/upsert-neighbour this (sut/new-neighbour-node (assoc neighbour-data1 :port 5370)))
-          (let [modified-nb (sut/get-neighbour this (:id neighbour-data1))]
-            (is (not= timestamp (:updated-at modified-nb)))
-            (is (not= port (:port modified-nb))))))))
 
-  (testing "upsert neighbour should success if node exists in a neighbours table"
-    (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 2))]
-      (m/assert empty? (sut/get-neighbours this))
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-      (m/assert 1 (count (sut/get-neighbours this)))
+      (testing "should update neighbour's timestamp after every update"
+        (let [nb-id (:id neighbour-data1)
+              nb        (sut/get-neighbour this nb-id)
+              old-timestamp (:updated-at nb)]
+          (sut/upsert-neighbour this nb)
+          (let [modified-nb (sut/get-neighbour this nb-id)]
+            (is (> (:updated-at modified-nb) old-timestamp))))
 
-      (testing "do not upsert new neighbour if cluster size exceeded"
-        (is (thrown-with-msg? Exception #"Cluster size exceeded"
-              (sut/upsert-neighbour this neighbour-data3))))
+        (testing "should have cluster size control"
+          (let [new-cluster-size 2
+                this (sut/new-node-object node-data1 (assoc cluster :cluster-size new-cluster-size))]
 
-      (testing "upsert existing neighbour should success"
-        (sut/upsert-neighbour this (assoc neighbour-data1 :restart-counter 4))
-        (m/assert {:restart-counter 4} (sut/get-neighbour this (:id neighbour-data1)))
-        (m/assert 1 (count (sut/get-neighbours this)))))))
+            (testing "should success before cluster size exceed"
+              (m/assert 0 (count (sut/get-neighbours this)))
+              (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+              (m/assert 1 (count (sut/get-neighbours this))))
+
+            (testing "should fail because cluster size exceed"
+              (is (thrown-with-msg? Exception #"Cluster size exceeded"
+                    (sut/upsert-neighbour this neighbour-data3))))
+
+            (testing "should success if neighbour exist"
+              (let [new-restart-counter 4]
+                (sut/upsert-neighbour this (assoc neighbour-data1 :restart-counter new-restart-counter))
+                (m/assert
+                  {:restart-counter new-restart-counter}
+                  (sut/get-neighbour this (:id neighbour-data1)))))))))))
 
 
 (deftest delete-neighbour-test
   (testing "delete neighbour"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-neighbours this))
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
-      (m/assert 2 (count (sut/get-neighbours this)))
-      (sut/delete-neighbour this (:id neighbour-data1))
-      (m/assert 1 (count (sut/get-neighbours this)))
-      (m/assert (dissoc neighbour-data2 :updated-at)
-        (sut/get-neighbour this (:id neighbour-data2))))))
+    (let [this (sut/new-node-object node-data1 cluster)
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
+          nb-count (count (sut/get-neighbours this))]
+
+      (testing "should delete first neighbour"
+        (sut/delete-neighbour this (:id neighbour-data1))
+        (m/assert (dec nb-count) (count (sut/get-neighbours this))))
+
+      (testing "neighbours map should contain second neighbour"
+        (m/assert ^:matcho/strict
+          {(:id neighbour-data2) (dissoc neighbour-data2 :updated-at)}
+          (sut/get-neighbours this)))
+
+      (testing "should delete second neighbour"
+        (sut/delete-neighbour this (:id neighbour-data2))
+        (m/assert 0 (count (sut/get-neighbours this)))))))
 
 
 (deftest delete-neighbours-test
-  (testing "delete all neighbours"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-neighbours this))
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
-      (m/assert 2 (count (sut/get-neighbours this)))
-      (m/assert 2 (sut/delete-neighbours this))
-      (m/assert 0 (count (sut/get-neighbours this))))))
+  (testing "delete neighbours"
+    (let [this (sut/new-node-object node-data1 cluster)
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))]
+
+      (testing "should delete all neighbours from neighbours map"
+        (m/assert 2 (count (sut/get-neighbours this)))
+        (m/assert 2 (sut/delete-neighbours this))
+        (m/assert 0 (count (sut/get-neighbours this)))))))
 
 
 (deftest set-outgoing-events-test
   (testing "set outgoing events"
     (let [new-outgoing-events [[(:left event/code) (random-uuid)]]
           this                (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-outgoing-events this))
-      (sut/set-outgoing-events this new-outgoing-events)
-      (m/assert ^:matcho/strict
-        new-outgoing-events
-        (sut/get-outgoing-events this)))))
+
+      (testing "should set new value"
+        (m/dessert new-outgoing-events (sut/get-outgoing-events this))
+        (sut/set-outgoing-events this new-outgoing-events)
+        (m/assert ^:matcho/strict new-outgoing-events (sut/get-outgoing-events this))))))
+
 
 
 (deftest put-event-test
   (testing "put event"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-outgoing-events this))
-      (sut/put-event this (event/empty-ping))
-      (sut/put-event this (event/empty-ack))
-      (m/assert ^:matcho/strict
-        [(event/empty-ping) (event/empty-ack)]
-        (sut/get-outgoing-events this)))))
+    (let [this       (sut/new-node-object node-data1 cluster)
+          ping-event (event/empty-ping)
+          ack-event  (event/empty-ack)
+          expected-events [ping-event ack-event]]
 
+      (testing "should save two events in outgoing events vector"
+        (m/dessert expected-events (sut/get-outgoing-events this))
+        (sut/put-event this (event/empty-ping))
+        (sut/put-event this (event/empty-ack))
+        (m/assert ^:matcho/strict expected-events (sut/get-outgoing-events this))))))
 
 
 (deftest take-events-test
   (testing "take events"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-outgoing-events this))
-      (sut/put-event this (event/empty-ping))
-      (sut/put-event this (event/empty-ack))
-      (m/assert 2 (count (sut/get-outgoing-events this)))
-      (m/assert
-        [(event/empty-ping) (event/empty-ack)]
-        (sut/take-events this 2))
-      (m/assert 0 (count (sut/get-outgoing-events this)))))
-  (testing "take all events"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-outgoing-events this))
-      (sut/put-event this (event/empty-ping))
-      (sut/put-event this (event/empty-ack))
-      (m/assert 2 (count (sut/get-outgoing-events this)))
-      (m/assert
-        [(event/empty-ping) (event/empty-ack)]
-        (sut/take-events this))
-      (m/assert 0 (count (sut/get-outgoing-events this))))))
+    (let [this (sut/new-node-object node-data1 cluster)
+          ping-event (event/empty-ping)
+          ack-event  (event/empty-ack)
+          expected-events [ping-event ack-event]]
+
+      (sut/put-event this ping-event)
+      (sut/put-event this ack-event)
+
+      (testing "should return two events from outgoing events buffer"
+        (m/assert ^:matcho/strict expected-events (sut/take-events this 2)))
+
+      (testing "should delete taken events from outgoing events buffer"
+        (m/assert empty? (sut/get-outgoing-events this)))
+
+      (testing "without arguments should take all events and make buffer empty"
+        (sut/put-event this ping-event)
+        (sut/put-event this ack-event)
+        (m/assert expected-events (sut/take-events this))
+        (m/assert empty? (sut/get-outgoing-events this))))))
 
 
 (deftest upsert-ping-test
   (testing "upsert ping"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-ping-events this))
+    (let [this (sut/new-node-object node-data1 cluster)
+          ping-event (event/empty-ping)
+          ping-id (.-neighbour_id ping-event)]
 
-      (testing "Function returns the id of ping event"
-        (m/assert #uuid "00000000-0000-0000-0000-000000000001"
-          (sut/upsert-ping this (event/empty-ping))))
+      (testing "should return key (`neighbour-id`) after upsert"
+        (m/assert nil (sut/get-ping-event this ping-id))
+        (m/assert ping-id (sut/upsert-ping this ping-event)))
 
-      (m/assert 1 (count (sut/get-ping-events this)))
-      (m/assert
-        {#uuid "00000000-0000-0000-0000-000000000001" (event/empty-ping)}
-        (sut/get-ping-events this))
+      (testing "should save ping event in a ping events map"
+        (m/assert ping-event (sut/get-ping-event this ping-id)))
 
-      (testing "Upsert ping event with same id will increment attempt number"
-        (sut/upsert-ping this (event/empty-ping))
-        (sut/upsert-ping this (event/empty-ping))
-        (m/assert {:attempt-number 3}
-          (sut/get-ping-event this #uuid"00000000-0000-0000-0000-000000000001")))
+      (testing "should increment attempt number if ping event is already in a map"
+        (sut/upsert-ping this ping-event)
+        (sut/upsert-ping this ping-event)
+        (m/assert {:attempt-number 3} (sut/get-ping-event this ping-id)))
 
-      (testing "Wrong data is prohibited by spec"
+      (testing "should catch invalid ping event data"
         (is (thrown-with-msg? Exception #"Invalid ping event data"
               (sut/upsert-ping this {:a :bad-value})))))))
 
 
 (deftest delete-ping-test
   (testing "delete ping"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-ping-events this))
-      (sut/upsert-ping this (event/empty-ping))
-      (m/assert 1 (count (sut/get-ping-events this)))
-      (sut/delete-ping this #uuid "00000000-0000-0000-0000-000000000001")
-      (m/assert zero? (count (sut/get-ping-events this))))))
+    (let [this (sut/new-node-object node-data1 cluster)
+          ping-event (event/empty-ping)
+          ping-id (.-neighbour_id ping-event)]
+
+      (sut/upsert-ping this ping-event)
+
+      (testing "should delete ping event from ping events map"
+        (m/assert ping-event (sut/get-ping-event this ping-id))
+        (sut/delete-ping this ping-id)
+        (m/assert nil (sut/get-ping-event this ping-id))))))
 
 
 (deftest upsert-indirect-ping-test
+
   (testing "upsert indirect ping"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-indirect-ping-events this))
+    (let [this (sut/new-node-object node-data1 cluster)
+          indirect-ping-event (event/empty-indirect-ping)
+          ping-id (.-neighbour_id indirect-ping-event)]
 
-      (testing "Function returns the id of indirect ping event"
-        (m/assert #uuid "00000000-0000-0000-0000-000000000002"
-          (sut/upsert-indirect-ping this (event/empty-indirect-ping))))
+      (testing "should return key (`neighbour-id`) after upsert"
+        (m/assert nil (sut/get-indirect-ping-event this ping-id))
+        (m/assert ping-id (sut/upsert-indirect-ping this indirect-ping-event)))
 
-      (m/assert 1 (count (sut/get-indirect-ping-events this)))
-      (m/assert {#uuid"00000000-0000-0000-0000-000000000002" (event/empty-indirect-ping)}
-        (sut/get-indirect-ping-events this))
+      (testing "should save indirect ping event in a map"
+        (m/assert indirect-ping-event (sut/get-indirect-ping-event this ping-id)))
 
-      (testing "Upsert indirect ping event with same id will increment attempt number"
-        (sut/upsert-indirect-ping this (event/empty-indirect-ping))
-        (sut/upsert-indirect-ping this (event/empty-indirect-ping))
-        (m/assert {:attempt-number 3}
-          (sut/get-indirect-ping-event this #uuid"00000000-0000-0000-0000-000000000002")))
+      (testing "should increment attempt number if indirect ping event is already in a map"
+        (sut/upsert-indirect-ping this indirect-ping-event)
+        (sut/upsert-indirect-ping this indirect-ping-event)
+        (m/assert {:attempt-number 3} (sut/get-indirect-ping-event this ping-id)))
 
-      (testing "Wrong data is prohibited by spec"
+      (testing "should catch invalid indirect ping event data"
         (is (thrown-with-msg? Exception #"Invalid indirect ping event data"
               (sut/upsert-indirect-ping this {:a :bad-value})))))))
 
 
 (deftest delete-indirect-ping-test
   (testing "delete indirect ping"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-indirect-ping-events this))
-      (sut/upsert-indirect-ping this (event/empty-indirect-ping))
-      (m/assert 1 (count (sut/get-indirect-ping-events this)))
-      (sut/delete-indirect-ping this #uuid"00000000-0000-0000-0000-000000000002")
-      (m/assert zero? (count (sut/get-indirect-ping-events this))))))
+    (let [this (sut/new-node-object node-data1 cluster)
+          indirect-ping-event (event/empty-indirect-ping)
+          ping-id (.-neighbour_id indirect-ping-event)]
+
+      (sut/upsert-indirect-ping this indirect-ping-event)
+
+      (testing "should delete indirect ping event from map"
+        (m/assert indirect-ping-event (sut/get-indirect-ping-event this ping-id))
+        (sut/delete-indirect-ping this ping-id)
+        (m/assert nil (sut/get-indirect-ping-event this ping-id))))))
 
 
-(deftest upsert-probe-test
-  (testing "upsert probe"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-probe-events this))
-      (sut/insert-probe this (event/empty-probe))
-      (m/assert 1 (count (sut/get-probe-events this)))
-      (m/assert
-        {#uuid "00000000-0000-0009-0000-000000000001" nil}
-        (sut/get-probe-events this))
-      (testing "Wrong data is prohibited by spec"
+(deftest insert-probe-test
+  (testing "insert probe"
+    (let [this (sut/new-node-object node-data1 cluster)
+          probe-event (event/empty-probe)
+          probe-key (.-probe_key probe-event)]
+
+      (testing "should save probe key from probe event in a probe events map"
+        (m/assert false (contains? (sut/get-probe-events this) probe-key))
+        (sut/insert-probe this probe-event)
+        (m/assert true (contains? (sut/get-probe-events this) probe-key))
+        (m/assert {probe-key nil} (sut/get-probe-events this)))
+
+      (testing "should catch invalid probe event data"
         (is (thrown-with-msg? Exception #"Invalid probe event data"
               (sut/insert-probe this {:a :bad-value})))))))
 
 
 (deftest delete-probe-test
   (testing "delete probe"
-    (let [this (sut/new-node-object node-data1 cluster)]
-      (m/assert empty? (sut/get-probe-events this))
-      (sut/insert-probe this (event/empty-probe))
-      (m/assert 1 (count (sut/get-probe-events this)))
-      (sut/delete-probe this #uuid "00000000-0000-0009-0000-000000000001")
-      (m/assert zero? (count (sut/get-probe-events this))))))
+    (let [this (sut/new-node-object node-data1 cluster)
+          probe-event (event/empty-probe)
+          probe-key (.-probe_key probe-event)]
+
+      (sut/insert-probe this probe-event)
+
+      (testing "should delete probe key from probe events map"
+        (m/assert ^:matcho/strict {probe-key nil} (sut/get-probe-events this))
+        (sut/delete-probe this probe-key)
+        (m/dessert ^:matcho/strict {probe-key nil} (sut/get-probe-events this))))))
 
 
 (deftest upsert-probe-ack-test
@@ -634,24 +722,17 @@
           probe-event     (event/empty-probe)
           probe-ack-event (sut/new-probe-ack-event this probe-event)
           probe-key       (.-probe_key probe-event)]
-      (m/assert empty? (sut/get-probe-events this))
-      (sut/insert-probe this (event/empty-probe))
-      (m/assert 1 (count (sut/get-probe-events this)))
-      (sut/upsert-probe-ack this probe-ack-event)
-      (m/assert
-        {probe-key
-         {:cmd-type        10
-          :id              #uuid "00000000-0000-0000-0000-000000000001"
-          :host            "127.0.0.1"
-          :port            5376
-          :restart-counter 7
-          :tx              0
-          :status          :stop
-          :neighbour-id    #uuid "00000000-0000-0000-0000-000000000000"
-          :neighbour-tx    0
-          :probe-key       #uuid "00000000-0000-0009-0000-000000000001"}}
-        (sut/get-probe-events this))
-      (testing "Wrong data is prohibited by spec"
+
+      (testing "should save probe ack event using probe key"
+        (m/dessert {probe-key probe-ack-event} (sut/get-probe-events this))
+        (sut/upsert-probe-ack this probe-ack-event)
+        (m/assert {probe-key probe-ack-event} (sut/get-probe-events this)))
+
+      (testing "should update existing probe ack event using probe key"
+        (sut/upsert-probe-ack this (assoc probe-ack-event :restart-counter 42))
+        (m/assert {probe-key {:restart-counter 42}} (sut/get-probe-events this)))
+
+      (testing "should catch invalid probe ack data"
         (is (thrown-with-msg? Exception #"Invalid probe ack event data"
               (sut/upsert-probe-ack this {:a :bad-value})))))))
 
@@ -664,122 +745,148 @@
 
 
 (deftest new-probe-event-test
-  (let [this        (sut/new-node-object node-data1 cluster)
-        probe-event (sut/new-probe-event this "127.0.0.1" 5376)]
-    (m/assert ProbeEvent (type probe-event))
-    (m/assert ::spec/probe-event probe-event)
-    (m/assert uuid? (.-probe_key probe-event))
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid probe event"
-            (sut/new-probe-event this "127.0.01" -1))))))
+  (testing "probe event builder"
+    (let [this        (sut/new-node-object node-data1 cluster)
+          current-tx  (sut/get-tx this)
+          probe-event (sut/new-probe-event this "127.0.0.1" 5376)]
+
+      (testing "should generate event with correct type"
+        (m/assert ProbeEvent (type probe-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/probe-event probe-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid probe data"
+        (is (thrown-with-msg? Exception #"Invalid probe data"
+              (sut/new-probe-event this "127.0.01" -1)))))))
 
 
-;;;;
 
 (deftest new-probe-ack-event-test
-  (let [this            (sut/new-node-object node-data1 cluster)
-        probe-event     (sut/new-probe-event this "127.0.0.1" 5376)
-        probe-ack-event (sut/new-probe-ack-event this probe-event)]
-    (m/assert ProbeAckEvent (type probe-ack-event))
-    (m/assert ::spec/probe-ack-event probe-ack-event)
-    (m/assert (.-probe_key probe-event) (.-probe_key probe-ack-event))
-    (testing "tx contains number of generated events on this node"
-      (m/assert 2 (sut/get-tx this)))
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid probe ack event"
-            (sut/new-probe-ack-event this (assoc probe-event :id :bad-value)))))))
+  (testing "probe ack event builder"
+    (let [this            (sut/new-node-object node-data1 cluster)
+          probe-event     (sut/new-probe-event this "127.0.0.1" 5376)
+          current-tx      (sut/get-tx this)
+          probe-ack-event (sut/new-probe-ack-event this probe-event)]
 
+      (testing "should generate event with correct type"
+        (m/assert ProbeAckEvent (type probe-ack-event)))
 
-;;;;
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/probe-ack-event probe-ack-event))
+
+      (testing "should set probe key to probe ack event from probe event"
+        (m/assert (.-probe_key probe-event) (.-probe_key probe-ack-event)))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid probe ack data"
+        (is (thrown-with-msg? Exception #"Invalid probe ack data"
+              (sut/new-probe-ack-event this (assoc probe-event :id :bad-value))))))))
+
 
 (deftest new-ping-event-test
-  (let [this       (sut/new-node-object node-data1 cluster)
-        ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)]
-    (m/assert PingEvent (type ping-event))
-    (m/assert ::spec/ping-event ping-event)
-    (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid ping event"
-            (sut/new-ping-event this :bad-value 42))))))
+  (testing "ping event builder"
+    (let [this       (sut/new-node-object node-data1 cluster)
+          current-tx (sut/get-tx this)
+          ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)]
 
+      (testing "should generate event with correct type"
+        (m/assert PingEvent (type ping-event)))
 
-;;;;
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/ping-event ping-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid ping data"
+        (is (thrown-with-msg? Exception #"Invalid ping data"
+              (sut/new-ping-event this :bad-value 42)))))))
+
 
 (deftest new-ack-event-test
-  (let [this       (sut/new-node-object node-data1 cluster)
-        ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
-        ack-event  (sut/new-ack-event this ping-event)]
-    (m/assert AckEvent (type ack-event))
-    (m/assert ::spec/ack-event ack-event)
-    (testing "tx contains number of generated events on this node"
-      (m/assert 2 (sut/get-tx this)))
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid ack event"
-            (sut/new-ack-event this (assoc ping-event :id :bad-value)))))))
+  (testing "ack event builder"
+    (let [this       (sut/new-node-object node-data1 cluster)
+          ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
+          current-tx (sut/get-tx this)
+          ack-event  (sut/new-ack-event this ping-event)]
+
+      (testing "should generate event with correct type"
+        (m/assert AckEvent (type ack-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/ack-event ack-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid ack data"
+        (is (thrown-with-msg? Exception #"Invalid ack data"
+              (sut/new-ack-event this (assoc ping-event :id :bad-value))))))))
 
 
-;;;;
 
 (deftest new-indirect-ping-event-test
 
-  (let [this         (sut/new-node-object node-data1 cluster)
-        intermediate (sut/new-neighbour-node neighbour-data1)
-        neighbour    (sut/new-neighbour-node neighbour-data2)]
+  (testing "indirect ping builder"
+    (let [this                (sut/new-node-object node-data1 cluster)
+          intermediate        (sut/new-neighbour-node neighbour-data1)
+          neighbour           (sut/new-neighbour-node neighbour-data2)
+          _                   (sut/upsert-neighbour this intermediate)
+          _                   (sut/upsert-neighbour this neighbour)
+          current-tx          (sut/get-tx this)
+          indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)]
 
-    (sut/upsert-neighbour this intermediate)
-    (sut/upsert-neighbour this neighbour)
 
-    (testing "Create normal indirect ping event"
+      (testing "should generate event with correct type"
+        (m/assert IndirectPingEvent (type indirect-ping-event)))
 
-      (let [indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)]
-        (m/assert IndirectPingEvent (type indirect-ping-event))
+      (testing "should generate event with correct structure"
         (m/assert ::spec/indirect-ping-event indirect-ping-event)
         (m/assert {:intermediate-id   (:id intermediate)
                    :intermediate-host (:host intermediate)
                    :intermediate-port (:port intermediate)}
-          indirect-ping-event)
+          indirect-ping-event))
 
-        (testing "tx contains number of generated events on this node"
-          (m/assert 1 (sut/get-tx this)))
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
 
-        (m/assert {:neighbour-id   (:id neighbour)
-                   :neighbour-host (:host neighbour)
-                   :neighbour-port (:port neighbour)}
-          indirect-ping-event)))
+      (testing "should catch unknown intermediate node"
+        (is (thrown-with-msg? Exception #"Unknown intermediate node with such id"
+              (sut/new-indirect-ping-event this :bad-id (:id neighbour) 1))))
 
-    (testing "Unknown intermediate node is prohibited"
-      (is (thrown-with-msg? Exception #"Unknown intermediate node with such id"
-            (sut/new-indirect-ping-event this :bad-id (:id neighbour) 1))))
+      (testing "should catch unknown neighbour"
+        (is (thrown-with-msg? Exception #"Unknown neighbour node with such id"
+              (sut/new-indirect-ping-event this (:id intermediate) :bad-id 1))))
 
-    (testing "Unknown neighbour node is prohibited"
-      (is (thrown-with-msg? Exception #"Unknown neighbour node with such id"
-            (sut/new-indirect-ping-event this (:id intermediate) :bad-id 1))))
-
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid indirect ping event"
-            (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) :bad-value))))))
+      (testing "should catch invalid indirect ping data"
+        (is (thrown-with-msg? Exception #"Invalid indirect ping data"
+              (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) :bad-value)))))))
 
 
-;;;;
 
 (deftest new-indirect-ack-event-test
 
-  (let [this                (sut/new-node-object node-data1 cluster)
-        intermediate        (sut/new-neighbour-node neighbour-data1)
-        neighbour           (sut/new-neighbour-node neighbour-data2)
-        _                   (sut/upsert-neighbour this intermediate)
-        _                   (sut/upsert-neighbour this neighbour)
-        indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)
-        neighbour-this      (sut/new-node-object node-data3 cluster)]
+  (testing "indirect ack builder"
+    (let [this                (sut/new-node-object node-data1 cluster)
+          intermediate        (sut/new-neighbour-node neighbour-data1)
+          neighbour           (sut/new-neighbour-node neighbour-data2)
+          _                   (sut/upsert-neighbour this intermediate)
+          _                   (sut/upsert-neighbour this neighbour)
+          indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)
+          ack-node            (sut/new-node-object node-data3 cluster)
+          current-tx          (sut/get-tx ack-node)
+          indirect-ack-event  (sut/new-indirect-ack-event ack-node indirect-ping-event)]
 
-    (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
+      (testing "should generate event with correct type"
+        (m/assert IndirectAckEvent (type indirect-ack-event)))
 
-    (testing "Create normal indirect ack event"
-
-      (let [indirect-ack-event (sut/new-indirect-ack-event neighbour-this indirect-ping-event)]
-        (m/assert IndirectAckEvent (type indirect-ack-event))
+      (testing "should generate event with correct structure"
         (m/assert ::spec/indirect-ack-event indirect-ack-event)
         (m/assert {:intermediate-id   (:id intermediate)
                    :intermediate-host (:host intermediate)
@@ -788,170 +895,216 @@
         (m/assert {:neighbour-id   (sut/get-id this)
                    :neighbour-host (sut/get-host this)
                    :neighbour-port (sut/get-port this)}
-          indirect-ack-event)))
+          indirect-ack-event))
 
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid indirect ack event"
-            (sut/new-indirect-ack-event this (assoc indirect-ping-event :attempt-number -1)))))))
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx ack-node)))
 
-
-;;;;
+      (testing "should catch invalid indirect ack data"
+        (is (thrown-with-msg? Exception #"Invalid indirect ack data"
+              (sut/new-indirect-ack-event ack-node (assoc indirect-ping-event :attempt-number -1))))))))
 
 
 (deftest new-alive-event-test
-  (let [this           (sut/new-node-object node-data1 cluster)
-        neighbour-this (sut/new-node-object node-data2 cluster)
-        _              (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-        ping-event     (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
-        ack-event      (sut/new-ack-event neighbour-this ping-event)
-        alive-event    (sut/new-alive-event this ack-event)]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 2 (sut/get-tx this)))
-    (m/assert AliveEvent (type alive-event))
-    (m/assert ::spec/alive-event alive-event)
-    (testing "Alive event contains tx less by 1 than node has"
-      (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"
-                 :neighbour-tx (dec (sut/get-tx neighbour-this))} alive-event))
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid alive event"
-            (sut/new-alive-event this (assoc ack-event :id :bad-value)))))))
+
+  (testing "alive event builder"
+    (let [this           (sut/new-node-object node-data1 cluster)
+          neighbour-this (sut/new-node-object node-data2 cluster)
+          _              (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+          ping-event     (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
+          ack-event      (sut/new-ack-event neighbour-this ping-event)
+          current-tx     (sut/get-tx this)
+          alive-event    (sut/new-alive-event this ack-event)]
+
+      (testing "should generate event with correct type"
+        (m/assert AliveEvent (type alive-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/alive-event alive-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid alive event data"
+        (is (thrown-with-msg? Exception #"Invalid alive data"
+              (sut/new-alive-event this (assoc ack-event :id :bad-value))))))))
 
 
-;;;;
 
 (deftest new-cluster-size-event-test
-  (let [this             (sut/new-node-object node-data1 cluster)
-        new-cluster-size 5
-        ncs-event        (sut/new-cluster-size-event this new-cluster-size)]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
-    (m/assert NewClusterSizeEvent (type ncs-event))
-    (m/assert ::spec/new-cluster-size-event ncs-event)
-    (m/assert {:old-cluster-size (.-cluster_size cluster)
-               :new-cluster-size new-cluster-size}
-      ncs-event)
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid new cluster size event"
-            (sut/new-cluster-size-event this -1))))))
+  (testing "new cluster size event builder"
+    (let [this             (sut/new-node-object node-data1 cluster)
+          new-cluster-size 5
+          current-tx       (sut/get-tx this)
+          ncs-event        (sut/new-cluster-size-event this new-cluster-size)]
+
+      (testing "should generate event with correct type"
+        (m/assert NewClusterSizeEvent (type ncs-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/new-cluster-size-event ncs-event)
+        (m/assert {:old-cluster-size (.-cluster_size cluster)
+                   :new-cluster-size new-cluster-size}
+          ncs-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid cluster size data"
+        (is (thrown-with-msg? Exception #"Invalid cluster size data"
+              (sut/new-cluster-size-event this -1)))))))
 
 
-
-;;;;
 
 (deftest new-dead-event-test
-  (let [this       (sut/new-node-object node-data1 cluster)
-        ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
-        neighbour  (sut/new-neighbour-node neighbour-data1)
-        _          (sut/upsert-neighbour this neighbour)
-        dead-event (sut/new-dead-event this (.-neighbour_id ping-event))]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 2 (sut/get-tx this)))
-    (m/assert DeadEvent (type dead-event))
-    (m/assert ::spec/dead-event dead-event)
-    (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
-      dead-event)
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid dead event"
-            (sut/new-dead-event this (assoc ping-event :id :bad-value)))))))
+  (testing "dead event builder"
+    (let [this       (sut/new-node-object node-data1 cluster)
+          ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
+          neighbour  (sut/new-neighbour-node neighbour-data1)
+          _          (sut/upsert-neighbour this neighbour)
+          current-tx (sut/get-tx this)
+          dead-event (sut/new-dead-event this (.-neighbour_id ping-event))]
 
+      (testing "should generate event with correct type"
+        (m/assert DeadEvent (type dead-event)))
 
-;;;;
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/dead-event dead-event)
+        (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
+          dead-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid dead event data"
+        (is (thrown-with-msg? Exception #"Invalid dead event data"
+              (sut/new-dead-event this (assoc ping-event :id :bad-value))))))))
+
 
 (deftest new-anti-entropy-event-test
-  (let [this                (sut/new-node-object node-data1 cluster)
-        neighbour           (sut/new-neighbour-node neighbour-data1)
-        _                   (sut/upsert-neighbour this neighbour)
-        _                   (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
-        anti-entropy-event  (sut/new-anti-entropy-event this)
-        anti-entropy-event2 (sut/new-anti-entropy-event this {:neighbour-id (:id neighbour-data1)})]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 2 (sut/get-tx this)))
-    (m/assert AntiEntropy (type anti-entropy-event))
-    (m/assert ::spec/anti-entropy-event anti-entropy-event)
-    (m/assert {:anti-entropy-data [[#uuid "00000000-0000-0000-0000-000000000002"
-                                    "127.0.0.1"
-                                    5377
-                                    3
-                                    0
-                                    3
-                                    0
-                                    {:tcp-port 4567}]]
-               :cmd-type          8
-               :id                #uuid "00000000-0000-0000-0000-000000000001"
-               :restart-counter   7
-               :tx                1}
-      anti-entropy-event2)))
+
+  (testing "anti entropy event builder"
+    (let [this                (sut/new-node-object node-data1 cluster)
+          neighbour           (sut/new-neighbour-node neighbour-data1)
+          _                   (sut/upsert-neighbour this neighbour)
+          _                   (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
+          current-tx          (sut/get-tx this)
+          anti-entropy-event  (sut/new-anti-entropy-event this)
+          current-tx2          (sut/get-tx this)
+          anti-entropy-event2 (sut/new-anti-entropy-event this {:neighbour-id (:id neighbour-data1)})]
+
+      (testing "should generate event with correct type"
+        (m/assert AntiEntropy (type anti-entropy-event))
+        (m/assert AntiEntropy (type anti-entropy-event2)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/anti-entropy-event anti-entropy-event)
+        (m/assert ::spec/anti-entropy-event anti-entropy-event2))
+
+      (testing "should generate event with number of :max-anti-entropy-items if :neighbour-id parameter omitted "
+        (m/assert
+          (:max-anti-entropy-items @sut/*config)
+          (count (:anti-entropy-data anti-entropy-event))))
+
+      (testing "should generate event with particular neighbour info if :neighbour-id parameter present"
+        (m/assert
+         {:anti-entropy-data [[(:id neighbour-data1)
+                               "127.0.0.1"
+                               5377
+                               3
+                               0
+                               3
+                               0
+                               {:tcp-port 4567}]]}
+         anti-entropy-event2))
 
 
-;;;;
+      (testing "should increase tx"
+        (m/assert (inc current-tx) current-tx2)
+        (m/assert (inc current-tx2) (sut/get-tx this))))))
+
+
 
 (deftest new-join-event-test
-  (let [this       (sut/new-node-object node-data1 cluster)
-        join-event (sut/new-join-event this)]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
-    (m/assert JoinEvent (type join-event))
-    (m/assert ::spec/join-event join-event)
-    (m/assert {:cmd-type        (:join event/code)
-               :id              (sut/get-id this)
-               :restart-counter (sut/get-restart-counter this)
-               :tx              (dec (sut/get-tx this))
-               :host            (sut/get-host this)
-               :port            (sut/get-port this)}
-      join-event)))
+
+  (testing "join event builder"
+    (let [this       (sut/new-node-object node-data1 cluster)
+          current-tx (sut/get-tx this)
+          join-event (sut/new-join-event this)]
+
+      (testing "should generate event with correct type"
+        (m/assert JoinEvent (type join-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/join-event join-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this))))))
 
 
-;;;;
 
 (deftest new-suspect-event-test
-  (let [this          (sut/new-node-object node-data1 cluster)
-        neighbour     (sut/new-neighbour-node neighbour-data1)
-        _             (sut/upsert-neighbour this neighbour)
-        suspect-event (sut/new-suspect-event this (:id neighbour))]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
-    (m/assert SuspectEvent (type suspect-event))
-    (m/assert ::spec/suspect-event suspect-event)
-    (m/assert {:neighbour-id #uuid "00000000-0000-0000-0000-000000000002"}
-      suspect-event)
-    (testing "Wrong data is prohibited by spec"
-      (is (thrown-with-msg? Exception #"Invalid suspect event data"
-            (sut/new-suspect-event this :bad-value))))))
 
+  (testing "suspect event builder"
+    (let [this          (sut/new-node-object node-data1 cluster)
+          neighbour     (sut/new-neighbour-node neighbour-data1)
+          _             (sut/upsert-neighbour this neighbour)
+          current-tx    (sut/get-tx this)
+          suspect-event (sut/new-suspect-event this (:id neighbour))]
 
-;;;;
+      (testing "should generate event with correct type"
+        (m/assert SuspectEvent (type suspect-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/suspect-event suspect-event)
+        (m/assert {:neighbour-id              (:id neighbour)
+                   :neighbour-restart-counter (:restart-counter neighbour)
+                   :neighbour-tx              (:tx neighbour)}
+          suspect-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this)))
+
+      (testing "should catch invalid suspect event data"
+        (is (thrown-with-msg? Exception #"Invalid suspect event data"
+              (sut/new-suspect-event this :bad-value)))))))
+
 
 (deftest new-left-event-test
-  (let [this       (sut/new-node-object node-data1 cluster)
-        left-event (sut/new-left-event this)]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
-    (m/assert LeftEvent (type left-event))
-    (m/assert ::spec/left-event left-event)
-    (m/assert {:cmd-type        (:left event/code)
-               :id              (sut/get-id this)
-               :restart-counter (sut/get-restart-counter this)
-               :tx              (dec (sut/get-tx this))}
-      left-event)))
+
+  (testing "left event builder"
+    (let [this       (sut/new-node-object node-data1 cluster)
+          current-tx (sut/get-tx this)
+          left-event (sut/new-left-event this)]
+
+      (testing "should generate event with correct type"
+        (m/assert LeftEvent (type left-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/left-event left-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this))))))
 
 
-;;;;
 
 (deftest new-payload-event-test
-  (let [this          (sut/new-node-object node-data1 cluster)
-        new-payload   {:a 1 :b [3]}
-        _             (sut/set-payload this new-payload)
-        payload-event (sut/new-payload-event this)]
-    (testing "tx contains number of generated events on this node"
-      (m/assert 1 (sut/get-tx this)))
-    (m/assert PayloadEvent (type payload-event))
-    (m/assert ::spec/payload-event payload-event)
-    (m/assert {:cmd-type        (:payload event/code)
-               :id              (sut/get-id this)
-               :restart-counter (sut/get-restart-counter this)
-               :tx              (dec (sut/get-tx this))
-               :payload         (sut/get-payload this)}
-      payload-event)))
+  (testing "payload event builder"
+    (let [this          (sut/new-node-object node-data1 cluster)
+          payload       {:a 1 :b [3]}
+          _             (sut/set-payload this payload)
+          current-tx    (sut/get-tx this)
+          payload-event (sut/new-payload-event this)]
+
+      (testing "should generate event with correct type"
+        (m/assert PayloadEvent (type payload-event)))
+
+      (testing "should generate event with correct structure"
+        (m/assert ::spec/payload-event payload-event)
+        (m/assert {:payload payload} payload-event))
+
+      (testing "should increase tx"
+        (m/assert (inc current-tx) (sut/get-tx this))))))
 
 
 
@@ -1437,8 +1590,8 @@
 
 
 (deftest set-nb-restart-counter-test
-  (let [this   (sut/new-node-object node-data1 cluster)
-        nb     (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
+  (let [this                (sut/new-node-object node-data1 cluster)
+        nb                  (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
         new-restart-counter 42]
     (sut/upsert-neighbour this nb)
 
@@ -1458,10 +1611,10 @@
 
 
 (deftest set-nb-status-test
-  (let [this   (sut/new-node-object node-data1 cluster)
+  (let [this           (sut/new-node-object node-data1 cluster)
         current-status :left
-        nb     (sut/new-neighbour-node (assoc neighbour-data1 :status current-status))
-        new-status :alive]
+        nb             (sut/new-neighbour-node (assoc neighbour-data1 :status current-status))
+        new-status     :alive]
     (sut/upsert-neighbour this nb)
 
     (testing "Update status for neighbour is successful"
@@ -1472,10 +1625,10 @@
 
 
 (deftest set-nb-direct-access-test
-  (let [this   (sut/new-node-object node-data1 cluster)
+  (let [this           (sut/new-node-object node-data1 cluster)
         current-access :indirect
-        nb     (sut/new-neighbour-node (assoc neighbour-data1 :access current-access))
-        new-access :direct]
+        nb             (sut/new-neighbour-node (assoc neighbour-data1 :access current-access))
+        new-access     :direct]
     (sut/upsert-neighbour this nb)
 
     (testing "Set direct access for neighbour is successful"
@@ -1486,10 +1639,10 @@
 
 
 (deftest set-nb-indirect-access-test
-  (let [this   (sut/new-node-object node-data1 cluster)
+  (let [this           (sut/new-node-object node-data1 cluster)
         current-access :direct
-        nb     (sut/new-neighbour-node (assoc neighbour-data1 :access current-access))
-        new-access :indirect]
+        nb             (sut/new-neighbour-node (assoc neighbour-data1 :access current-access))
+        new-access     :indirect]
     (sut/upsert-neighbour this nb)
 
     (testing "Set indirect access for neighbour is successful"
@@ -1765,7 +1918,7 @@
         (catch Exception e
           (println (ex-message e)))
         (finally
-          (sut/stop node1)
+          (sut/stop node1)                                  ;; FIXME: sometimes if fails to stop the node. NPE
           (sut/stop node2)))))
 
   (testing "Do nothing if event contains bad restart counter"
@@ -3135,7 +3288,7 @@
           (println (ex-message e)))
         (finally
           (sut/stop node1)
-          (sut/stop node2)))))
+          (sut/stop node2)))))                              ;; FIXME sometimes it fails to stop the node. NPE.
 
   (testing "Do not accept ack event on node1 from unknown neighbour"
     (let [node1        (sut/new-node-object node-data1 cluster)

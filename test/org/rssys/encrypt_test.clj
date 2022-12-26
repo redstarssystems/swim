@@ -10,6 +10,7 @@
 
 (def plain-text "Suppose the original message has length = 50 bytes")
 
+
 (deftest new-iv-test
   (testing "generate IV for AES/GCM mode"
     (let [iv (sut/new-iv)]
@@ -89,7 +90,7 @@
           result (String. (sut/decrypt-data secret-key encrypted-bytes))]
 
       (testing "should produce decrypted text equal to original text"
-        (m/assert plain-text result) )
+        (m/assert plain-text result))
 
       (testing "should detect corrupted data for decryption"
         (is (thrown-with-msg? Exception #"Tag mismatch"

@@ -388,7 +388,7 @@
   [^NodeObject this payload]
   ;;TODO: send event to cluster about new payload
   (when (> (alength ^bytes (serialize payload)) (:max-payload-size @*config))
-    (throw (ex-info "Size of payload is too big" {:max-allowed (:max-payload-size @*config)})))
+    (throw (ex-info "Payload size is too big" {:max-allowed (:max-payload-size @*config)})))
   (d> :set-payload (get-id this) {:payload payload})
   (swap! (:*node this) assoc :payload payload))
 
@@ -484,8 +484,9 @@
 
 
 (defn upsert-ping
-  "Update existing or insert new active ping event in map.
-  Returns id of upserted ping event"
+  "Update existing or insert new active ping event in a map.
+  `neighbour-id` is used as a key in ping events map.
+  Returns key (`neighbour-id`) of ping event in a map"
   [^NodeObject this ^PingEvent ping-event]
   (when-not (s/valid? ::spec/ping-event ping-event)
     (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::spec/ping-event) spec/problems))))
@@ -510,22 +511,23 @@
 
 (defn upsert-indirect-ping
   "Update existing or insert new active indirect ping event in map.
-  Returns id of upserted indirect ping event"
+  `neighbour-id` is used as a key in indirect ping events map.
+  Returns key (`neighbour-id`) of indirect ping event in a map"
   [^NodeObject this ^IndirectPingEvent indirect-ping-event]
   (when-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
     (throw (ex-info "Invalid indirect ping event data"
              (->> indirect-ping-event (s/explain-data ::spec/indirect-ping-event) spec/problems))))
-  (let [indirect-id            (.-neighbour_id indirect-ping-event)
-        previous-indirect-ping (get-indirect-ping-event this indirect-id)
+  (let [indirect-key            (.-neighbour_id indirect-ping-event)
+        previous-indirect-ping (get-indirect-ping-event this indirect-key)
         new-attempt-number     (if previous-indirect-ping
                                  (inc (.-attempt_number previous-indirect-ping))
                                  (.-attempt_number indirect-ping-event))
         indirect-ping-event'   (assoc indirect-ping-event :attempt-number new-attempt-number)]
     (d> :upsert-indirect-ping (get-id this) {:indirect-ping-event indirect-ping-event'
-                                             :indirect-id         indirect-id})
+                                             :indirect-id         indirect-key})
     (swap! (:*node this) assoc :indirect-ping-events
-      (assoc (get-indirect-ping-events this) indirect-id indirect-ping-event'))
-    indirect-id))
+      (assoc (get-indirect-ping-events this) indirect-key indirect-ping-event'))
+    indirect-key))
 
 
 (defn delete-indirect-ping
@@ -536,8 +538,7 @@
 
 
 (defn insert-probe
-  "Insert new active probe event in map {probe-key nil}
-  `:probe-key` is used as a key in event map."
+  "Insert probe key from probe event in a probe events map {probe-key nil}"
   [^NodeObject this ^ProbeEvent probe-event]
   (when-not (s/valid? ::spec/probe-event probe-event)
     (throw (ex-info "Invalid probe event data" (->> probe-event (s/explain-data ::spec/probe-event) spec/problems))))
@@ -555,7 +556,7 @@
 
 (defn upsert-probe-ack
   "Update existing or insert new probe ack event in map.
-  `:probe-key` is used as a key in event map."
+  `:probe-key` from event is used as a key in probe-events map."
   [^NodeObject this ^ProbeAckEvent probe-ack-event]
   (when-not (s/valid? ::spec/probe-ack-event probe-ack-event)
     (throw (ex-info "Invalid probe ack event data" (->> probe-ack-event (s/explain-data ::spec/probe-ack-event) spec/problems))))
@@ -572,7 +573,7 @@
 
 
 (defn new-probe-event
-  "Returns new probe event. Increments tx of `this` node."
+  "Returns new probe event. Increase tx of `this` node."
   ^ProbeEvent [^NodeObject this ^String neighbour-host ^long neighbour-port]
   (let [probe-event (event/map->ProbeEvent {:cmd-type        (:probe event/code)
                                             :id              (get-id this)
@@ -585,7 +586,7 @@
                                             :probe-key       (UUID/randomUUID)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/probe-event probe-event)
-      (throw (ex-info "Invalid probe event" (spec/problems (s/explain-data ::spec/probe-event probe-event))))
+      (throw (ex-info "Invalid probe data" (spec/problems (s/explain-data ::spec/probe-event probe-event))))
       probe-event)))
 
 
@@ -594,7 +595,7 @@
 
 
 (defn new-probe-ack-event
-  "Returns new probe ack event. Increments tx of `this` node."
+  "Returns new probe ack event. Increase tx of `this` node."
   ^ProbeAckEvent [^NodeObject this ^ProbeEvent e]
   (let [ack-event (event/map->ProbeAckEvent {:cmd-type        (:probe-ack event/code)
                                              :id              (get-id this)
@@ -608,7 +609,7 @@
                                              :probe-key       (.-probe_key e)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/probe-ack-event ack-event)
-      (throw (ex-info "Invalid probe ack event" (spec/problems (s/explain-data ::spec/probe-ack-event ack-event))))
+      (throw (ex-info "Invalid probe ack data" (spec/problems (s/explain-data ::spec/probe-ack-event ack-event))))
       ack-event)))
 
 
@@ -616,7 +617,7 @@
 
 
 (defn new-ping-event
-  "Returns new ping event. Increments tx of `this` node."
+  "Returns new ping event. Increase tx of `this` node."
   ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number]
   (let [ping-event (event/map->PingEvent {:cmd-type        (:ping event/code)
                                           :id              (get-id this)
@@ -628,14 +629,15 @@
                                           :attempt-number  attempt-number})]
     (inc-tx this)
     (if-not (s/valid? ::spec/ping-event ping-event)
-      (throw (ex-info "Invalid ping event" (spec/problems (s/explain-data ::spec/ping-event ping-event))))
+      (throw (ex-info "Invalid ping data" (spec/problems (s/explain-data ::spec/ping-event ping-event))))
       ping-event)))
 
 
 ;;;;
 
 (defn new-ack-event
-  "Returns new Ack event. Increments tx of `this` node."
+  "Returns new Ack event.
+  Increase tx of `this` node."
   ^AckEvent [^NodeObject this ^ISwimEvent e]
   (let [ack-event (event/map->AckEvent {:cmd-type        (:ack event/code)
                                         :id              (get-id this)
@@ -646,7 +648,7 @@
                                         :attempt-number  (:attempt-number e)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/ack-event ack-event)
-      (throw (ex-info "Invalid ack event" (spec/problems (s/explain-data ::spec/ack-event ack-event))))
+      (throw (ex-info "Invalid ack data" (spec/problems (s/explain-data ::spec/ack-event ack-event))))
       ack-event)))
 
 
@@ -654,7 +656,7 @@
 
 
 (defn new-indirect-ping-event
-  "Returns new indirect ping event. Increments tx of `this` node."
+  "Returns new indirect ping event. Increase tx of `this` node."
   ^IndirectPingEvent [^NodeObject this ^UUID intermediate-id ^UUID neighbour-id attempt-number]
   (let [intermediate (get-neighbour this intermediate-id)
         neighbour    (get-neighbour this neighbour-id)]
@@ -683,7 +685,7 @@
                                            :attempt-number    attempt-number})]
         (inc-tx this)
         (if-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
-          (throw (ex-info "Invalid indirect ping event"
+          (throw (ex-info "Invalid indirect ping data"
                    (spec/problems (s/explain-data ::spec/indirect-ping-event indirect-ping-event))))
           indirect-ping-event)))))
 
@@ -691,7 +693,7 @@
 ;;;;
 
 (defn new-indirect-ack-event
-  "Returns new indirect ack event. Increments tx of `this` node."
+  "Returns new indirect ack event. Increase tx of `this` node."
   ^IndirectAckEvent [^NodeObject this ^IndirectPingEvent e]
   (let [indirect-ack-event
         (event/map->IndirectAckEvent {:cmd-type          (:indirect-ack event/code)
@@ -710,7 +712,7 @@
                                       :attempt-number    (.-attempt_number e)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/indirect-ack-event indirect-ack-event)
-      (throw (ex-info "Invalid indirect ack event"
+      (throw (ex-info "Invalid indirect ack data"
                (spec/problems (s/explain-data ::spec/indirect-ack-event indirect-ack-event))))
       indirect-ack-event)))
 
@@ -718,7 +720,7 @@
 ;;;;
 
 (defn new-alive-event
-  "Returns new Alive event. Increments tx of `this` node."
+  "Returns new Alive event. Increase tx of `this` node."
   ^AliveEvent [^NodeObject this ^ISwimEvent e]
   (let [nb (get-neighbour this (:id e))
         alive-event
@@ -733,7 +735,7 @@
                                 :neighbour-port            (:port nb)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/alive-event alive-event)
-      (throw (ex-info "Invalid alive event"
+      (throw (ex-info "Invalid alive data"
                (spec/problems (s/explain-data ::spec/alive-event alive-event))))
       alive-event)))
 
@@ -741,7 +743,7 @@
 ;;;;;
 
 (defn new-dead-event
-  "Returns new dead event. Increments tx of `this` node."
+  "Returns new dead event. Increase tx of `this` node."
   (^DeadEvent [^NodeObject this ^UUID neighbour-id]
     (let [nb                 (get-neighbour this neighbour-id)
           nb-restart-counter (:restart-counter nb)
@@ -759,7 +761,7 @@
                                  :neighbour-tx              neighbour-tx})]
       (inc-tx this)
       (if-not (s/valid? ::spec/dead-event dead-event)
-        (throw (ex-info "Invalid dead event"
+        (throw (ex-info "Invalid dead event data"
                  (spec/problems (s/explain-data ::spec/dead-event dead-event))))
         dead-event))))
 
@@ -825,7 +827,9 @@
 
 
 (defn new-anti-entropy-event
-  "Returns anti-entropy event. Increments tx of `this` node."
+  "Returns anti-entropy event. Increase tx of `this` node.
+  If key `:neighbour-id` present then returns anti-entropy data for this neighbour only.
+  Default value for `:num` is :max-anti-entropy-items"
   ^AntiEntropy [^NodeObject this & {:keys [num neighbour-id] :as ks}]
   (let [anti-entropy-data (build-anti-entropy-data this ks)
         ae-event          (event/map->AntiEntropy {:cmd-type          (:anti-entropy event/code)
@@ -843,7 +847,7 @@
 
 ;; TODO: where to check if new cluster size is less than active nodes in a cluster?
 (defn new-cluster-size-event
-  "Returns new NewClusterSizeEvent event. Increments tx of `this` node.
+  "Returns new NewClusterSizeEvent event. Increase tx of `this` node.
   This event should be created before cluster size changed."
   ^NewClusterSizeEvent [^NodeObject this ^long new-cluster-size]
   (let [ncs-event (event/map->NewClusterSizeEvent {:cmd-type         (:new-cluster-size event/code)
@@ -854,7 +858,7 @@
                                                    :new-cluster-size new-cluster-size})]
     (inc-tx this)
     (if-not (s/valid? ::spec/new-cluster-size-event ncs-event)
-      (throw (ex-info "Invalid new cluster size event" (spec/problems (s/explain-data ::spec/new-cluster-size-event ncs-event))))
+      (throw (ex-info "Invalid cluster size data" (spec/problems (s/explain-data ::spec/new-cluster-size-event ncs-event))))
       ncs-event)))
 
 
@@ -862,7 +866,7 @@
 
 
 (defn new-join-event
-  "Returns new JoinEvent event. Increments tx of `this` node."
+  "Returns new JoinEvent event. Increase tx of `this` node."
   ^JoinEvent [^NodeObject this]
   (let [join-event (event/map->JoinEvent {:cmd-type        (:join event/code)
                                           :id              (get-id this)
@@ -880,7 +884,7 @@
 ;;;;;
 
 (defn new-suspect-event
-  "Returns new suspect event. Increments tx of `this` node."
+  "Returns new suspect event. Increase tx of `this` node."
   ^SuspectEvent [^NodeObject this ^UUID neighbour-id]
   (let [nb                 (get-neighbour this neighbour-id)
         nb-restart-counter (:restart-counter nb)
@@ -903,7 +907,7 @@
 ;;;;
 
 (defn new-left-event
-  "Returns new LeftEvent event. Increments tx of `this` node."
+  "Returns new LeftEvent event. Increase tx of `this` node."
   ^LeftEvent [^NodeObject this]
   (let [e (event/map->LeftEvent {:cmd-type        (:left event/code)
                                  :id              (get-id this)
@@ -917,7 +921,7 @@
 
 
 (defn new-payload-event
-  "Returns new PayloadEvent event. Increments tx of `this` node."
+  "Returns new PayloadEvent event. Increase tx of `this` node."
   ^PayloadEvent [^NodeObject this]
   (let [e (event/map->PayloadEvent {:cmd-type        (:payload event/code)
                                     :id              (get-id this)
