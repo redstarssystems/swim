@@ -36,55 +36,19 @@
       MutablePool)))
 
 
+;;;;;;;;;;;;;;;;;;;;;
+;; Constants and data
+;;;;;;;;;;;;;;;;;;;;;
+
 (def ^:dynamic *max-test-timeout*
   "Max promise timeout ms in tests"
   1500)
 
 
-(deftest safe-test
-  (testing "should prevent any exceptions"
-    (m/assert nil (sut/safe (/ 1 0))))
-  (testing "should return value for any normal expression"
-    (m/assert 1/2 (sut/safe (/ 1 2)))))
-
-
-(deftest calc-n-test
-  (testing "should calculate correct number of nodes for notification depending on cluster size"
-    (let [nodes-in-cluster [1 2 4 8 16 32 64 128 256 512 1024]
-          result           (mapv sut/calc-n nodes-in-cluster)]
-      (m/assert [0 1 2 3 4 5 6 7 8 9 10] result))))
-
-
 (def values [1 128 "hello" nil :k {:a 1 :b true} [1234567890 1]])
 
 
-(deftest serialize-test
-  (testing "serialization of different types"
-    (let [svalues (->> values (map sut/serialize))]
 
-      (testing "should produce a byte array for every serialized value"
-        (is (every? bytes? svalues)))
-
-      (testing "should produce output with expected size for every serialized value"
-        (m/assert [6 7 11 6 9 11 7] (mapv count svalues))))))
-
-
-(deftest deserialize-test
-  (testing "Deserialization of different types"
-    (let [bvalues (map byte-array
-                    '([-110 -93 126 35 39 1]
-                       [-110 -93 126 35 39 -52 -128]
-                       [-110 -93 126 35 39 -91 104 101 108 108 111]
-                       [-110 -93 126 35 39 -64]
-                       [-110 -93 126 35 39 -93 126 58 107]
-                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
-                       [-110, -50, 73, -106, 2, -46, 1]))
-          dvalues (mapv sut/deserialize bvalues)]
-      (testing "should produce output equals to initial values"
-        (m/assert values dvalues)))))
-
-
-;;;;;;;;;;
 
 (def cluster-data
   {:id           #uuid "10000000-0000-0000-0000-000000000000"
@@ -137,7 +101,71 @@
 (def node-data3 {:id #uuid "00000000-0000-0000-0000-000000000003" :host "127.0.0.1" :port 5378 :restart-counter 6})
 
 
-;;;;
+(def cluster (sut/new-cluster cluster-data))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;
+;; Basic functions tests
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(deftest safe-test
+  (testing "should prevent any exceptions"
+    (m/assert nil (sut/safe (/ 1 0))))
+  (testing "should return value for any normal expression"
+    (m/assert 1/2 (sut/safe (/ 1 2)))))
+
+
+(deftest calc-n-test
+  (testing "should calculate correct number of nodes for notification depending on cluster size"
+    (let [nodes-in-cluster [1 2 4 8 16 32 64 128 256 512 1024]
+          result           (mapv sut/calc-n nodes-in-cluster)]
+      (m/assert [0 1 2 3 4 5 6 7 8 9 10] result))))
+
+
+(deftest serialize-test
+  (testing "serialization of different types"
+    (let [svalues (->> values (map sut/serialize))]
+
+      (testing "should produce a byte array for every serialized value"
+        (is (every? bytes? svalues)))
+
+      (testing "should produce output with expected size for every serialized value"
+        (m/assert [6 7 11 6 9 11 7] (mapv count svalues))))))
+
+
+(deftest deserialize-test
+  (testing "Deserialization of different types"
+    (let [bvalues (map byte-array
+                    '([-110 -93 126 35 39 1]
+                       [-110 -93 126 35 39 -52 -128]
+                       [-110 -93 126 35 39 -91 104 101 108 108 111]
+                       [-110 -93 126 35 39 -64]
+                       [-110 -93 126 35 39 -93 126 58 107]
+                       [-126 -93 126 58 97 1 -93 126 58 98 -61]
+                       [-110, -50, 73, -106, 2, -46, 1]))
+          dvalues (mapv sut/deserialize bvalues)]
+      (testing "should produce output equals to initial values"
+        (m/assert values dvalues)))))
+
+
+
+(deftest nodes-in-cluster-test
+  (testing "Calculate nodes in the cluster"
+    (let [this (sut/new-node-object node-data1 cluster)
+          nb   (sut/new-neighbour-node neighbour-data1)]
+
+      (testing "should return one node"
+        (m/assert 1 (sut/nodes-in-cluster this)))
+
+      (testing "should return two nodes"
+        (sut/upsert-neighbour this nb)
+        (m/assert 2 (sut/nodes-in-cluster this))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;
+;; Basic objects tests
+;;;;;;;;;;;;;;;;;;;;;;
 
 
 (deftest new-cluster-test
@@ -153,8 +181,6 @@
       (testing "should have expected cluster size"
         (m/assert 3 (.-cluster_size result))))))
 
-
-;;;;
 
 
 (deftest new-neighbour-node-test
@@ -185,9 +211,6 @@
           result2)))))
 
 
-;;;;;
-
-(def cluster (sut/new-cluster cluster-data))
 
 
 (deftest new-node-object-test
@@ -228,6 +251,11 @@
   (testing "should catch invalid node data"
     (is (thrown-with-msg? Exception #"Invalid node data"
           (sut/new-node-object {:a 1} cluster)))))
+
+
+;;;;;;;;;;;;;;;;
+;; Getters tests
+;;;;;;;;;;;;;;;;
 
 
 (deftest getters-test
@@ -354,18 +382,10 @@
       (m/assert nil (sut/get-probe-event this #uuid"00000000-0000-0009-0000-000000000001")))))
 
 
-(deftest nodes-in-cluster-test
-  (testing "Calculate nodes in the cluster"
-    (let [this (sut/new-node-object node-data1 cluster)
-          nb   (sut/new-neighbour-node neighbour-data1)]
 
-      (testing "should return one node"
-        (m/assert 1 (sut/nodes-in-cluster this)))
-
-      (testing "should return two nodes"
-        (sut/upsert-neighbour this nb)
-        (m/assert 2 (sut/nodes-in-cluster this))))))
-
+;;;;;;;;;;;;;;;
+;; Setter tests
+;;;;;;;;;;;;;;;
 
 (deftest set-cluster-test
   (testing "Set new cluster"
@@ -737,11 +757,9 @@
               (sut/upsert-probe-ack this {:a :bad-value})))))))
 
 
-;;;;;;;;;;;;;;;;;
-
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;
 ;; Event builders tests
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (deftest new-probe-event-test
@@ -957,6 +975,7 @@
 
 
 (deftest new-dead-event-test
+
   (testing "dead event builder"
     (let [this       (sut/new-node-object node-data1 cluster)
           ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
@@ -1008,15 +1027,15 @@
 
       (testing "should generate event with particular neighbour info if :neighbour-id parameter present"
         (m/assert
-         {:anti-entropy-data [[(:id neighbour-data1)
-                               "127.0.0.1"
-                               5377
-                               3
-                               0
-                               3
-                               0
-                               {:tcp-port 4567}]]}
-         anti-entropy-event2))
+          {:anti-entropy-data [[(:id neighbour-data1)
+                                "127.0.0.1"
+                                5377
+                                3
+                                0
+                                3
+                                0
+                                {:tcp-port 4567}]]}
+          anti-entropy-event2))
 
 
       (testing "should increase tx"
@@ -1070,6 +1089,7 @@
               (sut/new-suspect-event this :bad-value)))))))
 
 
+
 (deftest new-left-event-test
 
   (testing "left event builder"
@@ -1107,80 +1127,75 @@
         (m/assert (inc current-tx) (sut/get-tx this))))))
 
 
-
-;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Utility functions tests
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (deftest suitable-restart-counter?-test
-  (let [node1 (sut/new-node-object node-data1 cluster)
-        node2 (sut/new-node-object node-data2 cluster)
-        ping1 (sut/new-ping-event node1 (sut/get-id node2) 42)]
+  (testing "check restart counter in event"
+    (let [node1      (sut/new-node-object node-data1 cluster)
+          node2      (sut/new-node-object node-data2 cluster)
+          ping-event (sut/new-ping-event node1 (sut/get-id node2) 42)]
 
-    (testing "Accept restart counter from normal neighbour"
-      ;; add node1(neighbour-data3) as new normal neighbour in map
-      (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
-      (is (true? (sut/suitable-restart-counter? node2 ping1)))
+      (testing "should accept normal restart counter"
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (m/assert true? (sut/suitable-restart-counter? node2 ping-event))
 
-      (testing "Deny older restart counter from neighbour"
-        ;; upsert neighbour with restart counter bigger than ping has
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :restart-counter inc)))
-        (is (not (sut/suitable-restart-counter? node2 ping1))))
+        (testing "should reject outdated restart counter"
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :restart-counter inc)))
+          (m/assert false (sut/suitable-restart-counter? node2 ping-event)))
 
-      (testing "Nil or absent value for neighbour id will not crash"
-        (is (not (sut/suitable-restart-counter? node2 nil)))
-        (is (not (sut/suitable-restart-counter? node2 {:id 123})))))))
+        (testing "should not crash if neighbour or event is nil or absent"
+          (m/assert nil (sut/suitable-restart-counter? node2 nil))
+          (m/assert nil (sut/suitable-restart-counter? node2 {:id 123})))))))
 
 
 (deftest suitable-tx?-test
-  (let [node1 (sut/new-node-object node-data1 cluster)
-        node2 (sut/new-node-object node-data2 cluster)
-        _     (sut/inc-tx node1)
-        ping1 (sut/new-ping-event node1 (sut/get-id node2) 42)]
+  (testing "check tx in event"
+    (let [node1      (sut/new-node-object node-data1 cluster)
+          node2      (sut/new-node-object node-data2 cluster)
+          _          (sut/inc-tx node1)
+          ping-event (sut/new-ping-event node1 (sut/get-id node2) 42)]
 
-    (testing "Accept tx from normal neighbour"
-      ;; add new normal neighbour in map
-      (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
-      (is (true? (sut/suitable-tx? node2 ping1))))
+      (testing "should accept normal tx"
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (m/assert true? (sut/suitable-tx? node2 ping-event)))
 
-    (testing "Deny older tx from neighbour"
-      ;; upsert neighbour with tx bigger than ping has
-      (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :tx inc)))
-      (is (not (sut/suitable-tx? node2 ping1))))
+      (testing "should reject outdated tx"
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :tx inc)))
+        (m/assert false (sut/suitable-tx? node2 ping-event)))
 
-    (testing "Nil or absent value for neighbour id will not crash"
-      (is (not (sut/suitable-tx? node2 nil)))
-      (is (not (sut/suitable-tx? node2 {:id 123}))))))
+      (testing "should not crash if neighbour or event is nil or absent"
+        (m/assert nil (sut/suitable-tx? node2 nil))
+        (m/assert nil (sut/suitable-tx? node2 {:id 123}))))))
 
 
 (deftest suitable-incarnation?-test
-  (let [node1 (sut/new-node-object node-data1 cluster)
-        node2 (sut/new-node-object node-data2 cluster)
-        _     (sut/inc-tx node1)
-        ping1 (sut/new-ping-event node1 (sut/get-id node2) 42)]
+  (testing "check incarnation in event"
+    (let [node1      (sut/new-node-object node-data1 cluster)
+          node2      (sut/new-node-object node-data2 cluster)
+          _          (sut/inc-tx node1)
+          ping-event (sut/new-ping-event node1 (sut/get-id node2) 42)]
 
-    (testing "ping from normal neighbour should be accepted"
-      ;; add new normal neighbour in map
-      (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
-      (is (true? (sut/suitable-incarnation? node2 ping1))))
+      (testing "should accept normal incarnation"
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (m/assert true (sut/suitable-incarnation? node2 ping-event)))
 
+      (testing "should reject cause tx is outdated"
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :tx inc)))
+        (m/assert false (sut/suitable-incarnation? node2 ping-event)))
 
-    (testing "ping with older tx should be denied"
-      ;; add neighbour with tx bigger than ping has
-      (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :tx inc)))
-      (is (not (sut/suitable-incarnation? node2 ping1))))
+      (testing "should reject cause restart counter is outdated"
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :restart-counter inc)))
+        (m/assert false (sut/suitable-incarnation? node2 ping-event)))
 
-    (testing "ping with older restart counter should be denied"
-      ;; add neighbour with tx bigger than ping has
-      (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :restart-counter inc)))
-      (is (not (sut/suitable-incarnation? node2 ping1))))
-
-    (testing "Nil or absent value for neighbour id will not crash"
-      (is (not (sut/suitable-incarnation? node2 nil)))
-      (is (not (sut/suitable-incarnation? node2 {:id 123}))))))
+      (testing "should not crash if neighbour or event is nil or absent"
+        (m/assert false (sut/suitable-incarnation? node2 nil))
+        (m/assert false (sut/suitable-incarnation? node2 {:id 123}))))))
 
 
-;;;;
+
 
 
 (deftest neighbour->vec-test

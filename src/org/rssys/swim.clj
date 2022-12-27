@@ -1,5 +1,5 @@
 (ns org.rssys.swim
-  "SWIM functions"
+  "SWIM protocol implementation"
   (:require
     [clojure.set]
     [clojure.spec.alpha :as s]
@@ -44,9 +44,9 @@
       SuspectEvent)))
 
 
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Common functions and constants
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def *config
   (atom {:enable-diag-tap?                    true          ;; Put diagnostic data to tap>
@@ -110,11 +110,10 @@
       (transit/read reader))))
 
 
-;;;;;;;;;;;;;;;;;;;;
-
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Domain entity builders
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 (defn new-cluster
   "Returns new Cluster instance."
@@ -181,11 +180,10 @@
                       })))
 
 
-;;;;;;;;;;;;;;;;;;;;
-
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;
 ;; NodeObject Getters
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;
+
 
 (defn get-value
   "Get node value"
@@ -325,11 +323,10 @@
   (get (get-probe-events this) probe-key))
 
 
-;;;;;;;;;;;;;;;;;;;;
-
-;;;;
+;;;;;;;;;;;;;;;;;;;;;
 ;; NodeObject Setters
-;;;;
+;;;;;;;;;;;;;;;;;;;;;
+
 
 (defn set-cluster
   "Set new cluster for this node"
@@ -565,11 +562,9 @@
   (.-probe_key probe-ack-event))
 
 
-;;;;;;;;;;;;;;;;;
-
-;;;;
+;;;;;;;;;;;;;;;;;;
 ;; Event builders
-;;;;
+;;;;;;;;;;;;;;;;;;
 
 
 (defn new-probe-event
@@ -588,10 +583,6 @@
     (if-not (s/valid? ::spec/probe-event probe-event)
       (throw (ex-info "Invalid probe data" (spec/problems (s/explain-data ::spec/probe-event probe-event))))
       probe-event)))
-
-
-;;;;
-
 
 
 (defn new-probe-ack-event
@@ -613,9 +604,6 @@
       ack-event)))
 
 
-;;;;
-
-
 (defn new-ping-event
   "Returns new ping event. Increase tx of `this` node."
   ^PingEvent [^NodeObject this ^UUID neighbour-id attempt-number]
@@ -633,8 +621,6 @@
       ping-event)))
 
 
-;;;;
-
 (defn new-ack-event
   "Returns new Ack event.
   Increase tx of `this` node."
@@ -651,8 +637,6 @@
       (throw (ex-info "Invalid ack data" (spec/problems (s/explain-data ::spec/ack-event ack-event))))
       ack-event)))
 
-
-;;;;
 
 
 (defn new-indirect-ping-event
@@ -690,7 +674,6 @@
           indirect-ping-event)))))
 
 
-;;;;
 
 (defn new-indirect-ack-event
   "Returns new indirect ack event. Increase tx of `this` node."
@@ -717,7 +700,6 @@
       indirect-ack-event)))
 
 
-;;;;
 
 (defn new-alive-event
   "Returns new Alive event. Increase tx of `this` node."
@@ -740,7 +722,6 @@
       alive-event)))
 
 
-;;;;;
 
 (defn new-dead-event
   "Returns new dead event. Increase tx of `this` node."
@@ -766,8 +747,6 @@
         dead-event))))
 
 
-
-;;;;
 
 (defn neighbour->vec
   "Convert NeighbourNode to vector of values.
@@ -843,7 +822,6 @@
       ae-event)))
 
 
-;;;;
 
 ;; TODO: where to check if new cluster size is less than active nodes in a cluster?
 (defn new-cluster-size-event
@@ -862,8 +840,6 @@
       ncs-event)))
 
 
-;;;;
-
 
 (defn new-join-event
   "Returns new JoinEvent event. Increase tx of `this` node."
@@ -881,7 +857,7 @@
       join-event)))
 
 
-;;;;;
+
 
 (defn new-suspect-event
   "Returns new suspect event. Increase tx of `this` node."
@@ -904,7 +880,7 @@
       suspect-event)))
 
 
-;;;;
+
 
 (defn new-left-event
   "Returns new LeftEvent event. Increase tx of `this` node."
@@ -916,8 +892,6 @@
     (inc-tx this)
     e))
 
-
-;;;;
 
 
 (defn new-payload-event
@@ -932,11 +906,10 @@
     e))
 
 
-;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Event sending functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;;;
-;; Functions for sending events
-;;;;
 
 (defn send-events
   "Send given events to a neighbour.
@@ -983,24 +956,24 @@
         (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id}))))))
 
 
-;;;;;;;;;;;;;;;;;;;;
-
-;;;;
+;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
-;;;;
+;;;;;;;;;;;;;;;;;;;
 
 
 (defn suitable-restart-counter?
-  "Check that restart counter from neighbours map is less or equal than from event or neighbour item.
+  "Check restart counter is suitable from event or given neighbour.
+  It should be greater or equal than restart counter this node knows.
   Returns true, if suitable and false/nil if not."
   [^NodeObject this event-or-neighbour]
   (let [neighbour-id (:id event-or-neighbour)]
     (when-let [nb ^NeighbourNode (get-neighbour this neighbour-id)]
-      (<= (.-restart_counter nb) (:restart-counter event-or-neighbour)))))
+      (>= (:restart-counter event-or-neighbour) (.-restart_counter nb)))))
 
 
 (defn suitable-tx?
-  "Check that tx from neighbours map is less or equal than from event or neighbour item.
+  "Check tx is suitable from event or given neighbour.
+  It should be greater than tx this node knows about neighbour.
   Returns true, if suitable and false/nil if not."
   [^NodeObject this event-or-neighbour]
   (let [neighbour-id (:id event-or-neighbour)]
@@ -1009,8 +982,7 @@
 
 
 (defn suitable-incarnation?
-  "Check that incarnation, pair [restart-counter tx] from neighbours map is less or equal
-  than from event or neighbour item.
+  "Check incarnation [restart-counter tx] is suitable from event or given neighbour.
   Returns true, if suitable and false if not."
   [^NodeObject this event-or-neighbour]
   (= [true true] [(suitable-restart-counter? this event-or-neighbour)
@@ -1134,11 +1106,9 @@
     (upsert-neighbour this (assoc nb :access :indirect))))
 
 
-;;;;;;;;;;;;;;;;;;;;
-
-;;;;
-;; Functions for processing events
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Event processing functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (defmulti restore-event (fn [x] (.get ^PersistentVector x 0)))
@@ -1175,6 +1145,8 @@
   (and (contains? (get-probe-events this) (.-probe_key e))  ;; check  we send probe-event before
     (= (.-neighbour_id e) (get-id this))))                  ;; this probe-ack for this node
 
+
+
 (defmethod process-incoming-event ProbeAckEvent
   [^NodeObject this ^ProbeAckEvent e]
   (let [nb
@@ -1194,6 +1166,7 @@
           (when (not (alive-node? this))
             (upsert-neighbour this nb)))
       (d> :probe-ack-event-probe-never-send-error (get-id this) e))))
+
 
 
 (defmethod process-incoming-event AntiEntropy
@@ -1225,6 +1198,7 @@
               (d> :anti-entropy-event (get-id this) ae-neighbour)
               (upsert-neighbour this ae-neighbour))))       ;; add a new neighbour
         (set-nb-tx this sender-id (.-tx e))))))
+
 
 
 (defn- expected-indirect-ack-event?
@@ -1538,13 +1512,11 @@
   (println "Node is stopped."))
 
 
-;;;;
 
-;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; NodeObject control functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;;;
-;; NodeObject Operations
-;;;;
 
 (defn start
   "Start the node and run `node-process-fn` in a separate virtual thread.
@@ -1672,4 +1644,3 @@
   (d> :stop (get-id this) {}))
 
 
-;;;;;;;;;;;;;;;;;;;;
