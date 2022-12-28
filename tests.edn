@@ -25,11 +25,15 @@
                                           :kaocha.plugin.alpha/info]
 
      :tests                              [
-                                          {:id           :unit
-                                           :source-paths ["src"]
-                                           ;; :test-paths   ["test/src"]
-                                           ;;:focus-meta   [:unit]
-                                           }
+                                          {:id           :all
+                                           :source-paths ["src"]}
+
+                                          ;;{:id           :unit
+                                          ;; :source-paths ["src"]
+                                          ;; ;;:test-paths   ["test"]
+                                          ;; ;;:focus-meta   [:unit]
+                                          ;; }
+
                                           ]
 
 
