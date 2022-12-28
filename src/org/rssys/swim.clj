@@ -400,10 +400,12 @@
   (swap! (:*node this) assoc :restart-counter restart-counter))
 
 
+
 (defn inc-tx
   "Increment node tx"
   [^NodeObject this]
   (swap! (:*node this) assoc :tx (inc (get-tx this))))
+
 
 
 (defn upsert-neighbour
@@ -778,7 +780,7 @@
                          :tx              (nth v 6)
                          :payload         (nth v 7)
                          :updated-at      0})
-    (throw (ex-info "Bad NeighbourNode vector" {:v v}))))
+    (throw (ex-info "Invalid data in vector for NeighbourNode" {:v v}))))
 
 
 (defn build-anti-entropy-data

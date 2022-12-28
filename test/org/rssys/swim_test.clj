@@ -1027,14 +1027,7 @@
 
       (testing "should generate event with particular neighbour info if :neighbour-id parameter present"
         (m/assert
-          {:anti-entropy-data [[(:id neighbour-data1)
-                                "127.0.0.1"
-                                5377
-                                3
-                                0
-                                3
-                                0
-                                {:tcp-port 4567}]]}
+          {:anti-entropy-data [[(:id neighbour-data1) "127.0.0.1" 5377 3 0 3 0 {:tcp-port 4567}]]}
           anti-entropy-event2))
 
 
@@ -1196,35 +1189,61 @@
 
 
 
-
-
 (deftest neighbour->vec-test
-  (let [nb (sut/new-neighbour-node neighbour-data1)]
-    (m/assert [#uuid "00000000-0000-0000-0000-000000000002"
-               "127.0.0.1"
-               5377                                         ;; port
-               3                                            ;; :alive = 3
-               0                                            ;; 0 - direct, 1 - indirect
-               3                                            ;; restart-counter
-               0                                            ;; tx
-               {:tcp-port 4567}]
-      (sut/neighbour->vec nb))))
+  (testing "convert NeighbourNode to vector of values"
+    (let [nb (sut/new-neighbour-node neighbour-data1)]
+      (testing "should return values in correct order"
+        (m/assert [#uuid "00000000-0000-0000-0000-000000000002" ;; id
+                   "127.0.0.1"                                  ;; host
+                   5377                                         ;; port
+                   3                                            ;; :alive = 3
+                   0                                            ;; 0 - direct, 1 - indirect
+                   3                                            ;; restart-counter
+                   0                                            ;; tx
+                   {:tcp-port 4567}]                            ;; payload
+          (sut/neighbour->vec nb))))))
+
 
 
 (deftest vec->neighbour-test
-  (testing "Converting NeighbourNode to vector and restore from vector to NeighbourNode is successful"
-    (let [nb          (sut/new-neighbour-node neighbour-data1)
-          nbv         (sut/neighbour->vec nb)
-          restored-nb (sut/vec->neighbour nbv)]
-      (m/assert (dissoc nb :updated-at) (dissoc restored-nb :updated-at)))))
+  (testing "Convert vector of values to NeighbourNode"
+    (let [v      [#uuid "00000000-0000-0000-0000-000000000002" ;; id
+                  "127.0.0.1"                               ;; host
+                  5377                                      ;; port
+                  3                                         ;; :alive = 3
+                  0                                         ;; 0 - direct, 1 - indirect
+                  4                                         ;; restart-counter
+                  42                                         ;; tx
+                  {:tcp-port 4567}]
+
+          result (sut/vec->neighbour v)]
+
+      (testing "should return NeighbourNode object"
+        (m/assert true (instance? NeighbourNode result)))
+
+      (testing "should return correct values"
+        (m/assert ^:matcho/strict
+          {:id              #uuid "00000000-0000-0000-0000-000000000002"
+           :access          :direct
+           :host            "127.0.0.1"
+           :payload         {:tcp-port 4567}
+           :port            5377
+           :restart-counter 4
+           :status          :alive
+           :tx              42
+           :updated-at      0}
+          result))
+
+      (testing "should catch invalid vector data"
+        (is (thrown-with-msg? Exception #"Invalid data in vector for NeighbourNode"
+              (sut/vec->neighbour [1 2 3 4 :bad-values])))))))
+
 
 
 (deftest build-anti-entropy-data-test
-  (let [node1 (sut/new-node-object node-data1 cluster)]
-
-    (testing "Anti entropy is build successfully"
-      ;; add new normal neighbour in map
-      (sut/upsert-neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000002"
+  (testing "build vector with anti-entropy data"
+    (let [node1                   (sut/new-node-object node-data1 cluster)
+          neighbour1              (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000002"
                                                            :host            "127.0.0.1"
                                                            :port            5432
                                                            :status          :alive
@@ -1232,8 +1251,8 @@
                                                            :restart-counter 2
                                                            :tx              2
                                                            :payload         {}
-                                                           :updated-at      (System/currentTimeMillis)}))
-      (sut/upsert-neighbour node1 (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000003"
+                                                           :updated-at      (System/currentTimeMillis)})
+          neighbour2              (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000003"
                                                            :host            "127.0.0.1"
                                                            :port            5433
                                                            :status          :alive
@@ -1241,41 +1260,40 @@
                                                            :restart-counter 3
                                                            :tx              3
                                                            :payload         {}
-                                                           :updated-at      (System/currentTimeMillis)}))
+                                                           :updated-at      (System/currentTimeMillis)})
 
-      (is (= 2 (count (sut/build-anti-entropy-data node1))) "Default size of vector as expected")
-      (is (= 1 (count (sut/build-anti-entropy-data node1 :num 1))) "Size of vector as requested")
-      (is (= [] (sut/build-anti-entropy-data (sut/new-node-object node-data2 cluster)))
-        "Empty neighbours map should produce empty anti-entropy vector")
-      (m/assert [[#uuid "00000000-0000-0000-0000-000000000002"
-                  "127.0.0.1"
-                  5432
-                  3
-                  0
-                  2
-                  2
-                  {}]
-                 [#uuid "00000000-0000-0000-0000-000000000003"
-                  "127.0.0.1"
-                  5433
-                  3
-                  0
-                  3
-                  3
-                  {}]]
-        (sort (sut/build-anti-entropy-data node1)))
+          requested-size          1
+          without-neighbours-node (sut/new-node-object node-data2 cluster)]
 
-      (testing "Requested anti-entropy data for node3 built successfully"
-        (m/assert [[#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
-          (sut/build-anti-entropy-data node1 {:neighbour-id (:id node-data3)})))
+      (sut/upsert-neighbour node1 neighbour1)
+      (sut/upsert-neighbour node1 neighbour2)
 
-      (testing "Requested anti-entropy data for unknown node should return empty vector"
-        (m/assert []
-          (sut/build-anti-entropy-data node1 {:neighbour-id 123}))))))
+      (testing "should return vector with :max-anti-entropy-items items by default"
+        (m/assert (:max-anti-entropy-items @sut/*config) (count (sut/build-anti-entropy-data node1))))
+
+      (testing "should return vector with requested number of items"
+        (m/assert requested-size (count (sut/build-anti-entropy-data node1 :num requested-size))))
+
+      (testing "should return empty vector for node without neighbours"
+        (m/assert [] (sut/build-anti-entropy-data without-neighbours-node)))
+
+      (testing "should return vector with values for node2 and node3"
+        (m/assert [[#uuid "00000000-0000-0000-0000-000000000002" "127.0.0.1" 5432 3 0 2 2 {}]
+                   [#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
+          (sort (sut/build-anti-entropy-data node1)))
+
+        (testing "should return vector with requested value for node3"
+          (m/assert [[#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
+            (sut/build-anti-entropy-data node1 {:neighbour-id (:id node-data3)})))
+
+        (testing "should return empty vector if requested unknown node"
+          (m/assert []
+            (sut/build-anti-entropy-data node1 {:neighbour-id 123})))))))
 
 
-;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
 ;; Send event tests
+;;;;;;;;;;;;;;;;;;;
 
 
 (defn empty-node-process-fn
