@@ -908,69 +908,6 @@
     e))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Event sending functions
-;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-(defn send-events
-  "Send events to host:port. All events will be serialized and encrypted.
-   Returns size of sent data in bytes. "
-  [^NodeObject this events-vector neighbour-host neighbour-port &
-   {:keys [max-udp-size ignore-max-udp-size?]
-    :or   {max-udp-size         (:max-udp-size @*config)
-           ignore-max-udp-size? (:ignore-max-udp-size? @*config)}}]
-  (let [secret-key             (-> this get-cluster :secret-key)
-        prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
-        data                   ^bytes (e/encrypt-data secret-key (serialize prepared-events-vector))]
-    (when (> (alength data) max-udp-size)
-      (d> :send-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
-      (when-not ignore-max-udp-size?
-        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
-    (d> :send-events-udp-size (get-id this) {:udp-size (alength data)})
-    (udp/send-packet data neighbour-host neighbour-port)))
-
-
-(defn send-event-by-host
-  "Send one event to a neighbour using its host and port.
-  Returns size of sent data in bytes."
-  [^NodeObject this ^ISwimEvent event neighbour-host neighbour-port & {:keys [attach-anti-entropy?] :as opts}]
-  (if attach-anti-entropy?
-    (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port opts)
-    (send-events this [event] neighbour-host neighbour-port opts)))
-
-
-(defn send-event-by-id
-  "Send one event to a neighbour using its id.
-  Returns size of sent data in bytes."
-  [^NodeObject this ^ISwimEvent event ^UUID neighbour-id & {:keys [] :as opts}]
-  (if-let [nb (get-neighbour this neighbour-id)]
-    (let [nb-host (.-host nb)
-          nb-port (.-port nb)]
-      (send-event-by-host this event nb-host nb-port opts))
-    (do
-      (d> :send-event-by-id-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
-      (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id})))))
-
-
-(defn send-event
-  "Send one event to a neighbour.
-  Returns size of sent data in bytes."
-  ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-    (send-event-by-host this event neighbour-host neighbour-port {:attach-anti-entropy? false}))
-  ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
-    (send-event-by-id this event neighbour-id {:attach-anti-entropy? false})))
-
-
-(defn send-event-ae
-  "Send one event + anti-entropy data to a neighbour.
-  Returns size of sent data in bytes."
-  ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
-    (send-event-by-host this event neighbour-host neighbour-port {:attach-anti-entropy? true}))
-  ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
-    (send-event-by-id this event neighbour-id {:attach-anti-entropy? true})))
-
-
 ;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
 ;;;;;;;;;;;;;;;;;;;
@@ -1043,7 +980,8 @@
 
 
 (defn get-oldest-neighbour
-  "Returns the oldest neighbour by :updated-at attribute. If `status-set` is omitted then use all statuses"
+  "Returns the oldest neighbour  with particular status by :updated-at attribute.
+  If `status-set` parameter is omitted then use all statuses"
   ([^NodeObject this]
     (get-oldest-neighbour this spec/status-set))
   ([^NodeObject this ^PersistentHashSet status-set]
@@ -1119,6 +1057,71 @@
   [^NodeObject this ^UUID neighbour-id]
   (when-let [nb (get-neighbour this neighbour-id)]
     (upsert-neighbour this (assoc nb :access :indirect))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Event sending functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defn send-events
+  "Send events to host:port. All events will be serialized and encrypted.
+   Returns size of sent data in bytes. "
+  [^NodeObject this events-vector neighbour-host neighbour-port &
+   {:keys [max-udp-size ignore-max-udp-size?]
+    :or   {max-udp-size         (:max-udp-size @*config)
+           ignore-max-udp-size? (:ignore-max-udp-size? @*config)}}]
+  (let [secret-key             (-> this get-cluster :secret-key)
+        prepared-events-vector (mapv #(.prepare ^ISwimEvent %) events-vector)
+        data                   ^bytes (e/encrypt-data secret-key (serialize prepared-events-vector))]
+    (when (> (alength data) max-udp-size)
+      (d> :send-events-too-big-udp-error (get-id this) {:udp-size (alength data)})
+      (when-not ignore-max-udp-size?
+        (throw (ex-info "UDP packet is too big" {:max-allowed (:max-udp-size @*config)}))))
+    (d> :send-events-udp-size (get-id this) {:udp-size (alength data)})
+    (udp/send-packet data neighbour-host neighbour-port)))
+
+
+(defn send-event-by-host
+  "Send one event to a neighbour using its host and port.
+  Returns size of sent data in bytes."
+  [^NodeObject this ^ISwimEvent event neighbour-host neighbour-port & {:keys [attach-anti-entropy?] :as opts}]
+  (if attach-anti-entropy?
+    (send-events this [event (new-anti-entropy-event this)] neighbour-host neighbour-port opts)
+    (send-events this [event] neighbour-host neighbour-port opts)))
+
+
+(defn send-event-by-id
+  "Send one event to a neighbour using its id.
+  Returns size of sent data in bytes."
+  [^NodeObject this ^ISwimEvent event ^UUID neighbour-id & {:keys [] :as opts}]
+  (if-let [nb (get-neighbour this neighbour-id)]
+    (let [nb-host (.-host nb)
+          nb-port (.-port nb)]
+      (send-event-by-host this event nb-host nb-port opts))
+    (do
+      (d> :send-event-by-id-unknown-neighbour-id-error (get-id this) {:neighbour-id neighbour-id})
+      (throw (ex-info "Unknown neighbour id" {:neighbour-id neighbour-id})))))
+
+
+(defn send-event
+  "Send one event to a neighbour.
+  Returns size of sent data in bytes."
+  ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
+    (send-event-by-host this event neighbour-host neighbour-port {:attach-anti-entropy? false}))
+  ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
+    (send-event-by-id this event neighbour-id {:attach-anti-entropy? false})))
+
+
+(defn send-event-ae
+  "Send one event + anti-entropy data to a neighbour.
+  Returns size of sent data in bytes."
+  ([^NodeObject this ^ISwimEvent event neighbour-host neighbour-port]
+    (send-event-by-host this event neighbour-host neighbour-port {:attach-anti-entropy? true}))
+  ([^NodeObject this ^ISwimEvent event ^UUID neighbour-id]
+    (send-event-by-id this event neighbour-id {:attach-anti-entropy? true})))
+
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

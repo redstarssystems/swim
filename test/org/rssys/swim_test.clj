@@ -58,8 +58,6 @@
 (def values [1 128 "hello" nil :k {:a 1 :b true} [1234567890 1]])
 
 
-
-
 (def cluster-data
   {:id           #uuid "10000000-0000-0000-0000-000000000000"
    :name         "cluster1"
@@ -1010,6 +1008,108 @@
               (sut/new-dead-event this (assoc ping-event :id :bad-value))))))))
 
 
+(deftest neighbour->vec-test
+  (testing "convert NeighbourNode to vector of values"
+    (let [nb (sut/new-neighbour-node neighbour-data1)]
+      (testing "should return values in correct order"
+        (m/assert [#uuid "00000000-0000-0000-0000-000000000002" ;; id
+                   "127.0.0.1"                                  ;; host
+                   5377                                         ;; port
+                   3                                            ;; :alive = 3
+                   0                                            ;; 0 - direct, 1 - indirect
+                   3                                            ;; restart-counter
+                   0                                            ;; tx
+                   {:tcp-port 4567}]                            ;; payload
+          (sut/neighbour->vec nb))))))
+
+
+
+(deftest vec->neighbour-test
+  (testing "Convert vector of values to NeighbourNode"
+    (let [v      [#uuid "00000000-0000-0000-0000-000000000002" ;; id
+                  "127.0.0.1"                               ;; host
+                  5377                                      ;; port
+                  3                                         ;; :alive = 3
+                  0                                         ;; 0 - direct, 1 - indirect
+                  4                                         ;; restart-counter
+                  42                                         ;; tx
+                  {:tcp-port 4567}]
+
+          result (sut/vec->neighbour v)]
+
+      (testing "should return NeighbourNode object"
+        (m/assert true (instance? NeighbourNode result)))
+
+      (testing "should return correct values"
+        (m/assert ^:matcho/strict
+          {:id              #uuid "00000000-0000-0000-0000-000000000002"
+           :access          :direct
+           :host            "127.0.0.1"
+           :payload         {:tcp-port 4567}
+           :port            5377
+           :restart-counter 4
+           :status          :alive
+           :tx              42
+           :updated-at      0}
+          result))
+
+      (testing "should catch invalid vector data"
+        (is (thrown-with-msg? Exception #"Invalid data in vector for NeighbourNode"
+              (sut/vec->neighbour [1 2 3 4 :bad-values])))))))
+
+
+
+(deftest build-anti-entropy-data-test
+  (testing "build vector with anti-entropy data"
+    (let [node1                   (sut/new-node-object node-data1 cluster)
+          neighbour1              (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000002"
+                                                           :host            "127.0.0.1"
+                                                           :port            5432
+                                                           :status          :alive
+                                                           :access          :direct
+                                                           :restart-counter 2
+                                                           :tx              2
+                                                           :payload         {}
+                                                           :updated-at      (System/currentTimeMillis)})
+          neighbour2              (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000003"
+                                                           :host            "127.0.0.1"
+                                                           :port            5433
+                                                           :status          :alive
+                                                           :access          :direct
+                                                           :restart-counter 3
+                                                           :tx              3
+                                                           :payload         {}
+                                                           :updated-at      (System/currentTimeMillis)})
+
+          requested-size          1
+          without-neighbours-node (sut/new-node-object node-data2 cluster)]
+
+      (sut/upsert-neighbour node1 neighbour1)
+      (sut/upsert-neighbour node1 neighbour2)
+
+      (testing "should return vector with :max-anti-entropy-items items by default"
+        (m/assert (:max-anti-entropy-items @sut/*config) (count (sut/build-anti-entropy-data node1))))
+
+      (testing "should return vector with requested number of items"
+        (m/assert requested-size (count (sut/build-anti-entropy-data node1 :num requested-size))))
+
+      (testing "should return empty vector for node without neighbours"
+        (m/assert [] (sut/build-anti-entropy-data without-neighbours-node)))
+
+      (testing "should return vector with values for node2 and node3"
+        (m/assert [[#uuid "00000000-0000-0000-0000-000000000002" "127.0.0.1" 5432 3 0 2 2 {}]
+                   [#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
+          (sort (sut/build-anti-entropy-data node1)))
+
+        (testing "should return vector with requested value for node3"
+          (m/assert [[#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
+            (sut/build-anti-entropy-data node1 {:neighbour-id (:id node-data3)})))
+
+        (testing "should return empty vector if requested unknown node"
+          (m/assert []
+            (sut/build-anti-entropy-data node1 {:neighbour-id 123})))))))
+
+
 (deftest new-anti-entropy-event-test
 
   (testing "anti entropy event builder"
@@ -1199,106 +1299,204 @@
 
 
 
-(deftest neighbour->vec-test
-  (testing "convert NeighbourNode to vector of values"
-    (let [nb (sut/new-neighbour-node neighbour-data1)]
-      (testing "should return values in correct order"
-        (m/assert [#uuid "00000000-0000-0000-0000-000000000002" ;; id
-                   "127.0.0.1"                                  ;; host
-                   5377                                         ;; port
-                   3                                            ;; :alive = 3
-                   0                                            ;; 0 - direct, 1 - indirect
-                   3                                            ;; restart-counter
-                   0                                            ;; tx
-                   {:tcp-port 4567}]                            ;; payload
-          (sut/neighbour->vec nb))))))
+(deftest get-neighbours-with-status-test
+  (testing "get neighbours with status"
+    (let [this                 (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
+          new-node-with-status (fn [status] (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status status)))]
+
+      (run!
+        #(sut/upsert-neighbour this (new-node-with-status %))
+        [:left :stop :alive :alive :dead :dead :dead :suspect :suspect :suspect :suspect])
+
+      (testing "should return all alive and left neighbours"
+        (let [result (filterv (fn [nb] (#{:alive :left} (:status nb)))
+                       (sut/get-neighbours-with-status this #{:alive :left}))]
+          (m/assert 3 (count result))))
+
+      (testing "should return all alive neighbours"
+        (let [result (filterv (fn [nb] (#{:alive} (:status nb))) (sut/get-alive-neighbours this))]
+          (m/assert 2 (count result))))
+
+      (testing "should return all stopped neighbours"
+        (let [result (filterv (fn [nb] (#{:stop} (:status nb))) (sut/get-stopped-neighbours this))]
+          (m/assert 1 (count result))))
+
+      (testing "should return all dead neighbours"
+        (let [result (filterv (fn [nb] (#{:dead} (:status nb))) (sut/get-dead-neighbours this))]
+          (m/assert 3 (count result))))
+
+      (testing "should return all left neighbours"
+        (let [result (filterv (fn [nb] (#{:left} (:status nb))) (sut/get-left-neighbours this))]
+          (m/assert 1 (count result))))
+
+      (testing "should return all suspect neighbours"
+        (let [result (filterv (fn [nb] (#{:suspect} (:status nb))) (sut/get-suspect-neighbours this))]
+          (m/assert 4 (count result)))))))
 
 
 
-(deftest vec->neighbour-test
-  (testing "Convert vector of values to NeighbourNode"
-    (let [v      [#uuid "00000000-0000-0000-0000-000000000002" ;; id
-                  "127.0.0.1"                               ;; host
-                  5377                                      ;; port
-                  3                                         ;; :alive = 3
-                  0                                         ;; 0 - direct, 1 - indirect
-                  4                                         ;; restart-counter
-                  42                                         ;; tx
-                  {:tcp-port 4567}]
+(deftest get-oldest-neighbour-test
+  (testing "get oldest neighbour"
+    (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
+          oldest-id   #uuid"00000000-0000-0000-0000-000000000555"
+          oldest-1-id #uuid"00000000-0000-0000-0000-000000000777"
+          oldest-2-id #uuid"00000000-0000-0000-0000-000000000222"
+          oldest-3-id #uuid"00000000-0000-0000-0000-000000000111"
+          oldest-nb   (sut/new-neighbour-node (assoc neighbour-data2 :id oldest-id))
+          oldest-1-nb (sut/new-neighbour-node (assoc neighbour-data2 :id oldest-1-id))
+          oldest-2-nb (sut/new-neighbour-node (assoc neighbour-data2 :id oldest-2-id))
+          oldest-3-nb (sut/new-neighbour-node (assoc neighbour-data2 :status :left :id oldest-3-id))]
 
-          result (sut/vec->neighbour v)]
+      (sut/upsert-neighbour this oldest-nb)
+      (Thread/sleep 1)
+      (sut/upsert-neighbour this oldest-1-nb)
+      (Thread/sleep 1)
+      (sut/upsert-neighbour this oldest-2-nb)
+      (Thread/sleep 1)
+      (sut/upsert-neighbour this oldest-3-nb)
 
-      (testing "should return NeighbourNode object"
-        (m/assert true (instance? NeighbourNode result)))
+      (testing "should return oldest"
+        (m/assert {:id oldest-id} (sut/get-oldest-neighbour this)))
 
-      (testing "should return correct values"
-        (m/assert ^:matcho/strict
-          {:id              #uuid "00000000-0000-0000-0000-000000000002"
-           :access          :direct
-           :host            "127.0.0.1"
-           :payload         {:tcp-port 4567}
-           :port            5377
-           :restart-counter 4
-           :status          :alive
-           :tx              42
-           :updated-at      0}
-          result))
+      (testing "after delete oldest should return oldest-1"
+        (sut/delete-neighbour this (:id oldest-nb))
+        (m/assert {:id oldest-1-id} (sut/get-oldest-neighbour this)))
 
-      (testing "should catch invalid vector data"
-        (is (thrown-with-msg? Exception #"Invalid data in vector for NeighbourNode"
-              (sut/vec->neighbour [1 2 3 4 :bad-values])))))))
+      (testing "with status :left should return oldest-3"
+        (m/assert {:id oldest-3-id} (sut/get-oldest-neighbour this #{:left}))))))
 
 
 
-(deftest build-anti-entropy-data-test
-  (testing "build vector with anti-entropy data"
-    (let [node1                   (sut/new-node-object node-data1 cluster)
-          neighbour1              (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000002"
-                                                           :host            "127.0.0.1"
-                                                           :port            5432
-                                                           :status          :alive
-                                                           :access          :direct
-                                                           :restart-counter 2
-                                                           :tx              2
-                                                           :payload         {}
-                                                           :updated-at      (System/currentTimeMillis)})
-          neighbour2              (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000003"
-                                                           :host            "127.0.0.1"
-                                                           :port            5433
-                                                           :status          :alive
-                                                           :access          :direct
-                                                           :restart-counter 3
-                                                           :tx              3
-                                                           :payload         {}
-                                                           :updated-at      (System/currentTimeMillis)})
+(deftest alive-neighbour?-test
 
-          requested-size          1
-          without-neighbours-node (sut/new-node-object node-data2 cluster)]
+  (testing "should be true for neighbours with alive statuses "
+    (let [nb1 (sut/new-neighbour-node neighbour-data1)
+          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :suspect))]
+      (m/assert true (sut/alive-neighbour? nb1))
+      (m/assert true (sut/alive-neighbour? nb2))))
 
-      (sut/upsert-neighbour node1 neighbour1)
-      (sut/upsert-neighbour node1 neighbour2)
+  (testing "should be false for neighbours with not alive statuses"
+    (let [nb1 (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
+          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead))
+          nb3 (sut/new-neighbour-node (assoc neighbour-data3 :status :stop))]
+      (m/assert false (sut/alive-neighbour? nb1))
+      (m/assert false (sut/alive-neighbour? nb2))
+      (m/assert false (sut/alive-neighbour? nb3)))))
 
-      (testing "should return vector with :max-anti-entropy-items items by default"
-        (m/assert (:max-anti-entropy-items @sut/*config) (count (sut/build-anti-entropy-data node1))))
 
-      (testing "should return vector with requested number of items"
-        (m/assert requested-size (count (sut/build-anti-entropy-data node1 :num requested-size))))
+(deftest alive-node?-test
 
-      (testing "should return empty vector for node without neighbours"
-        (m/assert [] (sut/build-anti-entropy-data without-neighbours-node)))
+  (testing "should be true for nodes with alive statuses"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)]
+      (sut/set-status node1 :alive)
+      (sut/set-status node2 :suspect)
+      (m/assert true (sut/alive-node? node1))
+      (m/assert true (sut/alive-node? node2))))
 
-      (testing "should return vector with values for node2 and node3"
-        (m/assert [[#uuid "00000000-0000-0000-0000-000000000002" "127.0.0.1" 5432 3 0 2 2 {}]
-                   [#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
-          (sort (sut/build-anti-entropy-data node1)))
+  (testing "should be false for nodes with not alive statuses"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)
+          node3 (sut/new-node-object node-data3 cluster)]
+      (sut/set-status node1 :dead)
+      (sut/set-status node2 :left)
+      (sut/set-status node2 :stop)
+      (m/assert false (sut/alive-node? node1))
+      (m/assert false (sut/alive-node? node2))
+      (m/assert false (sut/alive-node? node3)))))
 
-        (testing "should return vector with requested value for node3"
-          (m/assert [[#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
-            (sut/build-anti-entropy-data node1 {:neighbour-id (:id node-data3)})))
 
-        (testing "should return empty vector if requested unknown node"
-          (m/assert []
-            (sut/build-anti-entropy-data node1 {:neighbour-id 123})))))))
+
+(deftest set-nb-tx-test
+
+  (testing "set tx for neighbour"
+    (let [this   (sut/new-node-object node-data1 cluster)
+          nb     (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
+          new-tx 42]
+      (sut/upsert-neighbour this nb)
+
+      (testing "should update tx"
+        (m/assert 0 (:tx (sut/get-neighbour this (.-id nb))))
+        (sut/set-nb-tx this (.-id nb) new-tx)
+        (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb)))))
+
+      (testing "should do nothing if new tx less or equals to current value"
+        (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb))))
+        (sut/set-nb-tx this (.-id nb) 0)
+        (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb))))
+
+        (sut/set-nb-tx this (.-id nb) new-tx)
+        (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb))))))))
+
+
+
+(deftest set-nb-restart-counter-test
+
+  (testing "set restart counter for neighbour"
+    (let [this                (sut/new-node-object node-data1 cluster)
+          nb                  (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
+          new-restart-counter 42]
+      (sut/upsert-neighbour this nb)
+
+      (testing "should update restart counter for neighbour"
+        (m/assert (:restart-counter neighbour-data1) (:restart-counter (sut/get-neighbour this (.-id nb))))
+        (sut/set-nb-restart-counter this (.-id nb) new-restart-counter)
+        (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb)))))
+
+      (testing "should do nothing if new restart counter less or equals to current value"
+        (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb))))
+        (sut/set-nb-restart-counter this (.-id nb) 0)
+        (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb))))
+
+        (sut/set-nb-restart-counter this (.-id nb) new-restart-counter)
+        (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb))))))))
+
+
+
+(deftest set-nb-status-test
+
+  (testing "set status for neighbour"
+    (let [this           (sut/new-node-object node-data1 cluster)
+          current-status :left
+          nb             (sut/new-neighbour-node (assoc neighbour-data1 :status current-status))
+          new-status     :alive]
+      (sut/upsert-neighbour this nb)
+
+      (testing "should update status for neighbour"
+        (m/assert current-status (:status (sut/get-neighbour this (.-id nb))))
+        (sut/set-nb-status this (.-id nb) new-status)
+        (m/assert new-status (:status (sut/get-neighbour this (.-id nb))))))))
+
+
+
+(deftest set-nb-direct-access-test
+
+  (testing "set direct access for neighbour"
+    (let [this            (sut/new-node-object node-data1 cluster)
+          indirect-access :indirect
+          nb              (sut/new-neighbour-node (assoc neighbour-data1 :access indirect-access))
+          direct-access   :direct]
+      (sut/upsert-neighbour this nb)
+
+      (testing "should set to :direct value for neighbour"
+        (m/assert indirect-access (:access (sut/get-neighbour this (.-id nb))))
+        (sut/set-nb-direct-access this (.-id nb))
+        (m/assert direct-access (:access (sut/get-neighbour this (.-id nb))))))))
+
+
+(deftest set-nb-indirect-access-test
+
+  (testing "set indirect access for neighbour"
+    (let [this            (sut/new-node-object node-data1 cluster)
+          direct-access   :direct
+          nb              (sut/new-neighbour-node (assoc neighbour-data1 :access direct-access))
+          indirect-access :indirect]
+      (sut/upsert-neighbour this nb)
+
+      (testing "should set to :indirect value for neighbour"
+        (m/assert direct-access (:access (sut/get-neighbour this (.-id nb))))
+        (sut/set-nb-indirect-access this (.-id nb))
+        (m/assert indirect-access (:access (sut/get-neighbour this (.-id nb))))))))
 
 
 ;;;;;;;;;;;;;;;;;;;
@@ -1431,201 +1629,9 @@
           (sut/stop this))))))
 
 
-
-(deftest get-neighbours-with-status-test
-  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
-        nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :left))
-        nb1  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :stop))
-        nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :alive))
-        nb3  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :alive))
-        nb4  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :dead))
-        nb5  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :dead))
-        nb6  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :dead))
-        nb7  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
-        nb8  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
-        nb9  (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))
-        nb10 (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status :suspect))]
-    (sut/upsert-neighbour this nb0)
-    (sut/upsert-neighbour this nb1)
-    (sut/upsert-neighbour this nb2)
-    (sut/upsert-neighbour this nb3)
-    (sut/upsert-neighbour this nb4)
-    (sut/upsert-neighbour this nb5)
-    (sut/upsert-neighbour this nb6)
-    (sut/upsert-neighbour this nb7)
-    (sut/upsert-neighbour this nb8)
-    (sut/upsert-neighbour this nb9)
-    (sut/upsert-neighbour this nb10)
-
-    (testing "Get all alive and left neighbours"
-      (let [result (sut/get-neighbours-with-status this #{:alive :left})]
-        (m/assert 3 (count result))))
-
-    (testing "Get all alive neighbours"
-      (let [result (sut/get-alive-neighbours this)]
-        (m/assert 2 (count result))))
-
-    (testing "Get all stopped neighbours"
-      (let [result (sut/get-stopped-neighbours this)]
-        (m/assert 1 (count result))))
-
-    (testing "Get all dead neighbours"
-      (let [result (sut/get-dead-neighbours this)]
-        (m/assert 3 (count result))))
-
-    (testing "Get all left neighbours"
-      (let [result (sut/get-left-neighbours this)]
-        (m/assert 1 (count result))))
-
-    (testing "Get all suspect neighbours"
-      (let [result (sut/get-suspect-neighbours this)]
-        (m/assert 4 (count result))))))
-
-
-(deftest get-oldest-neighbour-test
-  (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
-        nb0  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000000"))
-        nb11 (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000011"))
-        nb2  (sut/new-neighbour-node (assoc neighbour-data2 :id #uuid"00000000-0000-0000-0000-000000000002"))
-        nb3  (sut/new-neighbour-node (assoc neighbour-data2 :status :left :id #uuid"00000000-0000-0000-0000-000000000003"))]
-    (sut/upsert-neighbour this nb0)
-    (Thread/sleep 1)
-    (sut/upsert-neighbour this nb11)
-    (Thread/sleep 1)
-    (sut/upsert-neighbour this nb2)
-    (Thread/sleep 1)
-    (sut/upsert-neighbour this nb3)
-    (m/assert (dissoc (sut/get-oldest-neighbour this) :updated-at) (dissoc nb0 :updated-at))
-    (sut/delete-neighbour this (:id nb0))
-    (m/assert (dissoc (sut/get-oldest-neighbour this) :updated-at) (dissoc nb11 :updated-at))
-    (m/assert (dissoc (sut/get-oldest-neighbour this #{:left}) :updated-at) (dissoc nb3 :updated-at))))
-
-
-(deftest alive-neighbour?-test
-  (testing "Result for neighbours with alive statuses should be true"
-    (let [nb1 (sut/new-neighbour-node neighbour-data1)
-          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :suspect))]
-      (m/assert true (sut/alive-neighbour? nb1))
-      (m/assert true (sut/alive-neighbour? nb2))))
-
-  (testing "Result for not alive neighbours should be false"
-    (let [nb1 (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
-          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead))
-          nb3 (sut/new-neighbour-node (assoc neighbour-data3 :status :stop))]
-      (m/assert false (sut/alive-neighbour? nb1))
-      (m/assert false (sut/alive-neighbour? nb2))
-      (m/assert false (sut/alive-neighbour? nb3)))))
-
-
-(deftest alive-node?-test
-  (testing "Result for nodes with alive statuses should be true"
-    (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
-          node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 99))]
-      (sut/set-status node1 :alive)
-      (sut/set-status node2 :suspect)
-      (m/assert true (sut/alive-node? node1))
-      (m/assert true (sut/alive-node? node2))))
-
-  (testing "Result for not alive nodes should be false"
-    (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
-          node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 99))
-          node3 (sut/new-node-object node-data3 (assoc cluster :cluster-size 99))]
-      (sut/set-status node1 :dead)
-      (sut/set-status node2 :left)
-      (sut/set-status node2 :stop)
-      (m/assert false (sut/alive-node? node1))
-      (m/assert false (sut/alive-node? node2))
-      (m/assert false (sut/alive-node? node3)))))
-
-
-(deftest update-nb-tx-test
-  (let [this   (sut/new-node-object node-data1 cluster)
-        nb     (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
-        new-tx 42]
-    (sut/upsert-neighbour this nb)
-
-    (testing "Update tx for neighbour is successful"
-      (m/assert 0 (:tx (sut/get-neighbour this (.-id nb))))
-      (sut/set-nb-tx this (.-id nb) new-tx)
-      (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb)))))
-
-    (testing "If new tx less or equal than the current value then do nothing"
-      (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb))))
-      (sut/set-nb-tx this (.-id nb) 0)
-      (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb))))
-
-      (sut/set-nb-tx this (.-id nb) new-tx)
-      (m/assert new-tx (:tx (sut/get-neighbour this (.-id nb)))))))
-
-
-(deftest set-nb-restart-counter-test
-  (let [this                (sut/new-node-object node-data1 cluster)
-        nb                  (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
-        new-restart-counter 42]
-    (sut/upsert-neighbour this nb)
-
-    (testing "Update restart counter for neighbour is successful"
-      (m/assert (:restart-counter neighbour-data1)
-        (:restart-counter (sut/get-neighbour this (.-id nb))))
-      (sut/set-nb-restart-counter this (.-id nb) new-restart-counter)
-      (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb)))))
-
-    (testing "If new restart counter less or equal than the current value then do nothing"
-      (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb))))
-      (sut/set-nb-restart-counter this (.-id nb) 0)
-      (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb))))
-
-      (sut/set-nb-restart-counter this (.-id nb) new-restart-counter)
-      (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb)))))))
-
-
-(deftest set-nb-status-test
-  (let [this           (sut/new-node-object node-data1 cluster)
-        current-status :left
-        nb             (sut/new-neighbour-node (assoc neighbour-data1 :status current-status))
-        new-status     :alive]
-    (sut/upsert-neighbour this nb)
-
-    (testing "Update status for neighbour is successful"
-      (m/assert current-status
-        (:status (sut/get-neighbour this (.-id nb))))
-      (sut/set-nb-status this (.-id nb) new-status)
-      (m/assert new-status (:status (sut/get-neighbour this (.-id nb)))))))
-
-
-(deftest set-nb-direct-access-test
-  (let [this           (sut/new-node-object node-data1 cluster)
-        current-access :indirect
-        nb             (sut/new-neighbour-node (assoc neighbour-data1 :access current-access))
-        new-access     :direct]
-    (sut/upsert-neighbour this nb)
-
-    (testing "Set direct access for neighbour is successful"
-      (m/assert current-access
-        (:access (sut/get-neighbour this (.-id nb))))
-      (sut/set-nb-direct-access this (.-id nb))
-      (m/assert new-access (:access (sut/get-neighbour this (.-id nb)))))))
-
-
-(deftest set-nb-indirect-access-test
-  (let [this           (sut/new-node-object node-data1 cluster)
-        current-access :direct
-        nb             (sut/new-neighbour-node (assoc neighbour-data1 :access current-access))
-        new-access     :indirect]
-    (sut/upsert-neighbour this nb)
-
-    (testing "Set indirect access for neighbour is successful"
-      (m/assert current-access
-        (:access (sut/get-neighbour this (.-id nb))))
-      (sut/set-nb-indirect-access this (.-id nb))
-      (m/assert new-access (:access (sut/get-neighbour this (.-id nb)))))))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; SWIM business logic tests
-;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (deftest probe-test
