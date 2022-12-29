@@ -36,6 +36,8 @@
       MutablePool)))
 
 
+
+
 ;;;;;;;;;;;;;;;;;;;;;
 ;; Constants and data
 ;;;;;;;;;;;;;;;;;;;;;
@@ -43,6 +45,14 @@
 (def ^:dynamic *max-test-timeout*
   "Max promise timeout ms in tests"
   1500)
+
+
+(defmacro no-timeout-check
+  "Test check if attempt of (deref *p) has no timeout *max-test-timeout*.
+  If timeout occurred then :timeout value will be delivered to promise and test will not pass."
+  [*p]
+  `(when-not (m/dessert :timeout (deref ~*p *max-test-timeout* :timeout))
+     (deliver ~*p :timeout)))
 
 
 (def values [1 128 "hello" nil :k {:a 1 :b true} [1234567890 1]])
@@ -1303,7 +1313,7 @@
     (Thread/sleep 5)))
 
 
-(defn set-payload-incoming-data-processor-fn
+(defn set-incoming-data-to-payload-processor-fn
   "Set received events to payload section without processing them."
   [^NodeObject this ^bytes encrypted-data]
   (let [secret-key     (-> this sut/get-cluster :secret-key)
@@ -1312,188 +1322,114 @@
     (sut/set-payload this events-vector)))
 
 
-(deftest send-event-test
-  (testing "node1 can send event to node2"
-    (let [big-cluster (assoc cluster :cluster-size 999)
-          node1       (sut/new-node-object node-data1 big-cluster)
-          node2       (sut/new-node-object node-data2 big-cluster)
-          probe-event (sut/new-probe-event node1 (sut/get-host node2) (sut/get-port node2))]
-      (try
-        (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
-        (sut/start node1 empty-node-process-fn #(do [%1 %2]))
-
-        (testing "send event using host and port"
-          (let [*expecting-event (promise)]
-
-            (add-watch (:*node node2) :event-detect
-              (fn [_ _ _ new-val]
-                (when-not (empty? (:payload new-val))
-                  (deliver *expecting-event (:payload new-val)))))
-
-            (sut/send-event node1 probe-event (sut/get-host node2) (sut/get-port node2))
-
-            (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
-            (m/assert [(.prepare probe-event)] (sut/get-payload node2))
-
-            (remove-watch (:*node node2) :event-detect)))
-
-        (testing "send event using neighbour id"
-          (let [*expecting-event (promise)]
-            (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-
-            (add-watch (:*node node2) :event-detect
-              (fn [_ _ _ new-val]
-                (when-not (empty? (:payload new-val))
-                  (deliver *expecting-event (:payload new-val)))))
-
-            (sut/send-event node1 (event/empty-ack) (sut/get-id node2))
-
-            (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
-            (m/assert [(.prepare (event/empty-ack))] (sut/get-payload node2))
-
-            (remove-watch (:*node node2) :event-detect)))
-
-        (testing "Wrong neighbour id is prohibited"
-          (is (thrown-with-msg? Exception #"Unknown neighbour id"
-                (sut/send-event node1 (event/empty-ack) (random-uuid)))))
-
-        (testing "Too big UDP packet is prohibited"
-          (let [config @sut/*config]
-            (swap! sut/*config assoc :max-anti-entropy-items 100)
-            (dotimes [n 100]                                ;; fill too many neighbours
-              (sut/upsert-neighbour node1 (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-
-            (is (thrown-with-msg? Exception #"UDP packet is too big"
-                  (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-id node2))))
-
-            (reset! sut/*config config)))
-
-
-        (catch Exception e
-          (println (.getMessage e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2))))))
-
-
-;;;;
-
-(deftest send-event-ae-test
-  (testing "node1 can send event to node2"
-    (let [big-cluster (assoc cluster :cluster-size 999)
-          node1       (sut/new-node-object node-data1 big-cluster)
-          node2       (sut/new-node-object node-data2 big-cluster)
-          probe-event (sut/new-probe-event node1 (sut/get-host node2) (sut/get-port node2))]
-      (try
-        (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
-        (sut/start node1 empty-node-process-fn #(do [%1 %2]))
-
-        (testing "send event using host and port"
-          (let [*expecting-event (promise)]
-
-            (add-watch (:*node node2) :event-detect
-              (fn [_ _ _ new-val]
-                (when-not (empty? (:payload new-val))
-                  (deliver *expecting-event (:payload new-val)))))
-
-            (sut/send-event-ae node1 probe-event (sut/get-host node2) (sut/get-port node2))
-
-            (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
-            (m/assert [(.prepare probe-event) (.prepare (update (sut/new-anti-entropy-event node1) :tx dec))]
-              (sut/get-payload node2))
-
-            (remove-watch (:*node node2) :event-detect)))
-
-        (testing "send event using neighbour id"
-          (let [*expecting-event (promise)]
-            (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-
-            (add-watch (:*node node2) :event-detect
-              (fn [_ _ _ new-val]
-                (when-not (empty? (:payload new-val))
-                  (deliver *expecting-event (:payload new-val)))))
-
-            (sut/send-event-ae node1 (event/empty-ack) (sut/get-id node2))
-
-            (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
-            (m/assert
-              [(.prepare (event/empty-ack)) (.prepare (update (sut/new-anti-entropy-event node1) :tx dec))]
-              (sut/get-payload node2))
-
-            (remove-watch (:*node node2) :event-detect)))
-
-        (testing "Wrong neighbour id is prohibited"
-          (is (thrown-with-msg? Exception #"Unknown neighbour id"
-                (sut/send-event-ae node1 (event/empty-ack) (random-uuid)))))
-
-        (testing "Too big UDP packet is prohibited"
-          (let [config @sut/*config]
-            (swap! sut/*config assoc :max-anti-entropy-items 100)
-            (dotimes [n 100]                                ;; fill too many neighbours
-              (sut/upsert-neighbour node1 (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-
-            (is (thrown-with-msg? Exception #"UDP packet is too big"
-                  (sut/send-event-ae node1 (sut/new-anti-entropy-event node1) (sut/get-id node2))))
-
-            (reset! sut/*config config)))
-
-        (catch Exception e
-          (println (.getMessage e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2))))))
-
 
 (deftest send-events-test
-  (testing "node1 can send all events to node2 with anti-entropy data"
-    (let [node1       (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
-          node2       (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
-          probe-event (sut/new-probe-event node1 (sut/get-host node2) (sut/get-port node2))]
-
+  (testing "send events"
+    (let [node1  (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
+          node2  (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
+          event1 (sut/new-probe-event node1 (sut/get-host node2) (sut/get-port node2))
+          event2 (event/empty-ack)
+          event3 (sut/new-anti-entropy-event node1)
+          events [event1 event2 event3]]
       (try
-        (sut/start node2 empty-node-process-fn set-payload-incoming-data-processor-fn)
+        (sut/start node2 empty-node-process-fn set-incoming-data-to-payload-processor-fn)
         (sut/start node1 empty-node-process-fn #(do [%1 %2]))
 
-        (testing "send all events using host and port"
-          (let [*expecting-event (promise)]
-            (sut/put-event node1 probe-event)
-            (sut/put-event node1 (event/empty-ack))
-            (sut/put-event node1 (sut/new-anti-entropy-event node1))
+        (testing "should transform all given events and send them to node2"
+          (let [*expecting-event (promise)
+                event-catcher-fn (fn [v]
+                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                     (when (and
+                                             (= :set-payload cmd)
+                                             (= (:id node-data2) (:node-id v)))
+                                       (deliver *expecting-event v))))]
+            (add-tap event-catcher-fn)
+            (m/assert pos-int? (sut/send-events node1 events (:host node-data2) (:port node-data2)))
+            (no-timeout-check *expecting-event)
+            (m/assert [(.prepare event1) (.prepare event2) (.prepare event3)] (sut/get-payload node2))
+            (remove-tap event-catcher-fn)))
 
-            (add-watch (:*node node2) :event-detect
-              (fn [_ _ _ new-val]
-                (when-not (empty? (:payload new-val))
-                  (deliver *expecting-event (:payload new-val)))))
+        (testing "should rise an exception if UDP packet size is too big"
+          (is (thrown-with-msg? Exception #"UDP packet is too big"
+                (sut/send-events node1 events (:host node-data2) (:port node-data2)
+                  {:max-udp-size 1}))))
 
-            (sut/send-events node1 (sut/take-events node1) (sut/get-host node2) (sut/get-port node2))
-
-            (m/dessert :timeout (deref *expecting-event *max-test-timeout* :timeout))
-            (m/assert
-              [(.prepare probe-event) (.prepare (event/empty-ack)) (.prepare (update (sut/new-anti-entropy-event node1) :tx dec))]
-              (sut/get-payload node2))
-
-            (testing "After send outgoing queue should be empty"
-              (m/assert empty? (sut/get-outgoing-events node1)))
-
-            (remove-watch (:*node node2) :event-detect)))
-
-        (testing "Too big UDP packet is prohibited"
-          (let [config @sut/*config]                        ;; increase from 2 to 100
-            (swap! sut/*config assoc :max-anti-entropy-items 100)
-            (dotimes [n 100]                                ;; fill too many neighbours
-              (sut/upsert-neighbour node1 (sut/new-neighbour-node (random-uuid) "127.0.0.1" (inc (rand-int 10240)))))
-
-            (is (thrown-with-msg? Exception #"UDP packet is too big"
-                  (sut/send-events node1
-                    [(sut/new-anti-entropy-event node1)] (sut/get-host node2) (sut/get-port node2))))
-
-            (reset! sut/*config config)))
+        (testing "should ignore UDP size check and send events anyway"
+          (m/assert pos-int? (sut/send-events node1 events (:host node-data2) (:port node-data2)
+                               {:max-udp-size 1 :ignore-max-udp-size? true})))
 
         (catch Exception e
-          (println (.getMessage e)))
+          (println "Got exception:" (.getMessage e)))
         (finally
           (sut/stop node1)
           (sut/stop node2))))))
+
+
+(deftest send-event-test
+
+  (testing "send one event"
+    (let [this  (sut/new-node-object node-data1 cluster)
+          neighbour (sut/new-neighbour-node neighbour-data1)
+          event (sut/new-cluster-size-event this 5)]
+      (try
+        (sut/start this empty-node-process-fn #(do [%1 %2]))
+        (sut/upsert-neighbour this neighbour)
+
+        (testing "using host:port should return number of bytes sent"
+          (m/assert pos-int? (sut/send-event this event (:host neighbour-data1) (:port neighbour-data1))))
+
+        (testing "using neighbour id should return number of bytes sent"
+          (m/assert pos-int? (sut/send-event this event (:id neighbour))))
+
+        (testing "should rise an exception if neighbour id is unknown"
+          (is (thrown-with-msg? Exception #"Unknown neighbour id"
+                (sut/send-event this event :bad-id))))
+
+        (catch Exception e
+          (println "Got exception:" (.getMessage e)))
+        (finally
+          (sut/stop this))))))
+
+
+
+(deftest send-event-ae-test
+  (testing "send one event + anti-entropy data"
+    (let [this  (sut/new-node-object node-data1 cluster)
+          neighbour (sut/new-neighbour-node neighbour-data1)
+          event (sut/new-cluster-size-event this 5)]
+      (try
+        (sut/start this empty-node-process-fn #(do [%1 %2]))
+        (sut/upsert-neighbour this neighbour)
+
+        (testing "using host:port"
+          (let [with-anti-entropy-size (sut/send-event-ae this event (:host neighbour-data1) (:port neighbour-data1))
+                without-anti-entropy-size (sut/send-event this event (:host neighbour-data1) (:port neighbour-data1))]
+
+            (testing "should return should return number of bytes sent"
+              (m/assert pos-int? with-anti-entropy-size))
+
+            (testing "should return size lager than sending event without anti-entropy data"
+              (m/assert true (> with-anti-entropy-size without-anti-entropy-size)))))
+
+        (testing "using neighbour id"
+          (let [with-anti-entropy-size (sut/send-event-ae this event (:id neighbour))
+                without-anti-entropy-size (sut/send-event this event (:id neighbour))]
+
+            (testing "should return should return number of bytes sent"
+              (m/assert pos-int? with-anti-entropy-size))
+
+            (testing "should return size lager than sending event without anti-entropy data"
+              (m/assert true (> with-anti-entropy-size without-anti-entropy-size)))))
+
+        (testing "should rise an exception if neighbour id is unknown"
+          (is (thrown-with-msg? Exception #"Unknown neighbour id"
+                (sut/send-event-ae this event :bad-id))))
+
+        (catch Exception e
+          (println "Got exception:" (.getMessage e)))
+        (finally
+          (sut/stop this))))))
+
 
 
 (deftest get-neighbours-with-status-test
@@ -1690,13 +1626,6 @@
 ;;;;
 ;; SWIM business logic tests
 ;;;;
-
-(defmacro no-timeout-check
-  "Test check if attempt of (deref *p) has no timeout *max-test-timeout*.
-  If timeout occurred then :timeout value will be delivered to promise and test will not pass."
-  [*p]
-  `(when-not (m/dessert :timeout (deref ~*p *max-test-timeout* :timeout))
-     (deliver ~*p :timeout)))
 
 
 (deftest probe-test
