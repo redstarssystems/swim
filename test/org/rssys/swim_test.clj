@@ -1405,7 +1405,7 @@
           (let [with-anti-entropy-size (sut/send-event-ae this event (:host neighbour-data1) (:port neighbour-data1))
                 without-anti-entropy-size (sut/send-event this event (:host neighbour-data1) (:port neighbour-data1))]
 
-            (testing "should return should return number of bytes sent"
+            (testing "should return number of bytes sent"
               (m/assert pos-int? with-anti-entropy-size))
 
             (testing "should return size lager than sending event without anti-entropy data"
@@ -1415,7 +1415,7 @@
           (let [with-anti-entropy-size (sut/send-event-ae this event (:id neighbour))
                 without-anti-entropy-size (sut/send-event this event (:id neighbour))]
 
-            (testing "should return should return number of bytes sent"
+            (testing "should return number of bytes sent"
               (m/assert pos-int? with-anti-entropy-size))
 
             (testing "should return size lager than sending event without anti-entropy data"
