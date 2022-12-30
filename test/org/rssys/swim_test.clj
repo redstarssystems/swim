@@ -1629,9 +1629,9 @@
           (sut/stop this))))))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; SWIM business logic tests
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Event processing tests
+;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (deftest probe-test
@@ -1639,8 +1639,8 @@
         node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))]
     (try
 
-      (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-      (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+      (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+      (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
       (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
         (testing "Probe should return probe key as UUID"
@@ -1672,8 +1672,8 @@
 
         (try
 
-          (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-          (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
 
           (add-watch (:*node node1) :event-detect
@@ -1713,8 +1713,8 @@
                                    (deliver *expecting-error cmd))))]
         (try
 
-          (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-          (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (add-tap error-catcher-fn)
 
@@ -1740,8 +1740,8 @@
             *expecting-event (promise)]
         (try
 
-          (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-          (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-cluster-size node1 3)                    ;; increase cluster size
 
@@ -1782,8 +1782,8 @@
                                    (deliver *expecting-event cmd))))]
         (try
           (add-tap event-catcher-fn)
-          (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-          (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
           (sut/set-cluster-size node1 3)                    ;; increase cluster size
 
           ;; check we have only this node in cluster
@@ -1812,8 +1812,8 @@
           node2 (sut/new-node-object node-data2 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
@@ -1857,8 +1857,8 @@
           node2 (sut/new-node-object node-data2 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
 
@@ -1894,8 +1894,8 @@
           node2 (sut/new-node-object node-data2 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node
@@ -1933,8 +1933,8 @@
           node2 (sut/new-node-object node-data2 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node
@@ -1972,8 +1972,8 @@
           node2 (sut/new-node-object node-data2 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node
@@ -2017,9 +2017,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node3 :alive)
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
@@ -2140,9 +2140,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node3 :alive)
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
@@ -2213,9 +2213,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node3 :alive)
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
@@ -2283,9 +2283,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node3 :alive)
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
@@ -2353,9 +2353,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node3 :alive)
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
@@ -2423,9 +2423,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node3 :alive)
         (sut/set-status node2 :left)
         (sut/set-status node1 :alive)
@@ -2492,9 +2492,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node3 :alive)
         (sut/set-status node2 :alive)
         (sut/set-status node1 :left)
@@ -2564,9 +2564,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -2695,9 +2695,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -2767,9 +2767,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :left)
@@ -2839,9 +2839,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -2912,9 +2912,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -2982,9 +2982,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3052,9 +3052,9 @@
           neighbour-id    (sut/get-id node3)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3126,8 +3126,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3210,8 +3210,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
@@ -3264,8 +3264,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3318,8 +3318,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :left)
@@ -3372,8 +3372,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3426,8 +3426,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3480,8 +3480,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3538,8 +3538,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :suspect)
         (sut/set-status node2 :alive)
@@ -3670,8 +3670,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :left)
@@ -3724,8 +3724,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3777,8 +3777,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3798,7 +3798,7 @@
               event-catcher-fn2 (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and
-                                            (= cmd :incoming-udp-processor)
+                                            (= cmd :udp-packet-processor)
                                             (= (sut/get-id node1) (:node-id v))
                                             (= 6 (-> v :data :event :cmd-type)))
                                       (deliver *expecting-event2 v))))]
@@ -3832,7 +3832,7 @@
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
                :ts                 pos-int?
-               :org.rssys.swim/cmd :incoming-udp-processor
+               :org.rssys.swim/cmd :udp-packet-processor
                :data
                {:event
                 {:cmd-type                  6
@@ -3859,8 +3859,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3880,7 +3880,7 @@
               event-catcher-fn2 (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and
-                                            (= cmd :incoming-udp-processor)
+                                            (= cmd :udp-packet-processor)
                                             (= (sut/get-id node1) (:node-id v))
                                             (= 6 (-> v :data :event :cmd-type)))
                                       (deliver *expecting-event2 v))))]
@@ -3914,7 +3914,7 @@
             (m/assert ^:matcho/strict
               {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
                :ts                 pos-int?
-               :org.rssys.swim/cmd :incoming-udp-processor
+               :org.rssys.swim/cmd :udp-packet-processor
                :data
                {:event
                 {:cmd-type                  6
@@ -3941,8 +3941,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -3995,8 +3995,8 @@
           neighbour-id (sut/get-id node2)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
@@ -4053,7 +4053,7 @@
     (let [node1 (sut/new-node-object node-data1 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node1 :left)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
@@ -4121,9 +4121,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
@@ -4196,9 +4196,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
@@ -4241,7 +4241,7 @@
               event-catcher-fn5 (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and
-                                            (= cmd :incoming-udp-processor)
+                                            (= cmd :udp-packet-processor)
                                             (= #uuid "00000000-0000-0000-0000-000000000001"
                                               (:node-id v))
                                             (= 3 (-> v :data :event :cmd-type)))
@@ -4301,7 +4301,7 @@
                  :tx                        2}}
                :node-id            #uuid "00000000-0000-0000-0000-000000000001"
                :ts                 pos-int?
-               :org.rssys.swim/cmd :incoming-udp-processor}
+               :org.rssys.swim/cmd :udp-packet-processor}
               @*expecting-event5))
 
 
@@ -4324,9 +4324,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :dead)
@@ -4364,9 +4364,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
@@ -4388,7 +4388,7 @@
               event-catcher-fn2 (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and
-                                            (= cmd :incoming-udp-processor)
+                                            (= cmd :udp-packet-processor)
                                             (= 6 (-> v :data :event :cmd-type)))
                                       (deliver *expecting-event2 v))))]
 
@@ -4428,7 +4428,7 @@
                  :tx                        2}}
                :node-id            #uuid "00000000-0000-0000-0000-000000000001"
                :ts                 pos-int?
-               :org.rssys.swim/cmd :incoming-udp-processor}
+               :org.rssys.swim/cmd :udp-packet-processor}
               @*expecting-event2))
 
           (remove-tap event-catcher-fn)
@@ -4447,9 +4447,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
@@ -4472,7 +4472,7 @@
               event-catcher-fn2 (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and
-                                            (= cmd :incoming-udp-processor)
+                                            (= cmd :udp-packet-processor)
                                             (= 6 (-> v :data :event :cmd-type)))
                                       (deliver *expecting-event2 v))))]
 
@@ -4512,7 +4512,7 @@
                  :tx                        2}}
                :node-id            #uuid "00000000-0000-0000-0000-000000000001"
                :ts                 pos-int?
-               :org.rssys.swim/cmd :incoming-udp-processor}
+               :org.rssys.swim/cmd :udp-packet-processor}
               @*expecting-event2))
 
           (remove-tap event-catcher-fn)
@@ -4531,9 +4531,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
@@ -4590,9 +4590,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
@@ -4669,9 +4669,9 @@
           node3 (sut/new-node-object node-data3 cluster)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node2 empty-node-process-fn sut/incoming-udp-processor-fn)
-        (sut/start node3 empty-node-process-fn sut/incoming-udp-processor-fn)
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)

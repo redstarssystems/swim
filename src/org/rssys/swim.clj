@@ -1122,8 +1122,6 @@
     (send-event-by-id this event neighbour-id {:attach-anti-entropy? true})))
 
 
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Event processing functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1147,10 +1145,10 @@
 (defmethod restore-event 15 ^IndirectAckEvent [e] (.restore (event/empty-indirect-ack) e))
 
 
-(defmulti process-incoming-event (fn [this e] (type e)))
+(defmulti event-processing (fn [this e] (type e)))
 
 
-(defmethod process-incoming-event ProbeEvent
+(defmethod event-processing ProbeEvent
   [^NodeObject this ^ProbeEvent e]
   (let [probe-ack-event (new-probe-ack-event this e)]
     (d> :probe-ack-event (get-id this) probe-ack-event)
@@ -1165,7 +1163,7 @@
 
 
 
-(defmethod process-incoming-event ProbeAckEvent
+(defmethod event-processing ProbeAckEvent
   [^NodeObject this ^ProbeAckEvent e]
   (let [nb
         (new-neighbour-node {:id              (.-id e)
@@ -1187,7 +1185,7 @@
 
 
 
-(defmethod process-incoming-event AntiEntropy
+(defmethod event-processing AntiEntropy
   [^NodeObject this ^AntiEntropy e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
@@ -1245,7 +1243,7 @@
     (= (get-id this) (:intermediate-id e))))
 
 
-(defmethod process-incoming-event IndirectAckEvent
+(defmethod event-processing IndirectAckEvent
   [^NodeObject this ^IndirectAckEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
@@ -1283,7 +1281,7 @@
           (put-event this (new-alive-event this e)))))))
 
 
-(defmethod process-incoming-event IndirectPingEvent
+(defmethod event-processing IndirectPingEvent
   [^NodeObject this ^IndirectPingEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
@@ -1318,7 +1316,7 @@
         (send-event-ae this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
 
 
-(defmethod process-incoming-event AckEvent
+(defmethod event-processing AckEvent
   [^NodeObject this ^AckEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
@@ -1352,7 +1350,7 @@
         (set-nb-status-alive this sender-id)))))
 
 
-(defmethod process-incoming-event PingEvent
+(defmethod event-processing PingEvent
   [^NodeObject this ^PingEvent e]
   (let [neighbour-id (:id e)
         nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
@@ -1394,7 +1392,7 @@
           (put-event this (new-alive-event this e)))))))
 
 
-(defmethod process-incoming-event JoinEvent
+(defmethod event-processing JoinEvent
   [^NodeObject this ^JoinEvent e]
   (cond
 
@@ -1437,7 +1435,7 @@
     (= :join (get-status this))))
 
 
-(defmethod process-incoming-event AliveEvent
+(defmethod event-processing AliveEvent
   [^NodeObject this ^AliveEvent e]
   (let [sender-nb (or (get-neighbour this (:id e)) :unknown-neighbour)]
 
@@ -1486,15 +1484,15 @@
 
 
 
-(defmethod process-incoming-event :default
+(defmethod event-processing :default
   [^NodeObject this e]
-  (d> :process-incoming-event-default (get-id this) {:msg "Unknown event type" :event e}))
+  (d> :event-processing-default (get-id this) {:msg "Unknown event type" :event e}))
 
 
 ;;;;
 
 
-(defn incoming-udp-processor-fn
+(defn udp-packet-processor
   "Main function to process all incoming UDP packets. UDP packets will be decrypted, serialized to events.
   Events will be processed one by one and dispatched to corresponding event handler.
   Returns void."
@@ -1506,12 +1504,12 @@
       (doseq [serialized-event events-vector]
         (let [event (restore-event serialized-event)]
           (inc-tx this)                                     ;; Every incoming event must increment tx on this node
-          (d> :incoming-udp-processor (get-id this) {:event event})
-          (process-incoming-event this event)))
-      (d> :incoming-udp-processor-error (get-id this) {:msg             "Bad events vector structure"
-                                                       :events-vector   events-vector
-                                                       :bad-udp-counter (:bad-udp-counter
-                                                                          (swap! *stat update :bad-udp-counter inc))}))))
+          (d> :udp-packet-processor (get-id this) {:event event})
+          (event-processing this event)))
+      (d> :udp-packet-processor-error (get-id this) {:msg             "Bad events vector structure"
+                                                     :events-vector   events-vector
+                                                     :bad-udp-counter (:bad-udp-counter
+                                                                        (swap! *stat update :bad-udp-counter inc))}))))
 
 
 ;; TODO: run periodic process for clean probe ack events - remember uuid key for non empty maps.
