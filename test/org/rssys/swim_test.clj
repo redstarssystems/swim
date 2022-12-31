@@ -1633,26 +1633,56 @@
 ;; Event processing tests
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn set-event-catcher
+  "Set new event catcher for given node.
+  Returns pair [*event-promise event-tap-fn], where `event-tap-fn` should catch event on given node via `tap>` mechanism.
+  Expected event will be delivered to *event-promise. Use `no-timeout-check` macro to detect promise timeout.
+  `event-tap-fn` is already bound to 'tap>' mechanism.
+  NB: Don't forget to call remove-tap for `event-tap-fn` after test."
+  [node-id event-kw ]
+  (let [*p    (promise)
+        tap-f (fn [v]
+                (when-let [cmd (:org.rssys.swim/cmd v)]
+                  (when (and
+                          (= cmd event-kw)
+                          (= node-id (:node-id v)))
+                    (deliver *p v))))]
+    (add-tap tap-f)
+    [*p tap-f]))
+
 
 (deftest probe-test
-  (let [node1 (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
-        node2 (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))]
-    (try
 
-      (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-      (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+  (testing "send probe event"
+    (let [node1 (sut/new-node-object node-data1 cluster)
+          node2 (sut/new-node-object node-data2 cluster)
+          node2-id (sut/get-id node2)
+          [*e1 e1-tap-fn] (set-event-catcher node2-id :udp-packet-processor)]
+      (try
 
-      (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
-        (testing "Probe should return probe key as UUID"
-          (m/assert UUID (type probe-key)))
-        (testing "Probe should insert probe key to the `probe-events` buffer"
-          (is (contains? (sut/get-probe-events node1) probe-key))))
+        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-      (catch Exception e
-        (println (ex-message e)))
-      (finally
-        (sut/stop node1)
-        (sut/stop node2)))))
+        (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
+
+          (no-timeout-check *e1)
+
+          (testing "should return probe key as UUID"
+            (m/assert UUID (type probe-key)))
+
+          (testing "should put probe key to probe events map"
+            (is (contains? (sut/get-probe-events node1) probe-key)))
+
+          (testing "node2 should receive probe event with expected probe key"
+            (m/assert {:data {:event {:probe-key probe-key}} :node-id node2-id} @*e1)))
+
+        (catch Exception e
+          (println (ex-message e)))
+        (finally
+          (remove-tap e1-tap-fn)
+          (sut/stop node1)
+          (sut/stop node2))))))
+
 
 
 (deftest ^:logic probe-probe-ack-test

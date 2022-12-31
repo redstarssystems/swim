@@ -1156,10 +1156,10 @@
 
 
 (defn- expected-probe-event?
-  "Returns true if we sent probe-event before, otherwise false"
+  "Returns true if probe key present in probe events map and ProbeAckEvent contains id of this node, otherwise false."
   [^NodeObject this ^ProbeAckEvent e]
   (and (contains? (get-probe-events this) (.-probe_key e))  ;; check  we send probe-event before
-    (= (.-neighbour_id e) (get-id this))))                  ;; this probe-ack for this node
+    (= (.-neighbour_id e) (get-id this))))                  ;; this probe-ack event is intended for this node
 
 
 
@@ -1554,8 +1554,8 @@
 
 
 (defn probe
-  "Probe other node. Returns probe key
-  Use probe key to catch events in `probe-events` buffer."
+  "Send probe event to neighbour. Put probe key to probe events map.
+  Returns probe key."
   ^UUID [^NodeObject this ^String neighbour-host ^long neighbour-port]
   (let [probe-event (new-probe-event this neighbour-host neighbour-port)]
     (d> :probe (get-id this) probe-event)
