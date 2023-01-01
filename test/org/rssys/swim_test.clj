@@ -1639,7 +1639,7 @@
   Expected event will be delivered to *event-promise. Use `no-timeout-check` macro to detect promise timeout.
   `event-tap-fn` is already bound to 'tap>' mechanism.
   NB: Don't forget to call remove-tap for `event-tap-fn` after test."
-  [node-id event-kw ]
+  [node-id event-kw]
   (let [*p    (promise)
         tap-f (fn [v]
                 (when-let [cmd (:org.rssys.swim/cmd v)]
@@ -1684,155 +1684,131 @@
           (sut/stop node2))))))
 
 
+(deftest probe-event-test
 
-(deftest ^:logic probe-probe-ack-test
-
-  (testing "Probe -> ProbeAck logic"
-
-    (testing "Neighbour from Probe Ack should not added to neighbours map cause cluster size limit reached"
-      (let [node1            (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
-            node2            (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))
-
-            *expecting-event (promise)
-            *expecting-error (promise)
-            error-catcher-fn (fn [v]
-                               (when-let [cmd (:org.rssys.swim/cmd v)]
-                                 (when (= cmd :upsert-neighbour-cluster-size-exceeded-error)
-                                   (deliver *expecting-error cmd))))]
+  (testing "probe event processing"
+    (testing "positive case"
+      (let [node1    (sut/new-node-object node-data1 cluster)
+            node2    (sut/new-node-object node-data2 cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event)
+            [*e2 e2-tap-fn] (set-event-catcher node1-id :upsert-probe-ack)
+            [*e3 e3-tap-fn] (set-event-catcher node1-id :upsert-neighbour)]
 
         (try
-
           (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
           (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
+          (testing "should receive ProbeAck event on node1"
+            (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
 
-          (add-watch (:*node node1) :event-detect
-            (fn [_ _ _ new-val]
-              (let [[_ probe-ack-event] (first (:probe-events new-val))]
-                (when (not (nil? probe-ack-event))          ;; wait for probe-ack event from node2
-                  (deliver *expecting-event (:probe-events new-val))))))
+              (testing "should be ProbeAck event from node2"
+                (no-timeout-check *e1)
+                (m/assert {:data {:id node2-id} :node-id node1-id} @*e1))
 
-          (add-tap error-catcher-fn)
+              (testing "should insert ProbeAck response into probe event map under probe key"
+                (no-timeout-check *e2)
+                (m/assert {:id           node2-id
+                           :neighbour-id node1-id
+                           :probe-key    probe-key}
+                  (sut/get-probe-event node1 probe-key)))
 
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-
-          (no-timeout-check *expecting-event)
-
-          (no-timeout-check *expecting-error)
-
-          (m/assert 1 (sut/nodes-in-cluster node1))
-          (m/assert :upsert-neighbour-cluster-size-exceeded-error @*expecting-error)
-
-          (remove-watch (:*node node1) :event-detect)
-          (remove-tap error-catcher-fn)
+              (testing "should upsert neighbour from ProbeAck when status is not alive"
+                (no-timeout-check *e3)
+                (m/assert node-data2 (sut/get-neighbour node1 node2-id)))))
 
           (catch Exception e
             (println (ex-message e)))
           (finally
+            (remove-tap e1-tap-fn)
+            (remove-tap e2-tap-fn)
+            (remove-tap e3-tap-fn)
             (sut/stop node1)
             (sut/stop node2)))))
 
-    (testing "Probe Ack should not accepted cause probe request never send"
-      (let [node1            (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
-            node2            (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))
-            probe-event      (sut/new-probe-event node1 (:host node-data2) (:port node-data2))
-            *expecting-error (promise)
-            error-catcher-fn (fn [v]
-                               (when-let [cmd (:org.rssys.swim/cmd v)]
-                                 (when (= cmd :probe-ack-event-probe-never-send-error)
-                                   (deliver *expecting-error cmd))))]
-        (try
+    (testing "should not upsert neighbour if cluster size limit exceed"
+      (let [node1    (sut/new-node-object node-data1 cluster)
+            node2    (sut/new-node-object node-data2 cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-neighbour-cluster-size-exceeded-error)]
 
+        (try
           (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
           (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-          (add-tap error-catcher-fn)
+          (sut/set-cluster-size node1 1)
+          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+
+          (testing "should rise error on upsert neighbour"
+            (no-timeout-check *e1)
+            (m/assert {:data {:cluster-size 1, :nodes-in-cluster 1} :node-id node1-id} @*e1)
+            (m/assert nil (sut/get-neighbour node1 node2-id)))
+
+          (catch Exception e
+            (println (ex-message e)))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "should not process ProbeAck if Probe event was never sent"
+      (let [node1       (sut/new-node-object node-data1 cluster)
+            node2       (sut/new-node-object node-data2 cluster)
+            probe-event (sut/new-probe-event node1 (:host node-data2) (:port node-data2))
+            node1-id    (sut/get-id node1)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event-probe-never-send-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (:host node-data1) (:port node-data1))
 
-          (no-timeout-check *expecting-error)
-
-          (m/assert :probe-ack-event-probe-never-send-error @*expecting-error)
-
-          (remove-tap error-catcher-fn)
+          (testing "should rise error and have no probe ack events"
+            (no-timeout-check *e1)
+            (m/assert empty? (sut/get-probe-events node1)))
 
           (catch Exception e
             (println (ex-message e)))
           (finally
+            (remove-tap e1-tap-fn)
             (sut/stop node1)
             (sut/stop node2)))))
 
-    (testing "Normal Probe Ack"
-      (let [node1            (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))
-            node2            (sut/new-node-object node-data2 (assoc cluster :cluster-size 1))
-            before-tx1       (sut/get-tx node1)
-            before-tx2       (sut/get-tx node2)
-            *expecting-event (promise)]
-        (try
+    (testing "should not upsert neighbour from ProbeAck when status is alive"
+      (let [node1    (sut/new-node-object node-data1 cluster)
+            node2    (sut/new-node-object node-data2 cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-probe-ack)]
 
+        (try
           (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
           (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-          (sut/set-cluster-size node1 3)                    ;; increase cluster size
-
-          (add-watch (:*node node1) :event-detect
-            (fn [_ _ _ new-val]
-              (when-not (empty? (:neighbours new-val))
-                (deliver *expecting-event 1))))
-
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-
-          ;; wait for ack
-          (no-timeout-check *expecting-event)
-
-          (testing "Neighbour from Probe Ack should be added to neighbours map cause cluster size limit is not reached"
-            (m/assert 2 (sut/nodes-in-cluster node1))
-            (m/assert (:id node-data2) (:id (sut/get-neighbour node1 (sut/get-id node2)))))
-
-          (testing "tx on node 1 is incremented correctly"
-            (m/assert (+ 3 before-tx1) (sut/get-tx node1))) ;; 1- start node, 2 - send probe, 3 - receive ack-probe
-          (testing "tx on node 2 is incremented correctly"  ;; 1- start node, 2 -receive probe, 3 - send ack-probe
-            (m/assert (+ 3 before-tx2) (sut/get-tx node2)))
-
-          (remove-watch (:*node node1) :event-detect)
-
-          (catch Exception e
-            (println (ex-message e)))
-          (finally
-            (sut/stop node1)
-            (sut/stop node2)))))
-
-    (testing "Do not add neighbour to neighbours map if our status is :alive or :suspect"
-      (let [node1            (sut/new-node-object node-data1 (assoc cluster :cluster-size 3))
-            node2            (sut/new-node-object node-data2 (assoc cluster :cluster-size 3))
-            *expecting-event (promise)
-            event-catcher-fn (fn [v]
-                               (when-let [cmd (:org.rssys.swim/cmd v)]
-                                 (when (= cmd :probe-ack-event)
-                                   (deliver *expecting-event cmd))))]
-        (try
-          (add-tap event-catcher-fn)
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/set-cluster-size node1 3)                    ;; increase cluster size
-
-          ;; check we have only this node in cluster
-          (m/assert 1 (sut/nodes-in-cluster node1))
-          ;; change status to any :alive or :suspect to verify that neighbour will be not added
           (sut/set-status node1 :alive)
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
-          (sut/set-status node1 :suspect)
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
 
-          (no-timeout-check *expecting-event)
+          (testing "should receive ProbeAck event on node1"
+            (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
 
-          (m/assert 1 (sut/nodes-in-cluster node1))
+              (testing "should insert ProbeAck response into probe event map under probe key"
+                (no-timeout-check *e1)
+                (m/assert {:id           node2-id
+                           :neighbour-id node1-id
+                           :probe-key    probe-key}
+                  (sut/get-probe-event node1 probe-key)))
+
+              (testing "neighbours map should be empty"
+                (m/assert empty? (sut/get-neighbours node1)))))
+
           (catch Exception e
             (println (ex-message e)))
           (finally
-            (remove-tap event-catcher-fn)
+            (remove-tap e1-tap-fn)
             (sut/stop node1)
             (sut/stop node2)))))))
+
 
 
 (deftest ^:logic anti-entropy-test
