@@ -1812,206 +1812,162 @@
 
 
 
-(deftest ^:logic anti-entropy-test
+(deftest anti-entropy-event-test
+  (testing "anti-entropy event processing"
+    (testing "positive case"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            node3-id (:id node3-nb-data)
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event)]
 
-  (testing "Accept normal anti-entropy event from node1 on node2"
-    (let [node1 (sut/new-node-object node1-data cluster)
-          node2 (sut/new-node-object node2-data cluster)]
-      (try
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+          (testing "node2 should have one neighbour before anti-entropy event "
+            (m/assert 1 (count (sut/get-neighbours node2)))
+            (m/assert {node1-id {}} (sut/get-neighbours node2)))
 
-        (let [ae-event         (sut/new-anti-entropy-event node1)
-              *expecting-event (promise)
-              event-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :anti-entropy-event)
-                                     (deliver *expecting-event cmd))))
-              node1-id         (:id ae-event)
-              prev-known-tx    (:tx (sut/get-neighbour node2 node1-id))]
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
 
-          (add-tap event-catcher-fn)
+          (testing "node2 should receive AntiEntropy event"
+            (no-timeout-check *e1)
+            (m/assert {:node-id node2-id} @*e1))
 
-          (m/assert 1 (count (sut/get-neighbours node2)))
+          (testing "node2 should have two neighbours: node1 and node3 after anti-entropy event"
+            (m/assert 2 (count (sut/get-neighbours node2)))
+            (m/assert {node1-id {} node3-id {}} (sut/get-neighbours node2)))
 
-          ;; sending normal anti-entropy event to node 2
-          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+          (catch Exception e
+            (println (ex-message e)))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
 
-          (no-timeout-check *expecting-event)
+    (testing "should do nothing if anti-entropy event from unknown node"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-unknown-neighbour-error)]
 
-          (m/assert 2 (count (sut/get-neighbours node2)))
-          (m/assert (dissoc node3-nb-data :updated-at) (sut/get-neighbour node2 (:id node3-nb-data)))
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-          (testing "on node2 the tx field for node1 should be updated in neighbours map"
-            (m/assert
-              (:tx (sut/get-neighbour node2 node1-id))
-              (inc prev-known-tx)))
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-          (remove-tap event-catcher-fn))
+          (testing "node2 should have zero neighbours before anti-entropy event "
+            (m/assert 0 (count (sut/get-neighbours node2))))
 
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (no-timeout-check *e1)
 
-  (testing "Do nothing if event from unknown node"
-    (let [node1 (sut/new-node-object node1-data cluster)
-          node2 (sut/new-node-object node2-data cluster)]
-      (try
+          (testing "node2 should have zero neighbours after anti-entropy event "
+            (m/assert 0 (count (sut/get-neighbours node2))))
 
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (catch Exception e
+            (println (ex-message e)))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+    (testing "should do nothing if anti-entropy event has bad restart counter"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-bad-restart-counter-error)]
 
-        (let [ae-event         (sut/new-anti-entropy-event node1)
-              *expecting-event (promise)
-              error-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :anti-entropy-event-unknown-neighbour-error)
-                                     (deliver *expecting-event cmd))))]
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-          (add-tap error-catcher-fn)
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node
+                                        (assoc node1-nb-data :restart-counter 999)))
 
-          (m/assert 0 (count (sut/get-neighbours node2)))
+          (testing "node2 should have one neighbour before anti-entropy event "
+            (m/assert 1 (count (sut/get-neighbours node2))))
 
-          ;; sending normal anti-entropy event to node 2
-          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (no-timeout-check *e1)
 
-          (no-timeout-check *expecting-event)
+          (testing "node2 should have one neighbour after anti-entropy event "
+            (m/assert 1 (count (sut/get-neighbours node2))))
 
-          (m/assert :anti-entropy-event-unknown-neighbour-error @*expecting-event)
-          (m/assert 0 (count (sut/get-neighbours node2)))
+          (catch Exception e
+            (println (ex-message e)))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
 
-          (remove-tap error-catcher-fn))
+    (testing "should do nothing if anti-entropy event has bad tx"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-bad-tx-error)]
 
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)                                  ;; FIXME: sometimes if fails to stop the node. NPE
-          (sut/stop node2)))))
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-  (testing "Do nothing if event contains bad restart counter"
-    (let [node1 (sut/new-node-object node1-data cluster)
-          node2 (sut/new-node-object node2-data cluster)]
-      (try
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node
+                                        (assoc node1-nb-data :tx 999)))
 
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (testing "node2 should have one neighbour before anti-entropy event "
+            (m/assert 1 (count (sut/get-neighbours node2))))
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node
-                                      (assoc node1-nb-data :restart-counter 999)))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (no-timeout-check *e1)
 
-        (let [ae-event         (sut/new-anti-entropy-event node1)
-              *expecting-event (promise)
-              error-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :anti-entropy-event-bad-restart-counter-error)
-                                     (deliver *expecting-event cmd))))]
+          (testing "node2 should have one neighbour after anti-entropy event "
+            (m/assert 1 (count (sut/get-neighbours node2))))
 
-          (add-tap error-catcher-fn)
+          (catch Exception e
+            (println (ex-message e)))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
 
-          (m/assert 1 (count (sut/get-neighbours node2)))
+    (testing "should do nothing if anti-entropy event from not alive node"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-not-alive-neighbour-error)]
 
-          ;; sending anti-entropy event to node 2 with outdated restart counter
-          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-          (no-timeout-check *expecting-event)
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node
+                                        (assoc node1-nb-data :status :stop)))
 
-          (m/assert :anti-entropy-event-bad-restart-counter-error @*expecting-event)
-          (m/assert 1 (count (sut/get-neighbours node2)))
+          (testing "node2 should have one neighbour before anti-entropy event "
+            (m/assert 1 (count (sut/get-neighbours node2))))
 
-          (remove-tap error-catcher-fn))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (no-timeout-check *e1)
 
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
+          (testing "node2 should have one neighbour after anti-entropy event "
+            (m/assert 1 (count (sut/get-neighbours node2))))
 
-  (testing "Do nothing if event contains bad tx"
-    (let [node1 (sut/new-node-object node1-data cluster)
-          node2 (sut/new-node-object node2-data cluster)]
-      (try
+          (catch Exception e
+            (println (ex-message e)))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))))
 
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node
-                                      (assoc node1-nb-data :tx 999)))
-
-        (let [ae-event         (sut/new-anti-entropy-event node1)
-              *expecting-event (promise)
-              error-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :anti-entropy-event-bad-tx-error)
-                                     (deliver *expecting-event cmd))))]
-
-          (add-tap error-catcher-fn)
-
-          (m/assert 1 (count (sut/get-neighbours node2)))
-
-          ;; sending anti-entropy event to node 2 with outdated tx
-          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
-
-          (no-timeout-check *expecting-event)
-
-          (m/assert :anti-entropy-event-bad-tx-error @*expecting-event)
-          (m/assert 1 (count (sut/get-neighbours node2)))
-
-          (remove-tap error-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-  (testing "Do not process events from not alive nodes"
-    (let [node1 (sut/new-node-object node1-data cluster)
-          node2 (sut/new-node-object node2-data cluster)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node
-                                      (assoc node1-nb-data :status :stop)))
-
-        (let [ae-event         (sut/new-anti-entropy-event node1)
-              *expecting-event (promise)
-              error-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :anti-entropy-event-not-alive-neighbour-error)
-                                     (deliver *expecting-event cmd))))]
-
-          (add-tap error-catcher-fn)
-
-          (m/assert 1 (count (sut/get-neighbours node2)))
-
-          ;; sending anti-entropy event to node 2 from not alive neighbour
-          (sut/send-event node1 ae-event (sut/get-host node2) (sut/get-port node2))
-
-          (no-timeout-check *expecting-event)
-
-          (m/assert :anti-entropy-event-not-alive-neighbour-error @*expecting-event)
-          (m/assert 1 (count (sut/get-neighbours node2)))
-
-          (remove-tap error-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2))))))
 
 
 (deftest ^:logic indirect-ack-event-test
