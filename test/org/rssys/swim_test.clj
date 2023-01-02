@@ -68,31 +68,7 @@
    :tags         #{"dc1" "rssys"}})
 
 
-(def neighbour-data1
-  {:id              #uuid"00000000-0000-0000-0000-000000000002"
-   :host            "127.0.0.1"
-   :port            5377
-   :status          :alive
-   :access          :direct
-   :restart-counter 3
-   :tx              0
-   :payload         {:tcp-port 4567}
-   :updated-at      (System/currentTimeMillis)})
-
-
-(def neighbour-data2
-  {:id              #uuid"00000000-0000-0000-0000-000000000003"
-   :host            "127.0.0.1"
-   :port            5378
-   :status          :alive
-   :access          :direct
-   :restart-counter 5
-   :tx              0
-   :payload         {:tcp-port 4567}
-   :updated-at      (System/currentTimeMillis)})
-
-
-(def neighbour-data3
+(def node1-nb-data
   {:id              #uuid"00000000-0000-0000-0000-000000000001"
    :host            "127.0.0.1"
    :port            5376
@@ -104,9 +80,34 @@
    :updated-at      (System/currentTimeMillis)})
 
 
-(def node-data1 {:id #uuid "00000000-0000-0000-0000-000000000001" :host "127.0.0.1" :port 5376 :restart-counter 7})
-(def node-data2 {:id #uuid "00000000-0000-0000-0000-000000000002" :host "127.0.0.1" :port 5377 :restart-counter 5})
-(def node-data3 {:id #uuid "00000000-0000-0000-0000-000000000003" :host "127.0.0.1" :port 5378 :restart-counter 6})
+(def node2-nb-data
+  {:id              #uuid"00000000-0000-0000-0000-000000000002"
+   :host            "127.0.0.1"
+   :port            5377
+   :status          :alive
+   :access          :direct
+   :restart-counter 3
+   :tx              0
+   :payload         {:tcp-port 4567}
+   :updated-at      (System/currentTimeMillis)})
+
+
+(def node3-nb-data
+  {:id              #uuid"00000000-0000-0000-0000-000000000003"
+   :host            "127.0.0.1"
+   :port            5378
+   :status          :alive
+   :access          :direct
+   :restart-counter 5
+   :tx              0
+   :payload         {:tcp-port 4567}
+   :updated-at      (System/currentTimeMillis)})
+
+
+
+(def node1-data {:id #uuid "00000000-0000-0000-0000-000000000001" :host "127.0.0.1" :port 5376 :restart-counter 7})
+(def node2-data {:id #uuid "00000000-0000-0000-0000-000000000002" :host "127.0.0.1" :port 5377 :restart-counter 5})
+(def node3-data {:id #uuid "00000000-0000-0000-0000-000000000003" :host "127.0.0.1" :port 5378 :restart-counter 6})
 
 
 (def cluster (sut/new-cluster cluster-data))
@@ -160,8 +161,8 @@
 
 (deftest nodes-in-cluster-test
   (testing "Calculate nodes in the cluster"
-    (let [this (sut/new-node-object node-data1 cluster)
-          nb   (sut/new-neighbour-node neighbour-data1)]
+    (let [this (sut/new-node-object node1-data cluster)
+          nb   (sut/new-neighbour-node node2-nb-data)]
 
       (testing "should return one node"
         (m/assert 1 (sut/nodes-in-cluster this)))
@@ -193,7 +194,7 @@
 
 (deftest new-neighbour-node-test
   (testing "Create new neighbour node"
-    (let [result1 (sut/new-neighbour-node neighbour-data1)
+    (let [result1 (sut/new-neighbour-node node2-nb-data)
           result2 (sut/new-neighbour-node #uuid "00000000-0000-0000-0000-000000000000" "127.0.0.1" 5379)]
 
       (testing "should produce NeighbourNode instance"
@@ -205,7 +206,7 @@
         (m/assert ::spec/neighbour-node result2))
 
       (testing "should produce expected values"
-        (m/assert neighbour-data1 result1)
+        (m/assert node2-nb-data result1)
         (m/assert ^:matcho/strict
           {:id              #uuid "00000000-0000-0000-0000-000000000000"
            :host            "127.0.0.1"
@@ -268,7 +269,7 @@
 
 (deftest getters-test
   (testing "Getters"
-    (let [this (sut/new-node-object node-data1 cluster)]
+    (let [this (sut/new-node-object node1-data cluster)]
 
       (m/assert ^:matcho/strict
         {:id                   #uuid "00000000-0000-0000-0000-000000000001"
@@ -298,10 +299,10 @@
       (m/assert 3 (sut/get-cluster-size this))
       (m/assert empty? (sut/get-payload this))
 
-      (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+      (sut/upsert-neighbour this (sut/new-neighbour-node node2-nb-data))
 
       (m/assert {#uuid "00000000-0000-0000-0000-000000000002"
-                 (dissoc (sut/new-neighbour-node neighbour-data1) :updated-at)}
+                 (dissoc (sut/new-neighbour-node node2-nb-data) :updated-at)}
         (sut/get-neighbours this))
 
       (m/assert true (sut/neighbour-exist? this #uuid "00000000-0000-0000-0000-000000000002"))
@@ -398,7 +399,7 @@
 (deftest set-cluster-test
   (testing "Set new cluster"
     (let [new-cluster (sut/new-cluster (assoc cluster-data :id (random-uuid) :name "cluster2"))
-          this        (sut/new-node-object node-data1 cluster)]
+          this        (sut/new-node-object node1-data cluster)]
 
       (testing "should set new cluster value for node"
         (sut/set-cluster this new-cluster)
@@ -416,7 +417,7 @@
 
 (deftest set-cluster-size-test
   (testing "Set cluster size"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           new-cluster-size 5]
 
       (testing "should set cluster size to a new value"
@@ -434,7 +435,7 @@
 (deftest cluster-size-exceed?-test
 
   (testing "cluster size check"
-    (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 1))]
+    (let [this (sut/new-node-object node1-data (assoc cluster :cluster-size 1))]
 
       (testing "should detect cluster size exceed"
         (m/assert true? (sut/cluster-size-exceed? this)))
@@ -447,7 +448,7 @@
 
 (deftest set-status-test
   (testing "set status"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           new-status :left]
 
       (testing "should set node status to a new value"
@@ -462,7 +463,7 @@
 
 (deftest set-payload-test
   (testing "Set payload"
-    (let [this        (sut/new-node-object node-data1 cluster)
+    (let [this        (sut/new-node-object node1-data cluster)
           new-payload {:tcp-port 1234 :role "data node"}]
 
       (testing "should set new payload value"
@@ -478,7 +479,7 @@
 
 (deftest set-restart-counter-test
   (testing "set restart counter"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           new-restart-counter 42]
 
       (testing "should set a new value"
@@ -493,7 +494,7 @@
 
 (deftest inc-tx-test
   (testing "increment tx"
-    (let [this        (sut/new-node-object node-data1 cluster)
+    (let [this        (sut/new-node-object node1-data cluster)
           current-tx (sut/get-tx this)]
 
       (testing "should set a new tx value (+1)"
@@ -503,24 +504,24 @@
 
 (deftest upsert-neighbour-test
   (testing "upsert neighbour"
-    (let [this (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))]
+    (let [this (sut/new-node-object node1-data (assoc cluster :cluster-size 99))]
 
       (testing "should insert two neighbours"
         (m/assert empty? (sut/get-neighbours this))
-        (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour this (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour this (sut/new-neighbour-node node3-nb-data))
         (m/assert 2 (count (sut/get-neighbours this)))
-        (m/assert {(:id neighbour-data1) (dissoc neighbour-data1 :updated-at)
-                   (:id neighbour-data2) (dissoc neighbour-data2 :updated-at)}
+        (m/assert {(:id node2-nb-data) (dissoc node2-nb-data :updated-at)
+                   (:id node3-nb-data) (dissoc node3-nb-data :updated-at)}
           (sut/get-neighbours this)))
 
       (testing "should reject neighbour with the same id as this node id"
         (m/assert 2 (count (sut/get-neighbours this)))
-        (m/assert (sut/get-id this) (:id neighbour-data3))
-        (sut/upsert-neighbour this neighbour-data3)
+        (m/assert (sut/get-id this) (:id node1-nb-data))
+        (sut/upsert-neighbour this node1-nb-data)
         (m/assert 2 (count (sut/get-neighbours this)))
-        (m/assert {(:id neighbour-data1) (dissoc neighbour-data1 :updated-at)
-                   (:id neighbour-data2) (dissoc neighbour-data2 :updated-at)}
+        (m/assert {(:id node2-nb-data) (dissoc node2-nb-data :updated-at)
+                   (:id node3-nb-data) (dissoc node3-nb-data :updated-at)}
           (sut/get-neighbours this)))
 
       (testing "should catch invalid neighbour data"
@@ -528,7 +529,7 @@
               (sut/upsert-neighbour this {:a :bad-value}))))
 
       (testing "should update neighbour's timestamp after every update"
-        (let [nb-id (:id neighbour-data1)
+        (let [nb-id (:id node2-nb-data)
               nb        (sut/get-neighbour this nb-id)
               old-timestamp (:updated-at nb)]
           (sut/upsert-neighbour this nb)
@@ -537,51 +538,51 @@
 
         (testing "should have cluster size control"
           (let [new-cluster-size 2
-                this (sut/new-node-object node-data1 (assoc cluster :cluster-size new-cluster-size))]
+                this (sut/new-node-object node1-data (assoc cluster :cluster-size new-cluster-size))]
 
             (testing "should success before cluster size exceed"
               (m/assert 0 (count (sut/get-neighbours this)))
-              (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+              (sut/upsert-neighbour this (sut/new-neighbour-node node2-nb-data))
               (m/assert 1 (count (sut/get-neighbours this))))
 
             (testing "should fail because cluster size exceed"
               (is (thrown-with-msg? Exception #"Cluster size exceeded"
-                    (sut/upsert-neighbour this neighbour-data3))))
+                    (sut/upsert-neighbour this node1-nb-data))))
 
             (testing "should success if neighbour exist"
               (let [new-restart-counter 4]
-                (sut/upsert-neighbour this (assoc neighbour-data1 :restart-counter new-restart-counter))
+                (sut/upsert-neighbour this (assoc node2-nb-data :restart-counter new-restart-counter))
                 (m/assert
                   {:restart-counter new-restart-counter}
-                  (sut/get-neighbour this (:id neighbour-data1)))))))))))
+                  (sut/get-neighbour this (:id node2-nb-data)))))))))))
 
 
 (deftest delete-neighbour-test
   (testing "delete neighbour"
-    (let [this (sut/new-node-object node-data1 cluster)
-          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
+    (let [this (sut/new-node-object node1-data cluster)
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node node2-nb-data))
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node node3-nb-data))
           nb-count (count (sut/get-neighbours this))]
 
       (testing "should delete first neighbour"
-        (sut/delete-neighbour this (:id neighbour-data1))
+        (sut/delete-neighbour this (:id node2-nb-data))
         (m/assert (dec nb-count) (count (sut/get-neighbours this))))
 
       (testing "neighbours map should contain second neighbour"
         (m/assert ^:matcho/strict
-          {(:id neighbour-data2) (dissoc neighbour-data2 :updated-at)}
+          {(:id node3-nb-data) (dissoc node3-nb-data :updated-at)}
           (sut/get-neighbours this)))
 
       (testing "should delete second neighbour"
-        (sut/delete-neighbour this (:id neighbour-data2))
+        (sut/delete-neighbour this (:id node3-nb-data))
         (m/assert 0 (count (sut/get-neighbours this)))))))
 
 
 (deftest delete-neighbours-test
   (testing "delete neighbours"
-    (let [this (sut/new-node-object node-data1 cluster)
-          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
-          _    (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))]
+    (let [this (sut/new-node-object node1-data cluster)
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node node2-nb-data))
+          _    (sut/upsert-neighbour this (sut/new-neighbour-node node3-nb-data))]
 
       (testing "should delete all neighbours from neighbours map"
         (m/assert 2 (count (sut/get-neighbours this)))
@@ -592,7 +593,7 @@
 (deftest set-outgoing-events-test
   (testing "set outgoing events"
     (let [new-outgoing-events [[(:left event/code) (random-uuid)]]
-          this                (sut/new-node-object node-data1 cluster)]
+          this                (sut/new-node-object node1-data cluster)]
 
       (testing "should set new value"
         (m/dessert new-outgoing-events (sut/get-outgoing-events this))
@@ -603,7 +604,7 @@
 
 (deftest put-event-test
   (testing "put event"
-    (let [this       (sut/new-node-object node-data1 cluster)
+    (let [this       (sut/new-node-object node1-data cluster)
           ping-event (event/empty-ping)
           ack-event  (event/empty-ack)
           expected-events [ping-event ack-event]]
@@ -617,7 +618,7 @@
 
 (deftest take-events-test
   (testing "take events"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           ping-event (event/empty-ping)
           ack-event  (event/empty-ack)
           expected-events [ping-event ack-event]]
@@ -640,7 +641,7 @@
 
 (deftest upsert-ping-test
   (testing "upsert ping"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           ping-event (event/empty-ping)
           ping-id (.-neighbour_id ping-event)]
 
@@ -663,7 +664,7 @@
 
 (deftest delete-ping-test
   (testing "delete ping"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           ping-event (event/empty-ping)
           ping-id (.-neighbour_id ping-event)]
 
@@ -678,7 +679,7 @@
 (deftest upsert-indirect-ping-test
 
   (testing "upsert indirect ping"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           indirect-ping-event (event/empty-indirect-ping)
           ping-id (.-neighbour_id indirect-ping-event)]
 
@@ -701,7 +702,7 @@
 
 (deftest delete-indirect-ping-test
   (testing "delete indirect ping"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           indirect-ping-event (event/empty-indirect-ping)
           ping-id (.-neighbour_id indirect-ping-event)]
 
@@ -715,7 +716,7 @@
 
 (deftest insert-probe-test
   (testing "insert probe"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           probe-event (event/empty-probe)
           probe-key (.-probe_key probe-event)]
 
@@ -732,7 +733,7 @@
 
 (deftest delete-probe-test
   (testing "delete probe"
-    (let [this (sut/new-node-object node-data1 cluster)
+    (let [this (sut/new-node-object node1-data cluster)
           probe-event (event/empty-probe)
           probe-key (.-probe_key probe-event)]
 
@@ -746,7 +747,7 @@
 
 (deftest upsert-probe-ack-test
   (testing "upsert ack probe"
-    (let [this            (sut/new-node-object node-data1 cluster)
+    (let [this            (sut/new-node-object node1-data cluster)
           probe-event     (event/empty-probe)
           probe-ack-event (sut/new-probe-ack-event this probe-event)
           probe-key       (.-probe_key probe-event)]
@@ -772,7 +773,7 @@
 
 (deftest new-probe-event-test
   (testing "probe event builder"
-    (let [this        (sut/new-node-object node-data1 cluster)
+    (let [this        (sut/new-node-object node1-data cluster)
           current-tx  (sut/get-tx this)
           probe-event (sut/new-probe-event this "127.0.0.1" 5376)]
 
@@ -793,7 +794,7 @@
 
 (deftest new-probe-ack-event-test
   (testing "probe ack event builder"
-    (let [this            (sut/new-node-object node-data1 cluster)
+    (let [this            (sut/new-node-object node1-data cluster)
           probe-event     (sut/new-probe-event this "127.0.0.1" 5376)
           current-tx      (sut/get-tx this)
           probe-ack-event (sut/new-probe-ack-event this probe-event)]
@@ -817,7 +818,7 @@
 
 (deftest new-ping-event-test
   (testing "ping event builder"
-    (let [this       (sut/new-node-object node-data1 cluster)
+    (let [this       (sut/new-node-object node1-data cluster)
           current-tx (sut/get-tx this)
           ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)]
 
@@ -837,7 +838,7 @@
 
 (deftest new-ack-event-test
   (testing "ack event builder"
-    (let [this       (sut/new-node-object node-data1 cluster)
+    (let [this       (sut/new-node-object node1-data cluster)
           ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
           current-tx (sut/get-tx this)
           ack-event  (sut/new-ack-event this ping-event)]
@@ -860,9 +861,9 @@
 (deftest new-indirect-ping-event-test
 
   (testing "indirect ping builder"
-    (let [this                (sut/new-node-object node-data1 cluster)
-          intermediate        (sut/new-neighbour-node neighbour-data1)
-          neighbour           (sut/new-neighbour-node neighbour-data2)
+    (let [this                (sut/new-node-object node1-data cluster)
+          intermediate        (sut/new-neighbour-node node2-nb-data)
+          neighbour           (sut/new-neighbour-node node3-nb-data)
           _                   (sut/upsert-neighbour this intermediate)
           _                   (sut/upsert-neighbour this neighbour)
           current-tx          (sut/get-tx this)
@@ -899,13 +900,13 @@
 (deftest new-indirect-ack-event-test
 
   (testing "indirect ack builder"
-    (let [this                (sut/new-node-object node-data1 cluster)
-          intermediate        (sut/new-neighbour-node neighbour-data1)
-          neighbour           (sut/new-neighbour-node neighbour-data2)
+    (let [this                (sut/new-node-object node1-data cluster)
+          intermediate        (sut/new-neighbour-node node2-nb-data)
+          neighbour           (sut/new-neighbour-node node3-nb-data)
           _                   (sut/upsert-neighbour this intermediate)
           _                   (sut/upsert-neighbour this neighbour)
           indirect-ping-event (sut/new-indirect-ping-event this (:id intermediate) (:id neighbour) 1)
-          ack-node            (sut/new-node-object node-data3 cluster)
+          ack-node            (sut/new-node-object node3-data cluster)
           current-tx          (sut/get-tx ack-node)
           indirect-ack-event  (sut/new-indirect-ack-event ack-node indirect-ping-event)]
 
@@ -934,9 +935,9 @@
 (deftest new-alive-event-test
 
   (testing "alive event builder"
-    (let [this           (sut/new-node-object node-data1 cluster)
-          neighbour-this (sut/new-node-object node-data2 cluster)
-          _              (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data1))
+    (let [this           (sut/new-node-object node1-data cluster)
+          neighbour-this (sut/new-node-object node2-data cluster)
+          _              (sut/upsert-neighbour this (sut/new-neighbour-node node2-nb-data))
           ping-event     (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
           ack-event      (sut/new-ack-event neighbour-this ping-event)
           current-tx     (sut/get-tx this)
@@ -959,7 +960,7 @@
 
 (deftest new-cluster-size-event-test
   (testing "new cluster size event builder"
-    (let [this             (sut/new-node-object node-data1 cluster)
+    (let [this             (sut/new-node-object node1-data cluster)
           new-cluster-size 5
           current-tx       (sut/get-tx this)
           ncs-event        (sut/new-cluster-size-event this new-cluster-size)]
@@ -985,9 +986,9 @@
 (deftest new-dead-event-test
 
   (testing "dead event builder"
-    (let [this       (sut/new-node-object node-data1 cluster)
+    (let [this       (sut/new-node-object node1-data cluster)
           ping-event (sut/new-ping-event this #uuid "00000000-0000-0000-0000-000000000002" 1)
-          neighbour  (sut/new-neighbour-node neighbour-data1)
+          neighbour  (sut/new-neighbour-node node2-nb-data)
           _          (sut/upsert-neighbour this neighbour)
           current-tx (sut/get-tx this)
           dead-event (sut/new-dead-event this (.-neighbour_id ping-event))]
@@ -1010,7 +1011,7 @@
 
 (deftest neighbour->vec-test
   (testing "convert NeighbourNode to vector of values"
-    (let [nb (sut/new-neighbour-node neighbour-data1)]
+    (let [nb (sut/new-neighbour-node node2-nb-data)]
       (testing "should return values in correct order"
         (m/assert [#uuid "00000000-0000-0000-0000-000000000002" ;; id
                    "127.0.0.1"                                  ;; host
@@ -1061,7 +1062,7 @@
 
 (deftest build-anti-entropy-data-test
   (testing "build vector with anti-entropy data"
-    (let [node1                   (sut/new-node-object node-data1 cluster)
+    (let [node1                   (sut/new-node-object node1-data cluster)
           neighbour1              (sut/new-neighbour-node {:id              #uuid "00000000-0000-0000-0000-000000000002"
                                                            :host            "127.0.0.1"
                                                            :port            5432
@@ -1082,7 +1083,7 @@
                                                            :updated-at      (System/currentTimeMillis)})
 
           requested-size          1
-          without-neighbours-node (sut/new-node-object node-data2 cluster)]
+          without-neighbours-node (sut/new-node-object node2-data cluster)]
 
       (sut/upsert-neighbour node1 neighbour1)
       (sut/upsert-neighbour node1 neighbour2)
@@ -1103,7 +1104,7 @@
 
         (testing "should return vector with requested value for node3"
           (m/assert [[#uuid "00000000-0000-0000-0000-000000000003" "127.0.0.1" 5433 3 0 3 3 {}]]
-            (sut/build-anti-entropy-data node1 {:neighbour-id (:id node-data3)})))
+            (sut/build-anti-entropy-data node1 {:neighbour-id (:id node3-data)})))
 
         (testing "should return empty vector if requested unknown node"
           (m/assert []
@@ -1113,14 +1114,14 @@
 (deftest new-anti-entropy-event-test
 
   (testing "anti entropy event builder"
-    (let [this                (sut/new-node-object node-data1 cluster)
-          neighbour           (sut/new-neighbour-node neighbour-data1)
+    (let [this                (sut/new-node-object node1-data cluster)
+          neighbour           (sut/new-neighbour-node node2-nb-data)
           _                   (sut/upsert-neighbour this neighbour)
-          _                   (sut/upsert-neighbour this (sut/new-neighbour-node neighbour-data2))
+          _                   (sut/upsert-neighbour this (sut/new-neighbour-node node3-nb-data))
           current-tx          (sut/get-tx this)
           anti-entropy-event  (sut/new-anti-entropy-event this)
           current-tx2          (sut/get-tx this)
-          anti-entropy-event2 (sut/new-anti-entropy-event this {:neighbour-id (:id neighbour-data1)})]
+          anti-entropy-event2 (sut/new-anti-entropy-event this {:neighbour-id (:id node2-nb-data)})]
 
       (testing "should generate event with correct type"
         (m/assert AntiEntropy (type anti-entropy-event))
@@ -1137,7 +1138,7 @@
 
       (testing "should generate event with particular neighbour info if :neighbour-id parameter present"
         (m/assert
-          {:anti-entropy-data [[(:id neighbour-data1) "127.0.0.1" 5377 3 0 3 0 {:tcp-port 4567}]]}
+          {:anti-entropy-data [[(:id node2-nb-data) "127.0.0.1" 5377 3 0 3 0 {:tcp-port 4567}]]}
           anti-entropy-event2))
 
 
@@ -1150,7 +1151,7 @@
 (deftest new-join-event-test
 
   (testing "join event builder"
-    (let [this       (sut/new-node-object node-data1 cluster)
+    (let [this       (sut/new-node-object node1-data cluster)
           current-tx (sut/get-tx this)
           join-event (sut/new-join-event this)]
 
@@ -1168,8 +1169,8 @@
 (deftest new-suspect-event-test
 
   (testing "suspect event builder"
-    (let [this          (sut/new-node-object node-data1 cluster)
-          neighbour     (sut/new-neighbour-node neighbour-data1)
+    (let [this          (sut/new-node-object node1-data cluster)
+          neighbour     (sut/new-neighbour-node node2-nb-data)
           _             (sut/upsert-neighbour this neighbour)
           current-tx    (sut/get-tx this)
           suspect-event (sut/new-suspect-event this (:id neighbour))]
@@ -1196,7 +1197,7 @@
 (deftest new-left-event-test
 
   (testing "left event builder"
-    (let [this       (sut/new-node-object node-data1 cluster)
+    (let [this       (sut/new-node-object node1-data cluster)
           current-tx (sut/get-tx this)
           left-event (sut/new-left-event this)]
 
@@ -1213,7 +1214,7 @@
 
 (deftest new-payload-event-test
   (testing "payload event builder"
-    (let [this          (sut/new-node-object node-data1 cluster)
+    (let [this          (sut/new-node-object node1-data cluster)
           payload       {:a 1 :b [3]}
           _             (sut/set-payload this payload)
           current-tx    (sut/get-tx this)
@@ -1237,16 +1238,16 @@
 
 (deftest suitable-restart-counter?-test
   (testing "check restart counter in event"
-    (let [node1      (sut/new-node-object node-data1 cluster)
-          node2      (sut/new-node-object node-data2 cluster)
+    (let [node1      (sut/new-node-object node1-data cluster)
+          node2      (sut/new-node-object node2-data cluster)
           ping-event (sut/new-ping-event node1 (sut/get-id node2) 42)]
 
       (testing "should accept normal restart counter"
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
         (m/assert true? (sut/suitable-restart-counter? node2 ping-event))
 
         (testing "should reject outdated restart counter"
-          (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :restart-counter inc)))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node (update node1-nb-data :restart-counter inc)))
           (m/assert false (sut/suitable-restart-counter? node2 ping-event)))
 
         (testing "should not crash if neighbour or event is nil or absent"
@@ -1256,17 +1257,17 @@
 
 (deftest suitable-tx?-test
   (testing "check tx in event"
-    (let [node1      (sut/new-node-object node-data1 cluster)
-          node2      (sut/new-node-object node-data2 cluster)
+    (let [node1      (sut/new-node-object node1-data cluster)
+          node2      (sut/new-node-object node2-data cluster)
           _          (sut/inc-tx node1)
           ping-event (sut/new-ping-event node1 (sut/get-id node2) 42)]
 
       (testing "should accept normal tx"
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
         (m/assert true? (sut/suitable-tx? node2 ping-event)))
 
       (testing "should reject outdated tx"
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :tx inc)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update node1-nb-data :tx inc)))
         (m/assert false (sut/suitable-tx? node2 ping-event)))
 
       (testing "should not crash if neighbour or event is nil or absent"
@@ -1276,21 +1277,21 @@
 
 (deftest suitable-incarnation?-test
   (testing "check incarnation in event"
-    (let [node1      (sut/new-node-object node-data1 cluster)
-          node2      (sut/new-node-object node-data2 cluster)
+    (let [node1      (sut/new-node-object node1-data cluster)
+          node2      (sut/new-node-object node2-data cluster)
           _          (sut/inc-tx node1)
           ping-event (sut/new-ping-event node1 (sut/get-id node2) 42)]
 
       (testing "should accept normal incarnation"
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
         (m/assert true (sut/suitable-incarnation? node2 ping-event)))
 
       (testing "should reject cause tx is outdated"
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :tx inc)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update node1-nb-data :tx inc)))
         (m/assert false (sut/suitable-incarnation? node2 ping-event)))
 
       (testing "should reject cause restart counter is outdated"
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update neighbour-data3 :restart-counter inc)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (update node1-nb-data :restart-counter inc)))
         (m/assert false (sut/suitable-incarnation? node2 ping-event)))
 
       (testing "should not crash if neighbour or event is nil or absent"
@@ -1301,8 +1302,8 @@
 
 (deftest get-neighbours-with-status-test
   (testing "get neighbours with status"
-    (let [this                 (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
-          new-node-with-status (fn [status] (sut/new-neighbour-node (assoc neighbour-data2 :id (random-uuid) :status status)))]
+    (let [this                 (sut/new-node-object node1-data (assoc cluster :cluster-size 99))
+          new-node-with-status (fn [status] (sut/new-neighbour-node (assoc node3-nb-data :id (random-uuid) :status status)))]
 
       (run!
         #(sut/upsert-neighbour this (new-node-with-status %))
@@ -1337,15 +1338,15 @@
 
 (deftest get-oldest-neighbour-test
   (testing "get oldest neighbour"
-    (let [this        (sut/new-node-object node-data1 (assoc cluster :cluster-size 99))
+    (let [this        (sut/new-node-object node1-data (assoc cluster :cluster-size 99))
           oldest-id   #uuid"00000000-0000-0000-0000-000000000555"
           oldest-1-id #uuid"00000000-0000-0000-0000-000000000777"
           oldest-2-id #uuid"00000000-0000-0000-0000-000000000222"
           oldest-3-id #uuid"00000000-0000-0000-0000-000000000111"
-          oldest-nb   (sut/new-neighbour-node (assoc neighbour-data2 :id oldest-id))
-          oldest-1-nb (sut/new-neighbour-node (assoc neighbour-data2 :id oldest-1-id))
-          oldest-2-nb (sut/new-neighbour-node (assoc neighbour-data2 :id oldest-2-id))
-          oldest-3-nb (sut/new-neighbour-node (assoc neighbour-data2 :status :left :id oldest-3-id))]
+          oldest-nb   (sut/new-neighbour-node (assoc node3-nb-data :id oldest-id))
+          oldest-1-nb (sut/new-neighbour-node (assoc node3-nb-data :id oldest-1-id))
+          oldest-2-nb (sut/new-neighbour-node (assoc node3-nb-data :id oldest-2-id))
+          oldest-3-nb (sut/new-neighbour-node (assoc node3-nb-data :status :left :id oldest-3-id))]
 
       (sut/upsert-neighbour this oldest-nb)
       (Thread/sleep 1)
@@ -1370,15 +1371,15 @@
 (deftest alive-neighbour?-test
 
   (testing "should be true for neighbours with alive statuses "
-    (let [nb1 (sut/new-neighbour-node neighbour-data1)
-          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :suspect))]
+    (let [nb1 (sut/new-neighbour-node node2-nb-data)
+          nb2 (sut/new-neighbour-node (assoc node3-nb-data :status :suspect))]
       (m/assert true (sut/alive-neighbour? nb1))
       (m/assert true (sut/alive-neighbour? nb2))))
 
   (testing "should be false for neighbours with not alive statuses"
-    (let [nb1 (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
-          nb2 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead))
-          nb3 (sut/new-neighbour-node (assoc neighbour-data3 :status :stop))]
+    (let [nb1 (sut/new-neighbour-node (assoc node2-nb-data :status :left))
+          nb2 (sut/new-neighbour-node (assoc node3-nb-data :status :dead))
+          nb3 (sut/new-neighbour-node (assoc node1-nb-data :status :stop))]
       (m/assert false (sut/alive-neighbour? nb1))
       (m/assert false (sut/alive-neighbour? nb2))
       (m/assert false (sut/alive-neighbour? nb3)))))
@@ -1387,17 +1388,17 @@
 (deftest alive-node?-test
 
   (testing "should be true for nodes with alive statuses"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)]
       (sut/set-status node1 :alive)
       (sut/set-status node2 :suspect)
       (m/assert true (sut/alive-node? node1))
       (m/assert true (sut/alive-node? node2))))
 
   (testing "should be false for nodes with not alive statuses"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (sut/set-status node1 :dead)
       (sut/set-status node2 :left)
       (sut/set-status node2 :stop)
@@ -1410,8 +1411,8 @@
 (deftest set-nb-tx-test
 
   (testing "set tx for neighbour"
-    (let [this   (sut/new-node-object node-data1 cluster)
-          nb     (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
+    (let [this   (sut/new-node-object node1-data cluster)
+          nb     (sut/new-neighbour-node (assoc node2-nb-data :status :left))
           new-tx 42]
       (sut/upsert-neighbour this nb)
 
@@ -1433,13 +1434,13 @@
 (deftest set-nb-restart-counter-test
 
   (testing "set restart counter for neighbour"
-    (let [this                (sut/new-node-object node-data1 cluster)
-          nb                  (sut/new-neighbour-node (assoc neighbour-data1 :status :left))
+    (let [this                (sut/new-node-object node1-data cluster)
+          nb                  (sut/new-neighbour-node (assoc node2-nb-data :status :left))
           new-restart-counter 42]
       (sut/upsert-neighbour this nb)
 
       (testing "should update restart counter for neighbour"
-        (m/assert (:restart-counter neighbour-data1) (:restart-counter (sut/get-neighbour this (.-id nb))))
+        (m/assert (:restart-counter node2-nb-data) (:restart-counter (sut/get-neighbour this (.-id nb))))
         (sut/set-nb-restart-counter this (.-id nb) new-restart-counter)
         (m/assert new-restart-counter (:restart-counter (sut/get-neighbour this (.-id nb)))))
 
@@ -1456,9 +1457,9 @@
 (deftest set-nb-status-test
 
   (testing "set status for neighbour"
-    (let [this           (sut/new-node-object node-data1 cluster)
+    (let [this           (sut/new-node-object node1-data cluster)
           current-status :left
-          nb             (sut/new-neighbour-node (assoc neighbour-data1 :status current-status))
+          nb             (sut/new-neighbour-node (assoc node2-nb-data :status current-status))
           new-status     :alive]
       (sut/upsert-neighbour this nb)
 
@@ -1472,9 +1473,9 @@
 (deftest set-nb-direct-access-test
 
   (testing "set direct access for neighbour"
-    (let [this            (sut/new-node-object node-data1 cluster)
+    (let [this            (sut/new-node-object node1-data cluster)
           indirect-access :indirect
-          nb              (sut/new-neighbour-node (assoc neighbour-data1 :access indirect-access))
+          nb              (sut/new-neighbour-node (assoc node2-nb-data :access indirect-access))
           direct-access   :direct]
       (sut/upsert-neighbour this nb)
 
@@ -1487,9 +1488,9 @@
 (deftest set-nb-indirect-access-test
 
   (testing "set indirect access for neighbour"
-    (let [this            (sut/new-node-object node-data1 cluster)
+    (let [this            (sut/new-node-object node1-data cluster)
           direct-access   :direct
-          nb              (sut/new-neighbour-node (assoc neighbour-data1 :access direct-access))
+          nb              (sut/new-neighbour-node (assoc node2-nb-data :access direct-access))
           indirect-access :indirect]
       (sut/upsert-neighbour this nb)
 
@@ -1523,8 +1524,8 @@
 
 (deftest send-events-test
   (testing "send events"
-    (let [node1  (sut/new-node-object node-data1 (assoc cluster :cluster-size 999))
-          node2  (sut/new-node-object node-data2 (assoc cluster :cluster-size 999))
+    (let [node1  (sut/new-node-object node1-data (assoc cluster :cluster-size 999))
+          node2  (sut/new-node-object node2-data (assoc cluster :cluster-size 999))
           event1 (sut/new-probe-event node1 (sut/get-host node2) (sut/get-port node2))
           event2 (event/empty-ack)
           event3 (sut/new-anti-entropy-event node1)
@@ -1539,21 +1540,21 @@
                                    (when-let [cmd (:org.rssys.swim/cmd v)]
                                      (when (and
                                              (= :set-payload cmd)
-                                             (= (:id node-data2) (:node-id v)))
+                                             (= (:id node2-data) (:node-id v)))
                                        (deliver *expecting-event v))))]
             (add-tap event-catcher-fn)
-            (m/assert pos-int? (sut/send-events node1 events (:host node-data2) (:port node-data2)))
+            (m/assert pos-int? (sut/send-events node1 events (:host node2-data) (:port node2-data)))
             (no-timeout-check *expecting-event)
             (m/assert [(.prepare event1) (.prepare event2) (.prepare event3)] (sut/get-payload node2))
             (remove-tap event-catcher-fn)))
 
         (testing "should rise an exception if UDP packet size is too big"
           (is (thrown-with-msg? Exception #"UDP packet is too big"
-                (sut/send-events node1 events (:host node-data2) (:port node-data2)
+                (sut/send-events node1 events (:host node2-data) (:port node2-data)
                   {:max-udp-size 1}))))
 
         (testing "should ignore UDP size check and send events anyway"
-          (m/assert pos-int? (sut/send-events node1 events (:host node-data2) (:port node-data2)
+          (m/assert pos-int? (sut/send-events node1 events (:host node2-data) (:port node2-data)
                                {:max-udp-size 1 :ignore-max-udp-size? true})))
 
         (catch Exception e
@@ -1566,15 +1567,15 @@
 (deftest send-event-test
 
   (testing "send one event"
-    (let [this  (sut/new-node-object node-data1 cluster)
-          neighbour (sut/new-neighbour-node neighbour-data1)
+    (let [this  (sut/new-node-object node1-data cluster)
+          neighbour (sut/new-neighbour-node node2-nb-data)
           event (sut/new-cluster-size-event this 5)]
       (try
         (sut/start this empty-node-process-fn #(do [%1 %2]))
         (sut/upsert-neighbour this neighbour)
 
         (testing "using host:port should return number of bytes sent"
-          (m/assert pos-int? (sut/send-event this event (:host neighbour-data1) (:port neighbour-data1))))
+          (m/assert pos-int? (sut/send-event this event (:host node2-nb-data) (:port node2-nb-data))))
 
         (testing "using neighbour id should return number of bytes sent"
           (m/assert pos-int? (sut/send-event this event (:id neighbour))))
@@ -1592,16 +1593,16 @@
 
 (deftest send-event-ae-test
   (testing "send one event + anti-entropy data"
-    (let [this  (sut/new-node-object node-data1 cluster)
-          neighbour (sut/new-neighbour-node neighbour-data1)
+    (let [this  (sut/new-node-object node1-data cluster)
+          neighbour (sut/new-neighbour-node node2-nb-data)
           event (sut/new-cluster-size-event this 5)]
       (try
         (sut/start this empty-node-process-fn #(do [%1 %2]))
         (sut/upsert-neighbour this neighbour)
 
         (testing "using host:port"
-          (let [with-anti-entropy-size (sut/send-event-ae this event (:host neighbour-data1) (:port neighbour-data1))
-                without-anti-entropy-size (sut/send-event this event (:host neighbour-data1) (:port neighbour-data1))]
+          (let [with-anti-entropy-size (sut/send-event-ae this event (:host node2-nb-data) (:port node2-nb-data))
+                without-anti-entropy-size (sut/send-event this event (:host node2-nb-data) (:port node2-nb-data))]
 
             (testing "should return number of bytes sent"
               (m/assert pos-int? with-anti-entropy-size))
@@ -1654,8 +1655,8 @@
 (deftest probe-test
 
   (testing "send probe event"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
           node2-id (sut/get-id node2)
           [*e1 e1-tap-fn] (set-event-catcher node2-id :udp-packet-processor)]
       (try
@@ -1688,8 +1689,8 @@
 
   (testing "probe event processing"
     (testing "positive case"
-      (let [node1    (sut/new-node-object node-data1 cluster)
-            node2    (sut/new-node-object node-data2 cluster)
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
             node1-id (sut/get-id node1)
             node2-id (sut/get-id node2)
             [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event)
@@ -1716,7 +1717,7 @@
 
               (testing "should upsert neighbour from ProbeAck when status is not alive"
                 (no-timeout-check *e3)
-                (m/assert node-data2 (sut/get-neighbour node1 node2-id)))))
+                (m/assert node2-data (sut/get-neighbour node1 node2-id)))))
 
           (catch Exception e
             (println (ex-message e)))
@@ -1728,8 +1729,8 @@
             (sut/stop node2)))))
 
     (testing "should not upsert neighbour if cluster size limit exceed"
-      (let [node1    (sut/new-node-object node-data1 cluster)
-            node2    (sut/new-node-object node-data2 cluster)
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
             node1-id (sut/get-id node1)
             node2-id (sut/get-id node2)
             [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-neighbour-cluster-size-exceeded-error)]
@@ -1754,9 +1755,9 @@
             (sut/stop node2)))))
 
     (testing "should not process ProbeAck if Probe event was never sent"
-      (let [node1       (sut/new-node-object node-data1 cluster)
-            node2       (sut/new-node-object node-data2 cluster)
-            probe-event (sut/new-probe-event node1 (:host node-data2) (:port node-data2))
+      (let [node1       (sut/new-node-object node1-data cluster)
+            node2       (sut/new-node-object node2-data cluster)
+            probe-event (sut/new-probe-event node1 (:host node2-data) (:port node2-data))
             node1-id    (sut/get-id node1)
             [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event-probe-never-send-error)]
 
@@ -1764,9 +1765,9 @@
           (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
           (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-          (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (:host node-data1) (:port node-data1))
+          (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (:host node1-data) (:port node1-data))
 
-          (testing "should rise error and have no probe ack events"
+          (testing "should rise an error and have no probe ack events"
             (no-timeout-check *e1)
             (m/assert empty? (sut/get-probe-events node1)))
 
@@ -1778,8 +1779,8 @@
             (sut/stop node2)))))
 
     (testing "should not upsert neighbour from ProbeAck when status is alive"
-      (let [node1    (sut/new-node-object node-data1 cluster)
-            node2    (sut/new-node-object node-data2 cluster)
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
             node1-id (sut/get-id node1)
             node2-id (sut/get-id node2)
             [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-probe-ack)]
@@ -1814,15 +1815,15 @@
 (deftest ^:logic anti-entropy-test
 
   (testing "Accept normal anti-entropy event from node1 on node2"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
         (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ae-event         (sut/new-anti-entropy-event node1)
               *expecting-event (promise)
@@ -1843,7 +1844,7 @@
           (no-timeout-check *expecting-event)
 
           (m/assert 2 (count (sut/get-neighbours node2)))
-          (m/assert (dissoc neighbour-data2 :updated-at) (sut/get-neighbour node2 (:id neighbour-data2)))
+          (m/assert (dissoc node3-nb-data :updated-at) (sut/get-neighbour node2 (:id node3-nb-data)))
 
           (testing "on node2 the tx field for node1 should be updated in neighbours map"
             (m/assert
@@ -1859,14 +1860,14 @@
           (sut/stop node2)))))
 
   (testing "Do nothing if event from unknown node"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
         (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
         (let [ae-event         (sut/new-anti-entropy-event node1)
               *expecting-event (promise)
@@ -1896,16 +1897,16 @@
           (sut/stop node2)))))
 
   (testing "Do nothing if event contains bad restart counter"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
         (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node
-                                      (assoc neighbour-data3 :restart-counter 999)))
+                                      (assoc node1-nb-data :restart-counter 999)))
 
         (let [ae-event         (sut/new-anti-entropy-event node1)
               *expecting-event (promise)
@@ -1935,16 +1936,16 @@
           (sut/stop node2)))))
 
   (testing "Do nothing if event contains bad tx"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
         (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node
-                                      (assoc neighbour-data3 :tx 999)))
+                                      (assoc node1-nb-data :tx 999)))
 
         (let [ae-event         (sut/new-anti-entropy-event node1)
               *expecting-event (promise)
@@ -1974,16 +1975,16 @@
           (sut/stop node2)))))
 
   (testing "Do not process events from not alive nodes"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
         (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
         (sut/upsert-neighbour node2 (sut/new-neighbour-node
-                                      (assoc neighbour-data3 :status :stop)))
+                                      (assoc node1-nb-data :status :stop)))
 
         (let [ae-event         (sut/new-anti-entropy-event node1)
               *expecting-event (promise)
@@ -2016,9 +2017,9 @@
 (deftest ^:logic indirect-ack-event-test
 
   (testing "Accept normal indirect ack event on node1 from node3 via node2"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2030,14 +2031,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                  (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2139,9 +2140,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process indirect ack event from unknown neighbour"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2153,14 +2154,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                  (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2212,9 +2213,9 @@
           (sut/stop node3)))))
 
   (testing "Do not accept indirect ack event on node1 from node3 with outdated restart counter"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2226,14 +2227,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data2 :restart-counter 999)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node3-nb-data :restart-counter 999)))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                  (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2282,9 +2283,9 @@
           (sut/stop node3)))))
 
   (testing "Do not accept indirect ack event on node1 from node3 with outdated tx"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2296,14 +2297,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data2 :tx 999)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node3-nb-data :tx 999)))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                  (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2352,9 +2353,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process indirect ack event if indirect ping never sent"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2366,14 +2367,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node1 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               ;; here we omit put this ping into the indirect ping table on node1
@@ -2422,9 +2423,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process intermediate events if node is not alive"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2436,14 +2437,14 @@
         (sut/set-status node2 :left)
         (sut/set-status node1 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                  (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2491,9 +2492,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process indirect ack events if node is not alive"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2505,14 +2506,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node1 :left)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping      (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                  (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2563,9 +2564,9 @@
 (deftest ^:logic indirect-ping-event-test
 
   (testing "Accept normal indirect ping event on node3 from node1 via node2"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2578,14 +2579,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping     (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                 (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2694,9 +2695,9 @@
 
 
   (testing "Do not process indirect ping event on not alive node"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2709,14 +2710,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :left)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping    (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2766,9 +2767,9 @@
 
 
   (testing "Do not resend indirect ping event on not alive intermediate node"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2781,14 +2782,14 @@
         (sut/set-status node2 :left)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping    (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2838,9 +2839,9 @@
 
 
   (testing "Do not process indirect ping event from unknown node"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2853,14 +2854,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping    (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2911,9 +2912,9 @@
 
 
   (testing "Do not process indirect ping with outdated restart counter"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2926,14 +2927,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc neighbour-data3 :restart-counter 999)))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc node1-nb-data :restart-counter 999)))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping    (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                (sut/upsert-indirect-ping node1 indirect-ping)
@@ -2981,9 +2982,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process indirect ping with outdated tx"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -2996,14 +2997,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc neighbour-data3 :tx 999)))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc node1-nb-data :tx 999)))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping    (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                (sut/upsert-indirect-ping node1 indirect-ping)
@@ -3051,9 +3052,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process indirect ping for different node"
-    (let [node1           (sut/new-node-object node-data1 cluster)
-          node2           (sut/new-node-object node-data2 cluster)
-          node3           (sut/new-node-object node-data3 cluster)
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node3           (sut/new-node-object node3-data cluster)
           intermediate-id (sut/get-id node2)
           neighbour-id    (sut/get-id node3)]
       (try
@@ -3066,14 +3067,14 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [indirect-ping    (sut/new-indirect-ping-event node1 intermediate-id neighbour-id 1)
               _                (sut/upsert-indirect-ping node1 indirect-ping)
@@ -3127,8 +3128,8 @@
 (deftest ^:logic ack-event-test
 
   (testing "Accept normal ack event on node1 from node2"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3138,8 +3139,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :suspect)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :status :suspect)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event        (sut/new-ping-event node1 neighbour-id 1)
               _                 (sut/upsert-ping node1 ping-event)
@@ -3211,8 +3212,8 @@
 
 
   (testing "Do not accept ack event on node1 if node1 is not alive"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3222,8 +3223,8 @@
         (sut/set-status node1 :left)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3265,8 +3266,8 @@
           (sut/stop node2)))))                              ;; FIXME sometimes it fails to stop the node. NPE.
 
   (testing "Do not accept ack event on node1 from unknown neighbour"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3276,7 +3277,7 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3319,8 +3320,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ack event on node1 from not alive neighbour node2"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3330,8 +3331,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :left)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :status :left)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :status :left)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3373,8 +3374,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ack event with outdated restart counter on node1 "
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3384,8 +3385,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :restart-counter 999)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :restart-counter 999)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3427,8 +3428,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ack event with outdated tx on node1 "
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3438,8 +3439,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data1 :tx 999)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :tx 999)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3481,8 +3482,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ack event on node1 if corresponding ping was never sent"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3492,8 +3493,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               ;; here we don't put ping event on node1 to make ack-event not requested
@@ -3539,8 +3540,8 @@
 (deftest ^:logic ping-event-test
 
   (testing "Accept normal ping event on node2 from node1"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3550,8 +3551,8 @@
         (sut/set-status node1 :suspect)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :suspect)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node1-nb-data :status :suspect)))
 
         (let [ping-event        (sut/new-ping-event node1 neighbour-id 1)
               _                 (sut/upsert-ping node1 ping-event)
@@ -3671,8 +3672,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ping event on node2 if node2 is not alive"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3682,8 +3683,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :left)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3725,8 +3726,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ping event on node2 from unknown neighbour"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3736,7 +3737,7 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3778,8 +3779,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ping event on node2 from not alive neighbour node1"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3789,8 +3790,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :dead)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node1-nb-data :status :dead)))
 
         (let [ping-event        (sut/new-ping-event node1 neighbour-id 1)
               _                 (sut/upsert-ping node1 ping-event)
@@ -3860,8 +3861,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ping event on node2 with outdated restart counter"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3871,8 +3872,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :restart-counter 999)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node1-nb-data :restart-counter 999)))
 
         (let [ping-event        (sut/new-ping-event node1 neighbour-id 1)
               _                 (sut/upsert-ping node1 ping-event)
@@ -3942,8 +3943,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ping event on node2 with outdated tx"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -3953,8 +3954,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :tx 999)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node1-nb-data :tx 999)))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -3996,8 +3997,8 @@
           (sut/stop node2)))))
 
   (testing "Do not accept ping event on node2 for other node"
-    (let [node1        (sut/new-node-object node-data1 cluster)
-          node2        (sut/new-node-object node-data2 cluster)
+    (let [node1        (sut/new-node-object node1-data cluster)
+          node2        (sut/new-node-object node2-data cluster)
           neighbour-id (sut/get-id node2)]
       (try
 
@@ -4007,8 +4008,8 @@
         (sut/set-status node1 :alive)
         (sut/set-status node2 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
         (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
               _                (sut/upsert-ping node1 ping-event)
@@ -4056,14 +4057,14 @@
 (deftest join-test
 
   (testing "Join node1 to a single node cluster"
-    (let [node1 (sut/new-node-object node-data1 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
         (sut/set-status node1 :left)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
         (sut/set-cluster-size node1 1)
 
@@ -4074,7 +4075,7 @@
                                         (when-let [cmd (:org.rssys.swim/cmd v)]
                                           (when (and
                                                   (= cmd :set-status)
-                                                  (= (:id node-data1) (-> v :node-id))
+                                                  (= (:id node1-data) (-> v :node-id))
                                                   (= :join (-> v :data :new-status)))
                                             (deliver *expecting-event v))))
 
@@ -4122,9 +4123,9 @@
           (sut/stop node1)))))
 
   (testing "Join node1 to a cluster of 3 nodes"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4135,12 +4136,12 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :dead)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data2 :status :dead)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data3))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data3))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node3-nb-data :status :dead)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node3-nb-data :status :dead)))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
 
         (let [current-restart-counter (sut/get-restart-counter node1)
               *expecting-event        (promise)
@@ -4148,7 +4149,7 @@
                                         (when-let [cmd (:org.rssys.swim/cmd v)]
                                           (when (and
                                                   (= cmd :set-status)
-                                                  (= (:id node-data1) (-> v :node-id))
+                                                  (= (:id node1-data) (-> v :node-id))
                                                   (= :join (-> v :data :new-status)))
                                             (deliver *expecting-event v))))
               *expecting-event2       (promise)
@@ -4197,9 +4198,9 @@
 (deftest ^:logic join-event-test
 
   (testing "Process join event from node1 on node2 or node3"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4210,23 +4211,23 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [*expecting-event  (promise)
               event-catcher-fn  (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and              ;; node2
                                             (= cmd :join-event)
-                                            (= (:id node-data2) (-> v :node-id)))
+                                            (= (:id node2-data) (-> v :node-id)))
                                       (deliver *expecting-event v))))
               event-catcher-fn2 (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and              ;; node3
                                             (= cmd :join-event)
-                                            (= (:id node-data3) (-> v :node-id)))
+                                            (= (:id node3-data) (-> v :node-id)))
                                       (deliver *expecting-event v))))
               *expecting-event3 (promise)
               event-catcher-fn3 (fn [v]
@@ -4234,7 +4235,7 @@
                                     (when (and
                                             (= cmd :upsert-neighbour)
                                             (= :alive (-> v :data :neighbour-node :status))
-                                            (= (:id node-data1) (-> v :data :neighbour-node :id)))
+                                            (= (:id node1-data) (-> v :data :neighbour-node :id)))
                                       (deliver *expecting-event3 v))))
               *expecting-event4 (promise)
               event-catcher-fn4 (fn [v]
@@ -4287,12 +4288,12 @@
               @*expecting-event3))
 
           (testing "node2 or node3 should update tx field for node1 in neighbours map"
-            (let [node (if (= (:id node-data2) (:node-id @*expecting-event3))
+            (let [node (if (= (:id node2-data) (:node-id @*expecting-event3))
                          node2
                          node3)]
               (m/assert
                 pos-int?
-                (:tx (sut/get-neighbour node (:id node-data1))))))
+                (:tx (sut/get-neighbour node (:id node1-data))))))
 
           (testing "node1 should get alive event from node2 or node3"
             (m/assert ^:matcho/strict
@@ -4325,9 +4326,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process join event on not alive node"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4337,15 +4338,15 @@
         (sut/set-status node1 :left)
         (sut/set-status node2 :dead)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :status :left)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node1-nb-data :status :left)))
 
         (let [*expecting-event (promise)
               event-catcher-fn (fn [v]
                                  (when-let [cmd (:org.rssys.swim/cmd v)]
                                    (when (and
                                            (= cmd :join-event-not-alive-node-error)
-                                           (= (:id node-data2) (-> v :node-id)))
+                                           (= (:id node2-data) (-> v :node-id)))
                                      (deliver *expecting-event v))))]
 
           (add-tap event-catcher-fn)
@@ -4365,9 +4366,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process join event from the dead node"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4378,12 +4379,12 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :restart-counter 999)))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc neighbour-data3 :restart-counter 999)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node1-nb-data :restart-counter 999)))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc node1-nb-data :restart-counter 999)))
 
         (let [*expecting-event  (promise)
               event-catcher-fn  (fn [v]
@@ -4448,9 +4449,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process join event if cluster size exceeded and new node is not in the table of known nodes"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4464,10 +4465,10 @@
         (sut/set-cluster-size node2 2)
         (sut/set-cluster-size node3 2)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [*expecting-event  (promise)
               event-catcher-fn  (fn [v]
@@ -4532,9 +4533,9 @@
           (sut/stop node3)))))
 
   (testing "Do not process join event with outdated tx"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4545,12 +4546,12 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc neighbour-data3 :tx 999)))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc neighbour-data3 :tx 999)))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node (assoc node1-nb-data :tx 999)))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node (assoc node1-nb-data :tx 999)))
 
         (let [*expecting-event (promise)
               event-catcher-fn (fn [v]
@@ -4591,9 +4592,9 @@
 (deftest ^:logic alive-event-test
 
   (testing "Process alive event on joining node1 for join confirmation from alive nodes"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4604,17 +4605,17 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [*expecting-event  (promise)
               event-catcher-fn  (fn [v]
                                   (when-let [cmd (:org.rssys.swim/cmd v)]
                                     (when (and
                                             (= cmd :alive-event-join-confirmed)
-                                            (= (:id node-data1) (-> v :node-id)))
+                                            (= (:id node1-data) (-> v :node-id)))
                                       (deliver *expecting-event v))))
 
               *expecting-event2 (promise)
@@ -4623,7 +4624,7 @@
                                     (when (and
                                             (= cmd :set-status)
                                             (= :join (-> v :data :old-status))
-                                            (= (:id node-data1) (-> v :node-id)))
+                                            (= (:id node1-data) (-> v :node-id)))
                                       (deliver *expecting-event2 v))))]
 
           (add-tap event-catcher-fn)
@@ -4670,9 +4671,9 @@
           (sut/stop node3)))))
 
   (testing "Process alive event about joined node1 on alive nodes"
-    (let [node1 (sut/new-node-object node-data1 cluster)
-          node2 (sut/new-node-object node-data2 cluster)
-          node3 (sut/new-node-object node-data3 cluster)]
+    (let [node1 (sut/new-node-object node1-data cluster)
+          node2 (sut/new-node-object node2-data cluster)
+          node3 (sut/new-node-object node3-data cluster)]
       (try
 
         (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4683,10 +4684,10 @@
         (sut/set-status node2 :alive)
         (sut/set-status node3 :alive)
 
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data1))
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node neighbour-data2))
-        (sut/upsert-neighbour node3 (sut/new-neighbour-node neighbour-data1))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+        (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
         (let [*expecting-event (promise)
               event-catcher-fn (fn [v]
@@ -4695,8 +4696,8 @@
                                            (= cmd :put-event)
                                            (= 3 (-> v :data :event :cmd-type))
                                            (or
-                                             (= (:id node-data2) (-> v :node-id))
-                                             (= (:id node-data3) (-> v :node-id))))
+                                             (= (:id node2-data) (-> v :node-id))
+                                             (= (:id node3-data) (-> v :node-id))))
                                      (deliver *expecting-event v))))]
 
           (add-tap event-catcher-fn)
@@ -4715,10 +4716,10 @@
                 {:cmd-type                  3               ;; alive
                  :id                        (fn [v]
                                               (or
-                                                (= v (:id node-data2))
-                                                (= v (:id node-data3))))
+                                                (= v (:id node2-data))
+                                                (= v (:id node3-data))))
 
-                 :neighbour-id              (:id node-data1)
+                 :neighbour-id              (:id node1-data)
                  :neighbour-restart-counter 8
                  :neighbour-tx              1
                  :restart-counter           pos-int?
@@ -4726,8 +4727,8 @@
                 :tx pos-int?}
                :node-id            (fn [v]
                                      (or
-                                       (= v (:id node-data2))
-                                       (= v (:id node-data3))))
+                                       (= v (:id node2-data))
+                                       (= v (:id node3-data))))
                :ts                 pos-int?
                :org.rssys.swim/cmd :put-event}
               @*expecting-event))
@@ -4739,8 +4740,8 @@
                                       (when (and
                                               (= cmd :alive-event)
                                               (or
-                                                (= (:id node-data2) (-> v :node-id))
-                                                (= (:id node-data3) (-> v :node-id))))
+                                                (= (:id node2-data) (-> v :node-id))
+                                                (= (:id node3-data) (-> v :node-id))))
                                         (deliver *expecting-event2 v))))
 
                 _                 (add-tap event-catcher-fn2)
@@ -4748,10 +4749,10 @@
                 [node events host port]
                 (condp = (:node-id @*expecting-event)
 
-                  (:id node-data2)
+                  (:id node2-data)
                   [node2 (sut/take-events node2) (sut/get-host node3) (sut/get-port node3)]
 
-                  (:id node-data3)
+                  (:id node3-data)
                   [node3 (sut/take-events node3) (sut/get-host node2) (sut/get-port node2)])]
             (sut/send-events node events host port)
 
