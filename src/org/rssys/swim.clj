@@ -379,6 +379,36 @@
   (swap! (:*node this) assoc :status new-status))
 
 
+(defn set-dead-status
+  [^NodeObject this]
+  (set-status this :dead))
+
+
+(defn set-stop-status
+  [^NodeObject this]
+  (set-status this :stop))
+
+
+(defn set-left-status
+  [^NodeObject this]
+  (set-status this :left))
+
+
+(defn set-join-status
+  [^NodeObject this]
+  (set-status this :join))
+
+
+(defn set-alive-status
+  [^NodeObject this]
+  (set-status this :alive))
+
+
+(defn set-suspect-status
+  [^NodeObject this]
+  (set-status this :suspect))
+
+
 (defn set-payload
   "Set new payload for this node.
   Max size of payload is limited by `*max-payload-size*`."
@@ -1036,9 +1066,34 @@
     (upsert-neighbour this (assoc nb :status status))))
 
 
-(defn- set-nb-status-alive
+(defn set-nb-dead-status
+  [^NodeObject this ^UUID neighbour-id]
+  (set-nb-status this neighbour-id :dead))
+
+
+(defn set-nb-stop-status
+  [^NodeObject this ^UUID neighbour-id]
+  (set-nb-status this neighbour-id :stop))
+
+
+(defn set-nb-left-status
+  [^NodeObject this ^UUID neighbour-id]
+  (set-nb-status this neighbour-id :left))
+
+
+(defn set-nb-join-status
+  [^NodeObject this ^UUID neighbour-id]
+  (set-nb-status this neighbour-id :join))
+
+
+(defn set-nb-alive-status
   [^NodeObject this ^UUID neighbour-id]
   (set-nb-status this neighbour-id :alive))
+
+
+(defn set-nb-suspect-status
+  [^NodeObject this ^UUID neighbour-id]
+  (set-nb-status this neighbour-id :suspect))
 
 
 (defn set-nb-direct-access
@@ -1347,7 +1402,7 @@
         (when (= :suspect (:status sender))
           (put-event this (new-alive-event this e)))
         (set-nb-tx this sender-id (.-tx e))
-        (set-nb-status-alive this sender-id)))))
+        (set-nb-alive-status this sender-id)))))
 
 
 (defmethod event-processing PingEvent
@@ -1384,7 +1439,7 @@
         (d> :ping-event (get-id this) e)
         (upsert-neighbour this (assoc nb :host (.-host e) :port (.-port e)))
         (set-nb-tx this neighbour-id (.-tx e))
-        (set-nb-status-alive this neighbour-id)
+        (set-nb-alive-status this neighbour-id)
         (let [ack-event (new-ack-event this e)]
           (send-event-ae this ack-event neighbour-id)
           (d> :ack-event (get-id this) ack-event))
@@ -1421,7 +1476,7 @@
           nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
           _           (upsert-neighbour this nb)
           _           (set-nb-tx this (.-id e) (.-tx e))
-          _           (set-nb-status-alive this (.-id e))
+          _           (set-nb-alive-status this (.-id e))
           _           (set-nb-direct-access this (.-id e))
           alive-event (new-alive-event this e)]
       (send-event-ae this alive-event (.-id e))
@@ -1468,7 +1523,7 @@
         (set-nb-tx this sender-nb (.-tx e))
         (upsert-neighbour this new-alive-nb)
         (set-nb-tx this alive-id (.-neighbour_tx e))
-        (set-nb-status-alive this alive-id)
+        (set-nb-alive-status this alive-id)
         (set-nb-direct-access this alive-id)
         (set-nb-restart-counter this alive-id (.-neighbour_restart_counter e))
         (put-event this e)))))
@@ -1540,16 +1595,19 @@
     * `node-process-fn` - fn with one arg `this` for main node process. It may look for :continue? flag in UDP server.
     * `incoming-data-processor-fn` fn to process incoming UDP packets with two args: `this` and `encrypted-data`"
   [^NodeObject this node-process-fn incoming-data-processor-fn]
-  (when (= (get-status this) :stop)
-    (set-status this :left)
-    (swap! (:*node this) assoc :tx 1)
-    (let [{:keys [host port]} (get-value this)]
-      (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
-    (when-not (s/valid? ::spec/node (get-value this))
-      (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
-    (swap! *stat assoc :bad-udp-counter 0)
-    (vthread/vfuture (node-process-fn this))
-    (d> :start (get-id this) {})))
+  (try
+    (when (= (get-status this) :stop)
+      (set-left-status this)
+      (swap! (:*node this) assoc :tx 1)
+      (let [{:keys [host port]} (get-value this)]
+        (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
+      (when-not (s/valid? ::spec/node (get-value this))
+        (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
+      (swap! *stat assoc :bad-udp-counter 0)
+      (vthread/vfuture (node-process-fn this))
+      (d> :start (get-id this) {}))
+    (catch Exception e
+      (throw (ex-info (format "Can't start node: %s" (get-id this)) {:cause (ex-cause e)} e)))))
 
 
 
@@ -1649,7 +1707,7 @@
     (leave this)
     (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
     (swap! (:*node this) assoc
-      :*udp-server (udp/stop *udp-server)
+      :*udp-server (when *udp-server (udp/stop *udp-server))
       :ping-events {}
       :outgoing-event-queue []
       :ping-round-buffer []
