@@ -2293,7 +2293,7 @@
             (sut/stop node2)
             (sut/stop node3)))))
 
-    (testing "destination node should reject event if indirect ping never sent"
+    (testing "destination node should reject event if indirect ping request was never sent"
       (let [node1    (sut/new-node-object node1-data cluster)
             node2    (sut/new-node-object node2-data cluster)
             node3    (sut/new-node-object node3-data cluster)
@@ -2690,417 +2690,316 @@
             (sut/stop node3)))))))
 
 
+(deftest ^:event-processing ack-event-test
 
-(deftest ^:logic ack-event-test
-
-  (testing "Accept normal ack event on node1 from node2"
-    (let [node1        (sut/new-node-object node1-data cluster)
-          node2        (sut/new-node-object node2-data cluster)
-          neighbour-id (sut/get-id node2)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/set-status node1 :alive)
-        (sut/set-status node2 :alive)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :status :suspect)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-        (let [ping-event        (sut/new-ping-event node1 neighbour-id 1)
-              _                 (sut/upsert-ping node1 ping-event)
-              ack-event         (sut/new-ack-event node2 ping-event)
-
-              *expecting-event  (promise)
-              event-catcher-fn  (fn [v]
-                                  (when-let [cmd (:org.rssys.swim/cmd v)]
-                                    (when (= cmd :ack-event)
-                                      (deliver *expecting-event v))))
-              *expecting-event2 (promise)
-              event-catcher-fn2 (fn [v]
-                                  (when-let [cmd (:org.rssys.swim/cmd v)]
-                                    (when (= cmd :put-event)
-                                      (deliver *expecting-event2 v))))]
-
-          (add-tap event-catcher-fn)
-          (add-tap event-catcher-fn2)
-
-          ;; sending normal ack event from node2 to node1
-          (sut/send-event node2 ack-event (sut/get-host node1) (sut/get-port node1))
-
-          (no-timeout-check *expecting-event)
-          (no-timeout-check *expecting-event2)
-
-          (testing "node1 should receive ack event from node2"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :ack-event
-               :data
-               {:attempt-number  1
-                :cmd-type        1
-                :id              #uuid "00000000-0000-0000-0000-000000000002"
-                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-tx    1
-                :restart-counter 5
-                :tx              1}}
-              @*expecting-event))
-
-          (testing "node1 should delete ping request after receive ack for it"
-            (m/assert empty? (sut/get-ping-events node1)))
-
-          (testing "node1 should generate alive event about suspect node2"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :put-event
-               :data
-               {:event
-                {:cmd-type                  3
-                 :id                        #uuid "00000000-0000-0000-0000-000000000001"
-                 :neighbour-id              #uuid "00000000-0000-0000-0000-000000000002"
-                 :neighbour-restart-counter 5
-                 :neighbour-tx              1
-                 :restart-counter           7
-                 :tx                        3}
-                :tx 4}}
-              @*expecting-event2))
-
-          (remove-tap event-catcher-fn)
-          (remove-tap event-catcher-fn2))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-
-  (testing "Do not accept ack event on node1 if node1 is not alive"
-    (let [node1        (sut/new-node-object node1-data cluster)
-          node2        (sut/new-node-object node2-data cluster)
-          neighbour-id (sut/get-id node2)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/set-status node1 :left)
-        (sut/set-status node2 :alive)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-        (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
-              _                (sut/upsert-ping node1 ping-event)
-              ack-event        (sut/new-ack-event node2 ping-event)
-
-              *expecting-event (promise)
-              event-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :ack-event-not-alive-node-error)
-                                     (deliver *expecting-event v))))]
-
-          (add-tap event-catcher-fn)
-
-          (sut/send-event node2 ack-event (sut/get-host node1) (sut/get-port node1))
-
-          (no-timeout-check *expecting-event)
-
-          (testing "node1 should not process ack event from node2 if node1 is not alive"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :ack-event-not-alive-node-error
-               :data
-               {:attempt-number  1
-                :cmd-type        1
-                :id              #uuid "00000000-0000-0000-0000-000000000002"
-                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-tx    1
-                :restart-counter 5
-                :tx              1}}
-              @*expecting-event))
-
-          (remove-tap event-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))                              ;; FIXME sometimes it fails to stop the node. NPE.
-
-  (testing "Do not accept ack event on node1 from unknown neighbour"
-    (let [node1        (sut/new-node-object node1-data cluster)
-          node2        (sut/new-node-object node2-data cluster)
-          neighbour-id (sut/get-id node2)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/set-status node1 :alive)
-        (sut/set-status node2 :alive)
-
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-        (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
-              _                (sut/upsert-ping node1 ping-event)
-              ack-event        (sut/new-ack-event node2 ping-event)
-
-              *expecting-event (promise)
-              event-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :ack-event-unknown-neighbour-error)
-                                     (deliver *expecting-event v))))]
-
-          (add-tap event-catcher-fn)
-
-
-          (sut/send-event node2 ack-event (sut/get-host node1) (sut/get-port node1))
-
-          (no-timeout-check *expecting-event)
-
-          (testing "node1 should not accept ack event from unknown node"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :ack-event-unknown-neighbour-error
-               :data
-               {:attempt-number  1
-                :cmd-type        1
-                :id              #uuid "00000000-0000-0000-0000-000000000002"
-                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-tx    1
-                :restart-counter 5
-                :tx              1}}
-              @*expecting-event))
-
-          (remove-tap event-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-  (testing "Do not accept ack event on node1 from not alive neighbour node2"
-    (let [node1        (sut/new-node-object node1-data cluster)
-          node2        (sut/new-node-object node2-data cluster)
-          neighbour-id (sut/get-id node2)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/set-status node1 :alive)
-        (sut/set-status node2 :left)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :status :left)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-        (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
-              _                (sut/upsert-ping node1 ping-event)
-              ack-event        (sut/new-ack-event node2 ping-event)
-
-              *expecting-event (promise)
-              event-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :ack-event-not-alive-neighbour-error)
-                                     (deliver *expecting-event v))))]
-
-          (add-tap event-catcher-fn)
-
-          (sut/send-event node2 ack-event (sut/get-host node1) (sut/get-port node1))
-
-          (no-timeout-check *expecting-event)
-
-          (testing "node1 should not accept ack event from not alive node2"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :ack-event-not-alive-neighbour-error
-               :data
-               {:attempt-number  1
-                :cmd-type        1
-                :id              #uuid "00000000-0000-0000-0000-000000000002"
-                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-tx    1
-                :restart-counter 5
-                :tx              1}}
-              @*expecting-event))
-
-          (remove-tap event-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-  (testing "Do not accept ack event with outdated restart counter on node1 "
-    (let [node1        (sut/new-node-object node1-data cluster)
-          node2        (sut/new-node-object node2-data cluster)
-          neighbour-id (sut/get-id node2)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/set-status node1 :alive)
-        (sut/set-status node2 :alive)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :restart-counter 999)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-        (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
-              _                (sut/upsert-ping node1 ping-event)
-              ack-event        (sut/new-ack-event node2 ping-event)
-
-              *expecting-event (promise)
-              event-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :ack-event-bad-restart-counter-error)
-                                     (deliver *expecting-event v))))]
-
-          (add-tap event-catcher-fn)
-
-          (sut/send-event node2 ack-event (sut/get-host node1) (sut/get-port node1))
-
-          (no-timeout-check *expecting-event)
-
-          (testing "node1 should not accept ack event from not alive node2"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :ack-event-bad-restart-counter-error
-               :data
-               {:attempt-number  1
-                :cmd-type        1
-                :id              #uuid "00000000-0000-0000-0000-000000000002"
-                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-tx    1
-                :restart-counter 5
-                :tx              1}}
-              @*expecting-event))
-
-          (remove-tap event-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-  (testing "Do not accept ack event with outdated tx on node1 "
-    (let [node1        (sut/new-node-object node1-data cluster)
-          node2        (sut/new-node-object node2-data cluster)
-          neighbour-id (sut/get-id node2)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/set-status node1 :alive)
-        (sut/set-status node2 :alive)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node (assoc node2-nb-data :tx 999)))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-        (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
-              _                (sut/upsert-ping node1 ping-event)
-              ack-event        (sut/new-ack-event node2 ping-event)
-
-              *expecting-event (promise)
-              event-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :ack-event-bad-tx-error)
-                                     (deliver *expecting-event v))))]
-
-          (add-tap event-catcher-fn)
-
-          (sut/send-event node2 ack-event (sut/get-host node1) (sut/get-port node1))
-
-          (no-timeout-check *expecting-event)
-
-          (testing "node1 should not accept ack event from not alive node2"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :ack-event-bad-tx-error
-               :data
-               {:attempt-number  1
-                :cmd-type        1
-                :id              #uuid "00000000-0000-0000-0000-000000000002"
-                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-tx    1
-                :restart-counter 5
-                :tx              1}}
-              @*expecting-event))
-
-          (remove-tap event-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2)))))
-
-  (testing "Do not accept ack event on node1 if corresponding ping was never sent"
-    (let [node1        (sut/new-node-object node1-data cluster)
-          node2        (sut/new-node-object node2-data cluster)
-          neighbour-id (sut/get-id node2)]
-      (try
-
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-
-        (sut/set-status node1 :alive)
-        (sut/set-status node2 :alive)
-
-        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
-        (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-        (let [ping-event       (sut/new-ping-event node1 neighbour-id 1)
-              ;; here we don't put ping event on node1 to make ack-event not requested
-              ack-event        (sut/new-ack-event node2 ping-event)
-
-              *expecting-event (promise)
-              event-catcher-fn (fn [v]
-                                 (when-let [cmd (:org.rssys.swim/cmd v)]
-                                   (when (= cmd :ack-event-not-expected-error)
-                                     (deliver *expecting-event v))))]
-
-          (add-tap event-catcher-fn)
-
-          ;; sending ack event from node2 to node1
-          (sut/send-event node2 ack-event (sut/get-host node1) (sut/get-port node1))
-
-          (no-timeout-check *expecting-event)
-
-          (testing "node1 should not accept not requested ack event"
-            (m/assert ^:matcho/strict
-              {:node-id            #uuid "00000000-0000-0000-0000-000000000001"
-               :ts                 pos-int?
-               :org.rssys.swim/cmd :ack-event-not-expected-error
-               :data
-               {:attempt-number  1
-                :cmd-type        1
-                :id              #uuid "00000000-0000-0000-0000-000000000002"
-                :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
-                :neighbour-tx    1
-                :restart-counter 5
-                :tx              1}}
-              @*expecting-event))
-
-          (remove-tap event-catcher-fn))
-
-        (catch Exception e
-          (println (ex-message e)))
-        (finally
-          (sut/stop node1)
-          (sut/stop node2))))))
+  (testing "ack event processing"
+
+    (testing "should accept event on node1"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event)
+            [*e2 e2-tap-fn] (set-event-catcher node1-id :put-event)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (sut/set-nb-suspect-status node1 node2-id)
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                node2-tx   (.-tx (sut/get-neighbour node1 node2-id))
+                _          (sut/upsert-ping node1 ping-event)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+            (testing "node1 should have ping request in ping map before process ack event"
+              (m/assert
+                {:id node1-id :neighbour-id node2-id}
+                (sut/get-ping-event node1 node2-id)))
+
+            (testing "node1 should have suspect status for neighbour node2 before process ack event"
+              (m/assert :suspect (:status (sut/get-neighbour node1 node2-id))))
+
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should receive ack event from node2"
+              (no-timeout-check *e1))
+
+            (testing "node1 should set tx for neighbour node2 by tx value from event"
+              (m/assert (-> @*e1 :data :tx) (.-tx (sut/get-neighbour node1 node2-id)))
+              (m/assert true (> (.-tx (sut/get-neighbour node1 node2-id)) node2-tx)))
+
+            (testing "node1 should set new status of neighbour node2 by value from event"
+              (m/assert :alive (:status (sut/get-neighbour node1 node2-id))))
+
+            (testing "node1 should delete ping request from ping map"
+              (m/assert nil (sut/get-ping-event node1 node2-id)))
+
+            (testing "node1 should put alive event about node2 to outgoing events buffer"
+              (no-timeout-check *e2)
+              (m/assert {:node-id node1-id
+                         :data    {:event {:neighbour-id node2-id :cmd-type 3}}} @*e2)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (remove-tap e2-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "destination node should reject event if its status is not alive"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-node-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-left-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                _          (sut/upsert-ping node1 ping-event)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+            (testing "node1 should have ping request in ping map before process ack event"
+              (m/assert
+                {:id node1-id :neighbour-id node2-id}
+                (sut/get-ping-event node1 node2-id)))
+
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should reject ack event from node2 cause its status is left"
+              (no-timeout-check *e1))
+
+            (testing "ping request should be ping map"
+              (m/dessert nil (sut/get-ping-event node1 node2-id))))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "destination node should reject event if its status is not alive"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-node-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-left-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                _          (sut/upsert-ping node1 ping-event)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should reject ack event from node2 cause its status is left"
+              (no-timeout-check *e1))
+
+            (testing "ping request should be still in a ping map"
+              (m/dessert nil (sut/get-ping-event node1 node2-id))))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "destination node should reject event from unknown neighbour"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-unknown-neighbour-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                _          (sut/upsert-ping node1 ping-event)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should reject ack event from unknown node2 "
+              (no-timeout-check *e1)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "destination node should reject event from not alive neighbour"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-neighbour-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                _          (sut/upsert-ping node1 ping-event)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+            (sut/set-nb-left-status node1 node2-id)
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should reject ack event from not alive node2 "
+              (no-timeout-check *e1)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "destination node should reject event with bad restart counter"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-bad-restart-counter-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                _          (sut/upsert-ping node1 ping-event)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+
+            (sut/set-nb-restart-counter node1 node2-id 999)
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should reject ack event with outdated restart counter"
+              (no-timeout-check *e1)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "destination node should reject event with bad tx"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-bad-tx-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                _          (sut/upsert-ping node1 ping-event)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+
+            (sut/set-nb-tx node1 node2-id 999)
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should reject ack event with outdated tx"
+              (no-timeout-check *e1)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "destination node should reject event if ping request was never sent"
+      (let [node1    (sut/new-node-object node1-data cluster)
+            node2    (sut/new-node-object node2-data cluster)
+            node1-id (sut/get-id node1)
+            node2-id (sut/get-id node2)
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-expected-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (let [ping-event (sut/new-ping-event node1 node2-id 1)
+                ack-event  (sut/new-ack-event node2 ping-event)]
+
+            (sut/send-event node2 ack-event node1-id)
+
+            (testing "node1 should reject ack event from node2"
+              (no-timeout-check *e1)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (sut/stop node1)
+            (sut/stop node2)))))))
+
 
 
 (deftest ^:logic ping-event-test
