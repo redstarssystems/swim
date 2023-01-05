@@ -1476,6 +1476,7 @@
           nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
           _           (upsert-neighbour this nb)
           _           (set-nb-tx this (.-id e) (.-tx e))
+          _           (set-nb-restart-counter this (.-id e) (.-restart_counter e))
           _           (set-nb-alive-status this (.-id e))
           _           (set-nb-direct-access this (.-id e))
           alive-event (new-alive-event this e)]
