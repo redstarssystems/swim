@@ -1399,10 +1399,10 @@
       (do
         (d> :ack-event (get-id this) e)
         (delete-ping this sender-id)
-        (when (= :suspect (:status sender))
-          (put-event this (new-alive-event this e)))
         (set-nb-tx this sender-id (.-tx e))
-        (set-nb-alive-status this sender-id)))))
+        (set-nb-alive-status this sender-id)
+        (when (= :suspect (:status sender))
+          (put-event this (new-alive-event this e)))))))
 
 
 (defmethod event-processing PingEvent
