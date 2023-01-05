@@ -84,7 +84,7 @@
                 :task (shell (str "clojure -M:test " (apply str (interpose " " *command-line-args*))))}
 
   repl         {:doc  "Run Clojure repl"
-                :task (clojure "-M:repl")}
+                :task (clojure "-M:test:repl")}
 
   outdated     {:doc  "Check for outdated dependencies"
                 :task (clojure (str "-M:outdated " (apply str (interpose " " *command-line-args*))))}
