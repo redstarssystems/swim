@@ -1230,12 +1230,12 @@
                              :tx              (.-tx e)
                              :payload         {}
                              :updated-at      (System/currentTimeMillis)})]
-    (d> :probe-ack-event (get-id this) nb)
 
     (if (expected-probe-event? this e)
       (do (upsert-probe-ack this e)
           (when (not (alive-node? this))
-            (upsert-neighbour this nb)))
+            (upsert-neighbour this nb))
+          (d> :probe-ack-event (get-id this) nb))
       (d> :probe-ack-event-probe-never-send-error (get-id this) e))))
 
 

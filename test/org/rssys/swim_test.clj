@@ -1715,10 +1715,6 @@
           (testing "should receive ProbeAck event on node1"
             (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
 
-              (testing "should upsert neighbour from ProbeAck when status is not alive"
-                (no-timeout-check *e3)
-                (m/assert node2-data (sut/get-neighbour node1 node2-id)))
-
               (testing "should be ProbeAck event from node2"
                 (no-timeout-check *e1)
                 (m/assert {:data {:id node2-id} :node-id node1-id} @*e1))
@@ -1728,7 +1724,11 @@
                 (m/assert {:id           node2-id
                            :neighbour-id node1-id
                            :probe-key    probe-key}
-                  (sut/get-probe-event node1 probe-key)))))
+                  (sut/get-probe-event node1 probe-key)))
+
+              (testing "should upsert neighbour from ProbeAck when status is not alive"
+                (no-timeout-check *e3)
+                (m/assert node2-data (sut/get-neighbour node1 node2-id)))))
 
           (catch Exception e
             (print-ex e))
