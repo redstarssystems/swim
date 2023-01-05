@@ -537,6 +537,7 @@
         (let [nb-id (:id node2-nb-data)
               nb        (sut/get-neighbour this nb-id)
               old-timestamp (:updated-at nb)]
+          (Thread/sleep 1)
           (sut/upsert-neighbour this nb)
           (let [modified-nb (sut/get-neighbour this nb-id)]
             (is (> (:updated-at modified-nb) old-timestamp))))
@@ -3040,6 +3041,11 @@
 
             (sut/send-event node1 ping-event node2-id)
 
+            (testing "node2 should put alive event about node1 to outgoing events buffer"
+              (no-timeout-check *e4)
+              (m/assert {:node-id node2-id
+                         :data    {:event {:neighbour-id node1-id :cmd-type 3}}} @*e4))
+
             (testing "node2 should receive ping event from node1"
               (no-timeout-check *e1))
 
@@ -3061,12 +3067,7 @@
             (testing "node2 should send ack event for node1"
               (no-timeout-check *e3)
               (m/assert {:node-id node2-id
-                         :data    {:udp-size pos-int?}} @*e3))
-
-            (testing "node2 should put alive event about node1 to outgoing events buffer"
-              (no-timeout-check *e4)
-              (m/assert {:node-id node2-id
-                         :data    {:event {:neighbour-id node1-id :cmd-type 3}}} @*e4)))
+                         :data    {:udp-size pos-int?}} @*e3)))
 
           (catch Exception e
             (print-ex e))
