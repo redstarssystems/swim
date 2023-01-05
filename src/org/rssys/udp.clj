@@ -91,11 +91,18 @@
   "Stops given `*server`.
   Returns: *server."
   [*server]
-  (let [{:keys [host port]} @*server]
+  (let [*stop-complete (promise)
+        {:keys [host port]} @*server]
     (swap! *server assoc :continue? false)
+    (add-watch *server :stop-watcher
+      (fn [_ _ _ new-state]
+        (when (= :stopped (:server-state new-state))
+          (deliver *stop-complete :stopped))))
     (send-packet (.getBytes "") host port)                  ;; send empty packet to trigger server
-    (Thread/sleep 2)                                        ;; wait for packet reach the server
+    (deref *stop-complete 2000 :timeout)                    ;; wait for packet reach the server
+    (remove-watch *server :stop-watcher)
     *server))
+
 
 
 (defn packets-received
