@@ -94,6 +94,7 @@
   (let [{:keys [host port]} @*server]
     (swap! *server assoc :continue? false)
     (send-packet (.getBytes "") host port)                  ;; send empty packet to trigger server
+    (Thread/sleep 2)                                        ;; wait for packet reach the server
     *server))
 
 
