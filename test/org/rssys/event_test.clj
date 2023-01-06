@@ -2,8 +2,7 @@
   (:require
     [clojure.test :refer [deftest is testing]]
     [matcho.core :as m :refer [match]]
-    [org.rssys.event :as sut]
-    [org.rssys.spec :as spec])
+    [org.rssys.event :as sut])
   (:import
     (org.rssys.event
       AckEvent

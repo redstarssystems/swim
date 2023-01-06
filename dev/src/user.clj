@@ -1,7 +1,6 @@
 (ns user
   (:require
     [bogus.core]
-    [clojure.stacktrace :as trace]
     [hashp.core]
     [puget.printer :refer [cprint] :rename {cprint cprn}]))
 

@@ -839,9 +839,10 @@
 
 (defn new-anti-entropy-event
   "Returns anti-entropy event. Increase tx of `this` node.
-  If key `:neighbour-id` present then returns anti-entropy data for this neighbour only.
-  Default value for `:num` is :max-anti-entropy-items"
-  ^AntiEntropy [^NodeObject this & {:keys [num neighbour-id] :as ks}]
+  If key `:neighbour-id` present in `ks` then returns anti-entropy data for this neighbour only.
+  If key `:num` present in `ks` then returns anti-entropy data for given number of neighbours.
+  Default value for `:num` in `ks` is :max-anti-entropy-items"
+  ^AntiEntropy [^NodeObject this & {:keys [] :as ks}]
   (let [anti-entropy-data (build-anti-entropy-data this ks)
         ae-event          (event/map->AntiEntropy {:cmd-type          (:anti-entropy event/code)
                                                    :id                (get-id this)
@@ -1200,7 +1201,7 @@
 (defmethod restore-event 15 ^IndirectAckEvent [e] (.restore (event/empty-indirect-ack) e))
 
 
-(defmulti event-processing (fn [this e] (type e)))
+(defmulti event-processing (fn [_ e] (type e)))
 
 
 (defmethod event-processing ProbeEvent
@@ -1627,7 +1628,7 @@
 ;; TODO: stop process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
 (defn leave
   "Leave the cluster"
-  [^NodeObject this])
+  [^NodeObject _])
 
 
 

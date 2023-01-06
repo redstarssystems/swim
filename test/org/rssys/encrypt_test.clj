@@ -1,7 +1,7 @@
 (ns org.rssys.encrypt-test
   (:require
     [clojure.test :as test :refer [deftest testing is]]
-    [matcho.core :as m :refer [match]]
+    [matcho.core :as m]
     [org.rssys.encrypt :as sut])
   (:import
     (javax.crypto

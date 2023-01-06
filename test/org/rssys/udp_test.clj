@@ -2,7 +2,6 @@
   (:require
     [clojure.test :refer [deftest is testing]]
     [matcho.core :as m]
-    [matcho.core :refer [match]]
     [org.rssys.udp :as sut])
   (:import
     (java.net
