@@ -858,7 +858,7 @@
 
 
 
-;; TODO: where to check if new cluster size is less than active nodes in a cluster?
+;; TODO where to check if new cluster size is less than active nodes in a cluster?
 (defn new-cluster-size-event
   "Returns new NewClusterSizeEvent event. Increase tx of `this` node.
   This event should be created before cluster size changed."
@@ -1534,8 +1534,39 @@
 
 
 
+(defmethod event-processing NewClusterSizeEvent
+  [^NodeObject this ^NewClusterSizeEvent e]
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)
+        new-size (.-new_cluster_size e)
+        alive-number (nodes-in-cluster this)]
+    (cond
 
-;;NewClusterSizeEvent
+      (= :unknown-neighbour sender)
+      (d> :new-cluster-size-event-unknown-neighbour-error (get-id this) e)
+
+      (not (suitable-restart-counter? this e))
+      (d> :new-cluster-size-event-bad-restart-counter-error (get-id this) e)
+
+      (not (suitable-tx? this e))
+      (d> :new-cluster-size-event-bad-tx-error (get-id this) e)
+
+      (not (alive-neighbour? sender))
+      (d> :new-cluster-size-event-not-alive-neighbour-error (get-id this) e)
+
+      (> alive-number new-size)
+      (d> :new-cluster-size-event-less-than-alive-nodes-error (get-id this) e)
+
+      :else
+      (do
+        (d> :new-cluster-size-event (get-id this) e)
+        (set-cluster-size this (.-new_cluster_size e))
+        (put-event this e)
+        (set-nb-tx this sender-id (.-tx e))))))
+
+
+
+
 ;;DeadEvent
 ;;SuspectEvent
 ;;LeftEvent
