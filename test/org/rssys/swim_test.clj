@@ -3937,6 +3937,222 @@
             (sut/stop node2)))))))
 
 
+(deftest ^:event-processing dead-event-test
+
+  (testing "dead event processing"
+
+    (testing "should accept event on alive node"
+      (let [node1      (sut/new-node-object node1-data cluster)
+            node2      (sut/new-node-object node2-data cluster)
+            node3      (sut/new-node-object node3-data cluster)
+
+            node2-id   (sut/get-id node2)
+            node3-id   (sut/get-id node3)
+
+            [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event)
+            [*e2 e2-tap-fn] (set-event-catcher node3-id :put-event {:cmd-type 6})
+            [*e3 e3-tap-fn] (set-event-catcher node3-id :delete-neighbour)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+          (sut/set-alive-status node3)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+
+          (sut/send-event node1 (sut/new-dead-event node1 node2-id) node3-id)
+
+          (testing "node3 should accept event"
+            (no-timeout-check *e1))
+
+          (testing "node3 should put event for outgoing events queue"
+            (no-timeout-check *e2))
+
+          (testing "node3 should delete info about dead neighbour from neighbours map"
+            (no-timeout-check *e3)
+            (m/assert {:node-id node3-id
+                       :data {:neighbour-id node2-id}} @*e3)
+            (m/assert nil (sut/get-neighbour node3 node2-id)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (remove-tap e2-tap-fn)
+            (remove-tap e3-tap-fn)
+
+            (sut/stop node1)
+            (sut/stop node2)
+            (sut/stop node3)))))
+
+    (testing "should reject event from unknown neighbour"
+      (let [node1      (sut/new-node-object node1-data cluster)
+            node2      (sut/new-node-object node2-data cluster)
+            node3      (sut/new-node-object node3-data cluster)
+            node2-id   (sut/get-id node2)
+            node3-id   (sut/get-id node3)
+            [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-unknown-neighbour-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+          (sut/set-alive-status node3)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+
+          (sut/send-event node1 (sut/new-dead-event node1 node2-id) node3-id)
+
+          (testing "node3 should reject event"
+            (no-timeout-check *e1))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+
+            (sut/stop node1)
+            (sut/stop node2)
+            (sut/stop node3)))))
+
+    (testing "should reject event with bad restart counter"
+      (let [node1      (sut/new-node-object node1-data cluster)
+            node2      (sut/new-node-object node2-data cluster)
+            node3      (sut/new-node-object node3-data cluster)
+            node2-id   (sut/get-id node2)
+            node3-id   (sut/get-id node3)
+            [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-bad-restart-counter-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+          (sut/set-alive-status node3)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+
+          (sut/set-nb-restart-counter node3 (sut/get-id node1) 999)
+          (sut/send-event node1 (sut/new-dead-event node1 node2-id) node3-id)
+
+          (testing "node3 should reject event"
+            (no-timeout-check *e1))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+
+            (sut/stop node1)
+            (sut/stop node2)
+            (sut/stop node3)))))
+
+    (testing "should reject event with bad tx"
+      (let [node1      (sut/new-node-object node1-data cluster)
+            node2      (sut/new-node-object node2-data cluster)
+            node3      (sut/new-node-object node3-data cluster)
+            node2-id   (sut/get-id node2)
+            node3-id   (sut/get-id node3)
+            [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-bad-tx-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+          (sut/set-alive-status node3)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+
+          (sut/set-nb-tx node3 (sut/get-id node1) 999)
+          (sut/send-event node1 (sut/new-dead-event node1 node2-id) node3-id)
+
+          (testing "node3 should reject event"
+            (no-timeout-check *e1))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+
+            (sut/stop node1)
+            (sut/stop node2)
+            (sut/stop node3)))))
+
+    (testing "should reject event from not alive neighbour"
+      (let [node1      (sut/new-node-object node1-data cluster)
+            node2      (sut/new-node-object node2-data cluster)
+            node3      (sut/new-node-object node3-data cluster)
+            node2-id   (sut/get-id node2)
+            node3-id   (sut/get-id node3)
+            [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-not-alive-neighbour-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+          (sut/set-alive-status node3)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+          (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
+
+          (sut/set-nb-dead-status node3 (sut/get-id node1))
+          (sut/send-event node1 (sut/new-dead-event node1 node2-id) node3-id)
+
+          (testing "node3 should reject event"
+            (no-timeout-check *e1))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+
+            (sut/stop node1)
+            (sut/stop node2)
+            (sut/stop node3)))))))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; NodeObject control tests
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;

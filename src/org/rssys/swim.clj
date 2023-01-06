@@ -1565,9 +1565,32 @@
         (set-nb-tx this sender-id (.-tx e))))))
 
 
+(defmethod event-processing DeadEvent
+  [^NodeObject this ^DeadEvent e]
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+    (cond
+
+      (= :unknown-neighbour sender)
+      (d> :dead-event-unknown-neighbour-error (get-id this) e)
+
+      (not (suitable-restart-counter? this e))
+      (d> :dead-event-bad-restart-counter-error (get-id this) e)
+
+      (not (suitable-tx? this e))
+      (d> :dead-event-bad-tx-error (get-id this) e)
+
+      (not (alive-neighbour? sender))
+      (d> :dead-event-not-alive-neighbour-error (get-id this) e)
+
+      :else
+      (do
+        (d> :dead-event (get-id this) e)
+        (delete-neighbour this (.-neighbour_id e))
+        (put-event this e)
+        (set-nb-tx this sender-id (.-tx e))))))
 
 
-;;DeadEvent
 ;;SuspectEvent
 ;;LeftEvent
 ;;PayloadEvent
