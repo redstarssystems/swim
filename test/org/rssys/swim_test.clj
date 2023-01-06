@@ -1548,18 +1548,18 @@
                                              (= (:id node2-data) (:node-id v)))
                                        (deliver *expecting-event v))))]
             (add-tap event-catcher-fn)
-            (m/assert pos-int? (sut/send-events node1 events (:host node2-data) (:port node2-data)))
+            (m/assert pos-int? (sut/send-events node1 events (sut/get-host node2) (sut/get-port node2)))
             (no-timeout-check *expecting-event)
             (m/assert [(.prepare event1) (.prepare event2) (.prepare event3)] (sut/get-payload node2))
             (remove-tap event-catcher-fn)))
 
         (testing "should rise an exception if UDP packet size is too big"
           (is (thrown-with-msg? Exception #"UDP packet is too big"
-                (sut/send-events node1 events (:host node2-data) (:port node2-data)
+                (sut/send-events node1 events (sut/get-host node2) (sut/get-port node2)
                   {:max-udp-size 1}))))
 
         (testing "should ignore UDP size check and send events anyway"
-          (m/assert pos-int? (sut/send-events node1 events (:host node2-data) (:port node2-data)
+          (m/assert pos-int? (sut/send-events node1 events (sut/get-host node2) (sut/get-port node2)
                                {:max-udp-size 1 :ignore-max-udp-size? true})))
 
         (catch Exception e
@@ -1580,7 +1580,7 @@
         (sut/upsert-neighbour this neighbour)
 
         (testing "using host:port should return number of bytes sent"
-          (m/assert pos-int? (sut/send-event this event (:host node2-nb-data) (:port node2-nb-data))))
+          (m/assert pos-int? (sut/send-event this event (sut/get-host this) (sut/get-port this))))
 
         (testing "using neighbour id should return number of bytes sent"
           (m/assert pos-int? (sut/send-event this event (:id neighbour))))
@@ -1768,7 +1768,7 @@
     (testing "should not process ProbeAck if Probe event was never sent"
       (let [node1       (sut/new-node-object node1-data cluster)
             node2       (sut/new-node-object node2-data cluster)
-            probe-event (sut/new-probe-event node1 (:host node2-data) (:port node2-data))
+            probe-event (sut/new-probe-event node1 (sut/get-host node2) (sut/get-port node2))
             node1-id    (sut/get-id node1)
             [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event-probe-never-send-error)]
 
@@ -1776,7 +1776,7 @@
           (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
           (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
 
-          (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (:host node1-data) (:port node1-data))
+          (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (sut/get-host node1) (sut/get-port node1))
 
           (testing "should rise an error and have no probe ack events"
             (no-timeout-check *e1)
@@ -1844,7 +1844,7 @@
             (m/assert 1 (count (sut/get-neighbours node2)))
             (m/assert {node1-id {}} (sut/get-neighbours node2)))
 
-          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
 
           (testing "node2 should upsert neighbour"
             (no-timeout-check *e2))
@@ -1880,7 +1880,7 @@
           (testing "node2 should have zero neighbours before anti-entropy event "
             (m/assert 0 (count (sut/get-neighbours node2))))
 
-          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
           (no-timeout-check *e1)
 
           (testing "node2 should have zero neighbours after anti-entropy event "
@@ -1910,7 +1910,7 @@
           (testing "node2 should have one neighbour before anti-entropy event "
             (m/assert 1 (count (sut/get-neighbours node2))))
 
-          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
           (no-timeout-check *e1)
 
           (testing "node2 should have one neighbour after anti-entropy event "
@@ -1940,7 +1940,7 @@
           (testing "node2 should have one neighbour before anti-entropy event "
             (m/assert 1 (count (sut/get-neighbours node2))))
 
-          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
           (no-timeout-check *e1)
 
           (testing "node2 should have one neighbour after anti-entropy event "
@@ -1971,7 +1971,7 @@
           (testing "node2 should have one neighbour before anti-entropy event "
             (m/assert 1 (count (sut/get-neighbours node2))))
 
-          (sut/send-event node1 (sut/new-anti-entropy-event node1) (:host node2-data) (:port node2-data))
+          (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
           (no-timeout-check *e1)
 
           (testing "node2 should have one neighbour after anti-entropy event "
@@ -3839,4 +3839,6 @@
 
 (comment
   (require '[kaocha.repl :as k])
-  (k/run 'org.rssys.swim-test {:kaocha.filter/focus-meta [:event-processing]}))
+  (k/run 'org.rssys.swim-test {:kaocha.filter/focus-meta [:event-processing]})
+  (k/run 'org.rssys.swim-test)
+  )
