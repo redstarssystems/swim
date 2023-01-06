@@ -1565,6 +1565,7 @@
         (set-nb-tx this sender-id (.-tx e))))))
 
 
+
 (defmethod event-processing DeadEvent
   [^NodeObject this ^DeadEvent e]
   (let [sender-id (:id e)
@@ -1591,7 +1592,12 @@
         (set-nb-tx this sender-id (.-tx e))))))
 
 
-;;SuspectEvent
+;; this event will be not propagated in the cluster so far
+(defmethod event-processing SuspectEvent
+  [^NodeObject this ^SuspectEvent e]
+  (d> :suspect-event (get-id this) e))
+
+
 ;;LeftEvent
 ;;PayloadEvent
 
