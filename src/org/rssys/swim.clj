@@ -1499,8 +1499,8 @@
 
       (alive-event-join-confirm? this e)
       (do
-        (d> :alive-event-join-confirmed (get-id this) e)
-        (set-status this :alive))
+        (set-status this :alive)
+        (d> :alive-event-join-confirmed (get-id this) e))
 
       (not (alive-node? this))
       (d> :alive-event-not-alive-node-error (get-id this) e)
