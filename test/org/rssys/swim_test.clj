@@ -3335,7 +3335,8 @@
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
 
-          (sut/join node1)
+          (testing "should return true when node status became alive"
+            (m/assert true (sut/join node1)))
 
           (testing "join confirmation as alive event should happen on node1"
             (no-timeout-check *e4)
@@ -3396,7 +3397,11 @@
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
 
-          (sut/join node1)
+          (testing "should return false cause join fails"
+            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+
+          (testing "status should be :left if join fails"
+            (m/assert :left (sut/get-status node1)))
 
           (testing "join event from node1 should be rejected on node2"
             (no-timeout-check *e1)
@@ -3432,7 +3437,12 @@
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
           (sut/set-nb-restart-counter node2 node1-id 999)
-          (sut/join node1)
+
+          (testing "should return false cause join fails"
+            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+
+          (testing "status should be :left if join fails"
+            (m/assert :left (sut/get-status node1)))
 
           (testing "node1 should receive reject for join from node2"
             (no-timeout-check *e2)
@@ -3476,7 +3486,11 @@
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
 
-          (sut/join node1)
+          (testing "should return false cause join fails"
+            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+
+          (testing "status should be :left if join fails"
+            (m/assert :left (sut/get-status node1)))
 
           (testing "node1 should receive reject for join from node2"
             (no-timeout-check *e2)
@@ -3519,7 +3533,12 @@
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
           (sut/set-nb-tx node2 node1-id 999)
-          (sut/join node1)
+
+          (testing "should return false cause join fails"
+            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+
+          (testing "status should be :left if join fails"
+            (m/assert :left (sut/get-status node1)))
 
           (testing "join event with outdated tx should be rejected on node2"
             (no-timeout-check *e1)
@@ -3679,7 +3698,7 @@
           (testing "should increase restart counter"
             (m/assert (inc current-restart-counter) (sut/get-restart-counter node1)))
 
-          (testing "repeat join should do nothing and return nil"
+          (testing "repeat join should do nothing and returns nil"
             (m/assert nil (sut/join node1))))
 
         (catch Exception e
@@ -3722,7 +3741,7 @@
           (testing "before join status should be left"
             (m/assert :left (sut/get-status node1)))
 
-          (testing "should return true"
+          (testing "should block thread until join confirmation from alive nodes then return true"
             (m/assert true (sut/join node1)))
 
           (testing "node1 should send join event to alive node2"

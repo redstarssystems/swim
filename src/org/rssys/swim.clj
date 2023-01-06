@@ -57,8 +57,10 @@
          :max-ping-without-ack-before-suspect 2             ;; How many pings without ack before node became suspect
          :max-ping-without-ack-before-dead    4             ;; How many pings without ack before node considered as dead
 
-         ;; Send ping+events to neighbours every N ms
-         :ping-heartbeat-ms                   300}))
+
+         :ping-heartbeat-ms                   300           ;; Send ping+events to neighbours every N ms
+         :max-join-time-ms                    2000          ;; How much time node awaits join confirmation before timeout
+         }))
 
 
 (def *stat
@@ -1634,23 +1636,25 @@
 
 ;; FIXME: start process of periodic event send from buffer
 ;; FIXME: start process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
-;; TODO: what if join takes too much time or udp packet with join is lost?
 (defn join
-  "Join this node to the cluster.
-   If status is already :alive or :join then do nothing and exit.
+  "Join this node to the cluster. Blocks thread until join confirmation from alive nodes.
+   If status is already :alive or :join then returns nil and do nothing.
 
    Increase restart counter.
 
    If cluster size > 1:
     1. Set status for this node as :join.
     2. Notify known alive neighbours for this node
+    3. Block thread and wait for join confirmation event from alive nodes.
+       When status became alive or timeout happens (max-join-time-ms) continue thread execution.
+    4. If join fails then set status :left
 
    If cluster size = 1:
     0. Delete all neighbours info
     1. Set status for this node as :alive and become single node in the cluster
 
-  Returns true if join complete or nil if already has join or alive status"
-  [^NodeObject this]
+  Returns true if join complete, false if join fails due to timeout or nil if already has join or alive status"
+  [^NodeObject this & {:keys [max-join-time-ms] :or {max-join-time-ms (-> @*config :max-join-time-ms)}}]
   (when-not (or (alive-node? this) (= :join (get-status this)))
 
     (set-restart-counter this (inc (get-restart-counter this)))
@@ -1670,15 +1674,36 @@
         (let [n             (calc-n cluster-size)
               join-event    (new-join-event this)
               alive-nb-ids  (mapv :id (get-alive-neighbours this))
-              nb-random-ids (take n (shuffle alive-nb-ids))]
+              nb-random-ids (take n (shuffle alive-nb-ids))
+              *join-await-promise (promise)]
+
           (set-status this :join)
+
+          (add-watch (:*node this) :join-await-watcher
+            (fn [_ _ _ new-state]
+              (when (= :alive (:status new-state))
+                (deliver *join-await-promise :alive))))
+
           (when (seq nb-random-ids)
             (run!
               (fn [nb-id] (send-event this join-event nb-id))
               nb-random-ids))
+
           (d> :join (get-id this) {:cluster-size        cluster-size
                                    :notified-neighbours (vec nb-random-ids)})
-          true)))))
+
+          (if (alive-node? this)
+            (do
+              (remove-watch (:*node this) :join-await-watcher)
+              true)
+            (do
+              (deref *join-await-promise max-join-time-ms :timeout)
+              (remove-watch (:*node this) :join-await-watcher)
+              (if (alive-node? this)
+                true
+                (do
+                  (set-status this :left)
+                  false)))))))))
 
 
 
