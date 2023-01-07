@@ -1642,6 +1642,9 @@
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
     (cond
 
+      (not (alive-node? this))
+      (d> :left-event-not-alive-node-error (get-id this) e)
+
       (= :unknown-neighbour sender)
       (d> :left-event-unknown-neighbour-error (get-id this) e)
 
@@ -1667,6 +1670,9 @@
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
     (cond
+
+      (not (alive-node? this))
+      (d> :payload-event-not-alive-node-error (get-id this) e)
 
       (= :unknown-neighbour sender)
       (d> :payload-event-unknown-neighbour-error (get-id this) e)
