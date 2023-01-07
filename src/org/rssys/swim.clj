@@ -1759,7 +1759,6 @@
 
 
 ;; TODO: stop process of periodic event send from buffer
-;; TODO: stop process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
 (defn node-leave
   "Leave the cluster"
   [^NodeObject _])
@@ -1767,7 +1766,6 @@
 
 
 ;; FIXME: start process of periodic event send from buffer
-;; FIXME: start process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
 (defn node-join
   "Join this node to the cluster. Blocks thread until join confirmation from alive nodes.
    If status is already :alive or :join then returns nil and do nothing.
