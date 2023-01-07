@@ -1684,7 +1684,7 @@
 
 
 (defn udp-packet-processor
-  "Main function to process all incoming UDP packets. UDP packets will be decrypted, serialized to events.
+  "Main function to process all incoming UDP packets. UDP packets will be decrypted, deserialized to events.
   Events will be processed one by one and dispatched to corresponding event handler.
   Returns void."
   [^NodeObject this ^bytes encrypted-data]
