@@ -1564,6 +1564,9 @@
         alive-number (nodes-in-cluster this)]
     (cond
 
+      (not (alive-node? this))
+      (d> :new-cluster-size-event-not-alive-node-error (get-id this) e)
+
       (= :unknown-neighbour sender)
       (d> :new-cluster-size-event-unknown-neighbour-error (get-id this) e)
 
@@ -1593,6 +1596,17 @@
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
     (cond
+
+      (= (get-id this) (.-neighbour_id e))
+      (when (and
+              (alive-neighbour? sender)
+              (suitable-restart-counter? this e)
+              (suitable-tx? this e))
+        (d> :dead-event-about-this-node-error (get-id this) e)
+        (set-left-status this))
+
+      (not (alive-node? this))
+      (d> :dead-event-not-alive-node-error (get-id this) e)
 
       (= :unknown-neighbour sender)
       (d> :dead-event-unknown-neighbour-error (get-id this) e)
