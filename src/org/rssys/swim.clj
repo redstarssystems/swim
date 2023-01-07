@@ -1727,7 +1727,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(defn start
+(defn node-start
   "Start the node and run `node-process-fn` in a separate virtual thread.
    Params:
     * `node-process-fn` - fn with one arg `this` for main node process. It may look for :continue? flag in UDP server.
@@ -1749,7 +1749,7 @@
 
 
 
-(defn probe
+(defn node-probe
   "Send probe event to neighbour. Put probe key to probe events map.
   Returns probe key."
   ^UUID [^NodeObject this ^String neighbour-host ^long neighbour-port]
@@ -1762,7 +1762,7 @@
 
 ;; TODO: stop process of periodic event send from buffer
 ;; TODO: stop process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
-(defn leave
+(defn node-leave
   "Leave the cluster"
   [^NodeObject _])
 
@@ -1770,7 +1770,7 @@
 
 ;; FIXME: start process of periodic event send from buffer
 ;; FIXME: start process of periodic clean neighbour table from old nodes. Or we need to remove dead nodes.
-(defn join
+(defn node-join
   "Join this node to the cluster. Blocks thread until join confirmation from alive nodes.
    If status is already :alive or :join then returns nil and do nothing.
 
@@ -1841,7 +1841,7 @@
 
 
 
-(defn ping
+(defn node-ping
   "Send Ping event to neighbour node. Also, all known messages
   Returns sent ping event if success or :ping-unknown-neighbour-id-error if error."
   [^NodeObject this neighbour-id]
@@ -1861,11 +1861,11 @@
       :ping-unknown-neighbour-id-error)))
 
 
-(defn stop
+(defn node-stop
   "Stop the node and leave the cluster"
   [^NodeObject this]
   (let [{:keys [*udp-server scheduler-pool]} (get-value this)]
-    (leave this)
+    (node-leave this)
     (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
     (swap! (:*node this) assoc
       :*udp-server (when *udp-server (udp/stop *udp-server))

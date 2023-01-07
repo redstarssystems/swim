@@ -1568,8 +1568,8 @@
           event3 (sut/new-anti-entropy-event node1)
           events [event1 event2 event3]]
       (try
-        (sut/start node2 empty-node-process-fn set-incoming-data-to-payload-processor-fn)
-        (sut/start node1 empty-node-process-fn #(do [%1 %2]))
+        (sut/node-start node2 empty-node-process-fn set-incoming-data-to-payload-processor-fn)
+        (sut/node-start node1 empty-node-process-fn #(do [%1 %2]))
 
         (testing "should transform all given events and send them to node2"
           (let [*expecting-event (promise)
@@ -1597,8 +1597,8 @@
         (catch Exception e
           (print-ex e))
         (finally
-          (sut/stop node1)
-          (sut/stop node2))))))
+          (sut/node-stop node1)
+          (sut/node-stop node2))))))
 
 
 (deftest send-event-test
@@ -1608,7 +1608,7 @@
           neighbour (sut/new-neighbour-node node2-nb-data)
           event     (sut/new-cluster-size-event this 5)]
       (try
-        (sut/start this empty-node-process-fn #(do [%1 %2]))
+        (sut/node-start this empty-node-process-fn #(do [%1 %2]))
         (sut/upsert-neighbour this neighbour)
 
         (testing "using host:port should return number of bytes sent"
@@ -1624,7 +1624,7 @@
         (catch Exception e
           (print-ex e))
         (finally
-          (sut/stop this))))))
+          (sut/node-stop this))))))
 
 
 
@@ -1634,7 +1634,7 @@
           neighbour (sut/new-neighbour-node node2-nb-data)
           event     (sut/new-cluster-size-event this 5)]
       (try
-        (sut/start this empty-node-process-fn #(do [%1 %2]))
+        (sut/node-start this empty-node-process-fn #(do [%1 %2]))
         (sut/upsert-neighbour this neighbour)
 
         (testing "using host:port"
@@ -1664,7 +1664,7 @@
         (catch Exception e
           (print-ex e))
         (finally
-          (sut/stop this))))))
+          (sut/node-stop this))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1704,10 +1704,10 @@
           [*e1 e1-tap-fn] (set-event-catcher node2-id :udp-packet-processor)]
       (try
 
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
-        (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
+        (let [probe-key (sut/node-probe node1 (sut/get-host node2) (sut/get-port node2))]
 
           (no-timeout-check *e1)
 
@@ -1724,8 +1724,8 @@
           (print-ex e))
         (finally
           (remove-tap e1-tap-fn)
-          (sut/stop node1)
-          (sut/stop node2))))))
+          (sut/node-stop node1)
+          (sut/node-stop node2))))))
 
 
 (deftest ^:event-processing probe-event-test
@@ -1741,11 +1741,11 @@
             [*e3 e3-tap-fn] (set-event-catcher node1-id :upsert-neighbour)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (testing "should receive ProbeAck event on node1"
-            (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
+            (let [probe-key (sut/node-probe node1 (sut/get-host node2) (sut/get-port node2))]
 
               (testing "should be ProbeAck event from node2"
                 (no-timeout-check *e1)
@@ -1768,8 +1768,8 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should not upsert neighbour if cluster size limit exceed"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -1779,11 +1779,11 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-neighbour-cluster-size-exceeded-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-cluster-size node1 1)
-          (sut/probe node1 (sut/get-host node2) (sut/get-port node2))
+          (sut/node-probe node1 (sut/get-host node2) (sut/get-port node2))
 
           (testing "should rise error on upsert neighbour"
             (no-timeout-check *e1)
@@ -1794,8 +1794,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should not process ProbeAck if Probe event was never sent"
       (let [node1       (sut/new-node-object node1-data cluster)
@@ -1805,8 +1805,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event-probe-never-send-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (sut/get-host node1) (sut/get-port node1))
 
@@ -1818,8 +1818,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should not upsert neighbour from ProbeAck when status is alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -1829,12 +1829,12 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-probe-ack)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
           (sut/set-alive-status node1)
 
           (testing "should receive ProbeAck event on node1"
-            (let [probe-key (sut/probe node1 (sut/get-host node2) (sut/get-port node2))]
+            (let [probe-key (sut/node-probe node1 (sut/get-host node2) (sut/get-port node2))]
 
               (testing "should insert ProbeAck response into probe event map under probe key"
                 (no-timeout-check *e1)
@@ -1850,8 +1850,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))))
 
 
 (deftest ^:event-processing anti-entropy-event-test
@@ -1866,8 +1866,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node2-id :upsert-neighbour)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
@@ -1894,8 +1894,8 @@
           (finally
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should do nothing if anti-entropy event from unknown node"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -1904,8 +1904,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
@@ -1922,8 +1922,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should do nothing if anti-entropy event has bad restart counter"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -1932,8 +1932,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-bad-restart-counter-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node
@@ -1952,8 +1952,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should do nothing if anti-entropy event has bad tx"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -1962,8 +1962,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node
@@ -1982,8 +1982,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should do nothing if anti-entropy event from not alive node"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -1993,8 +1993,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-not-alive-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
@@ -2013,8 +2013,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))))
 
 
 (deftest ^:event-processing indirect-ack-event-test
@@ -2033,9 +2033,9 @@
             [*e3 e3-tap-fn] (set-event-catcher node1-id :put-event)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2100,9 +2100,9 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event if its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2114,9 +2114,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-not-alive-node-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -2148,9 +2148,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "intermediate node should reject event if its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2161,9 +2161,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :indirect-ack-event-not-alive-node-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-left-status node2)
@@ -2192,9 +2192,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event from unknown neighbour"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2206,9 +2206,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2238,9 +2238,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event with bad restart counter"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2252,9 +2252,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-bad-restart-counter-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2283,9 +2283,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event with bad tx"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2297,9 +2297,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2328,9 +2328,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event if indirect ping request was never sent"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2342,9 +2342,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-not-expected-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2371,9 +2371,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))))
 
 
 (deftest ^:event-processing indirect-ping-event-test
@@ -2393,9 +2393,9 @@
             [*e4 e4-tap-fn] (set-event-catcher node2-id :intermediate-node-indirect-ping-event)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2452,9 +2452,9 @@
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
             (remove-tap e4-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event if its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2466,9 +2466,9 @@
             [*e4 e4-tap-fn] (set-event-catcher node2-id :intermediate-node-indirect-ping-event)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2500,9 +2500,9 @@
           (finally
             (remove-tap e1-tap-fn)
             (remove-tap e4-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "intermediate node should reject event if its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2513,9 +2513,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :indirect-ping-event-not-alive-node-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-left-status node2)
@@ -2543,9 +2543,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event from unknown neighbour"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2557,9 +2557,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2588,9 +2588,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event with bad restart counter"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2602,9 +2602,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-bad-restart-counter-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2633,9 +2633,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event with bad tx"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2647,9 +2647,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2678,9 +2678,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "destination node should reject event intended for different node"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2691,9 +2691,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-neighbour-id-mismatch-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2721,9 +2721,9 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))))
 
 
 (deftest ^:event-processing ack-event-test
@@ -2739,8 +2739,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node1-id :put-event)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2788,8 +2788,8 @@
           (finally
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event if its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2799,8 +2799,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-node-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -2829,8 +2829,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event if its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2840,8 +2840,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-node-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -2865,8 +2865,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event from unknown neighbour"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2876,8 +2876,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2897,8 +2897,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event from not alive neighbour"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2908,8 +2908,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2931,8 +2931,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event with bad restart counter"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2942,8 +2942,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-bad-restart-counter-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2966,8 +2966,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event with bad tx"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2977,8 +2977,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3001,8 +3001,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event if ping request was never sent"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3012,8 +3012,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-expected-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3033,8 +3033,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))))
 
 
 (deftest ^:event-processing ping-event-test
@@ -3053,8 +3053,8 @@
             [*e5 e5-tap-fn] (set-event-catcher node2-id :upsert-neighbour)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3109,8 +3109,8 @@
             (remove-tap e3-tap-fn)
             (remove-tap e4-tap-fn)
             (remove-tap e5-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event cause its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3119,8 +3119,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-not-alive-node-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-left-status node2)
@@ -3140,8 +3140,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event from unknown neighbour"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3150,8 +3150,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3170,8 +3170,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event from not alive neighbour"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3183,8 +3183,8 @@
             [*e3 e3-tap-fn] (set-event-catcher node1-id :udp-packet-processor)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3219,8 +3219,8 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event with bad restart counter"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3232,8 +3232,8 @@
             [*e3 e3-tap-fn] (set-event-catcher node1-id :udp-packet-processor {:cmd-type 6})]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3269,8 +3269,8 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event with bad tx"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3280,8 +3280,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3303,8 +3303,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event intended for other node"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3313,8 +3313,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-neighbour-id-mismatch-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3337,8 +3337,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))))
 
 
 (deftest ^:event-processing join-event-test
@@ -3358,8 +3358,8 @@
             [*e4 e4-tap-fn] (set-event-catcher node1-id :udp-packet-processor)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3368,7 +3368,7 @@
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
 
           (testing "should return true when node status became alive"
-            (m/assert true (sut/join node1)))
+            (m/assert true (sut/node-join node1)))
 
           (testing "join confirmation as alive event should happen on node1"
             (no-timeout-check *e4)
@@ -3407,8 +3407,8 @@
             (remove-tap e3-tap-fn)
             (remove-tap e4-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "destination node should reject event cause its status is not alive"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3420,8 +3420,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :join-event-not-alive-node-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-dead-status node2)
@@ -3430,7 +3430,7 @@
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
 
           (testing "should return false cause join fails"
-            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+            (m/assert false (sut/node-join node1 {:max-join-time-ms 1})))
 
           (testing "status should be :left if join fails"
             (m/assert :left (sut/get-status node1)))
@@ -3447,8 +3447,8 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject join event from the dead node"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3459,8 +3459,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node1-id :udp-packet-processor {:cmd-type 6})]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3471,7 +3471,7 @@
           (sut/set-nb-restart-counter node2 node1-id 999)
 
           (testing "should return false cause join fails"
-            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+            (m/assert false (sut/node-join node1 {:max-join-time-ms 1})))
 
           (testing "status should be :left if join fails"
             (m/assert :left (sut/get-status node1)))
@@ -3495,8 +3495,8 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject join event if cluster size exceeded and new node is not in the table of known nodes"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3507,8 +3507,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node1-id :udp-packet-processor {:cmd-type 6})]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3519,7 +3519,7 @@
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
 
           (testing "should return false cause join fails"
-            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+            (m/assert false (sut/node-join node1 {:max-join-time-ms 1})))
 
           (testing "status should be :left if join fails"
             (m/assert :left (sut/get-status node1)))
@@ -3543,8 +3543,8 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
 
     (testing "should reject join event with bad tx"
@@ -3555,8 +3555,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :join-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3567,7 +3567,7 @@
           (sut/set-nb-tx node2 node1-id 999)
 
           (testing "should return false cause join fails"
-            (m/assert false (sut/join node1 {:max-join-time-ms 1})))
+            (m/assert false (sut/node-join node1 {:max-join-time-ms 1})))
 
           (testing "status should be :left if join fails"
             (m/assert :left (sut/get-status node1)))
@@ -3581,8 +3581,8 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (sut/stop node1)
-            (sut/stop node2)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))))
 
 
 (deftest ^:event-processing alive-event-test
@@ -3599,8 +3599,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :alive-event-join-confirmed)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3608,7 +3608,7 @@
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
 
-          (sut/join node1)
+          (sut/node-join node1)
 
           (testing "node1 should receive alive event for join confirmation from node2"
             (no-timeout-check *e1)
@@ -3625,8 +3625,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
 
     (testing "should process alive event about joined node1 on other alive nodes"
@@ -3642,9 +3642,9 @@
             [*e2 e2-tap-fn] (set-event-catcher node3-id :alive-event)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3656,7 +3656,7 @@
 
           (sut/set-outgoing-events node2 [])
 
-          (sut/join node1)
+          (sut/node-join node1)
 
           (testing "node2 should put alive event about node1 to outgoing events buffer"
             (no-timeout-check *e1)
@@ -3682,9 +3682,9 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))))
 
 
 (deftest ^:event-processing new-cluster-size-test
@@ -3708,9 +3708,9 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3750,9 +3750,9 @@
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event if new size is less than alive nodes number"
       (let [node1                  (sut/new-node-object node1-data cluster)
@@ -3771,9 +3771,9 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3809,9 +3809,9 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event from unknown neighbour"
       (let [node1                  (sut/new-node-object node1-data cluster)
@@ -3826,8 +3826,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3848,8 +3848,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject event with bad restart counter"
       (let [node1                  (sut/new-node-object node1-data cluster)
@@ -3864,8 +3864,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3887,8 +3887,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject event with bad tx"
       (let [node1                  (sut/new-node-object node1-data cluster)
@@ -3903,8 +3903,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3926,8 +3926,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject event from not alive neighbour"
       (let [node1                  (sut/new-node-object node1-data cluster)
@@ -3942,8 +3942,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3965,8 +3965,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))))
 
 
 (deftest ^:event-processing dead-event-test
@@ -3986,9 +3986,9 @@
             [*e3 e3-tap-fn] (set-event-catcher node3-id :delete-neighbour)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4022,9 +4022,9 @@
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event from unknown neighbour"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4035,9 +4035,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4060,9 +4060,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event with bad restart counter"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4073,9 +4073,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-bad-restart-counter-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4100,9 +4100,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event with bad tx"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4113,9 +4113,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4140,9 +4140,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event from not alive neighbour"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4153,9 +4153,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-not-alive-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4180,9 +4180,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))))
 
 
 
@@ -4203,9 +4203,9 @@
             [*e3 e3-tap-fn] (set-event-catcher node3-id :delete-neighbour)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4239,9 +4239,9 @@
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event from unknown neighbour"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4251,9 +4251,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :left-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4276,9 +4276,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event with bad restart counter"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4288,9 +4288,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :left-event-bad-restart-counter-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4315,9 +4315,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event with bad tx"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4327,9 +4327,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :left-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4354,9 +4354,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))
 
     (testing "should reject event from not alive neighbour"
       (let [node1      (sut/new-node-object node1-data cluster)
@@ -4367,9 +4367,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-not-alive-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4394,9 +4394,9 @@
             (remove-tap e1-tap-fn)
 
 
-            (sut/stop node1)
-            (sut/stop node2)
-            (sut/stop node3)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)
+            (sut/node-stop node3)))))))
 
 
 
@@ -4417,8 +4417,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node2-id :put-event {:cmd-type 7})]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4445,8 +4445,8 @@
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject event from unknown neighbour"
       (let [node1       (sut/new-node-object node1-data cluster)
@@ -4460,8 +4460,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-unknown-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4482,8 +4482,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject event with bad restart counter"
       (let [node1       (sut/new-node-object node1-data cluster)
@@ -4497,8 +4497,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-bad-restart-counter-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4521,8 +4521,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject event with bad tx"
       (let [node1       (sut/new-node-object node1-data cluster)
@@ -4536,8 +4536,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-bad-tx-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4560,8 +4560,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))
 
     (testing "should reject event from not alive neighbour"
       (let [node1       (sut/new-node-object node1-data cluster)
@@ -4575,8 +4575,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-not-alive-neighbour-error)]
 
         (try
-          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4599,8 +4599,8 @@
           (finally
             (remove-tap e1-tap-fn)
 
-            (sut/stop node1)
-            (sut/stop node2)))))))
+            (sut/node-stop node1)
+            (sut/node-stop node2)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -4608,14 +4608,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(deftest ^:node-control join-test
+(deftest ^:node-control node-join-test
 
   (testing "join node to a single node cluster"
     (let [node1    (sut/new-node-object node1-data cluster)
           node1-id (sut/get-id node1)
           [*e1 e1-tap-fn] (set-event-catcher node1-id :join)]
       (try
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
@@ -4632,7 +4632,7 @@
             (m/assert pos-int? (count (sut/get-neighbours node1))))
 
           (testing "should return true"
-            (m/assert true (sut/join node1)))
+            (m/assert true (sut/node-join node1)))
 
           (testing "should set intermediate join status"
             (no-timeout-check *e1))
@@ -4647,13 +4647,13 @@
             (m/assert (inc current-restart-counter) (sut/get-restart-counter node1)))
 
           (testing "repeat join should do nothing and returns nil"
-            (m/assert nil (sut/join node1))))
+            (m/assert nil (sut/node-join node1))))
 
         (catch Exception e
           (print-ex e))
         (finally
           (remove-tap e1-tap-fn)
-          (sut/stop node1)))))
+          (sut/node-stop node1)))))
 
   (testing "join node to a cluster of 3 nodes"
     (let [node1    (sut/new-node-object node1-data cluster)
@@ -4666,9 +4666,9 @@
           [*e2 e2-tap-fn] (set-event-catcher node1-id :set-status {:new-status :join})]
 
       (try
-        (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
-        (sut/start node3 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
@@ -4690,7 +4690,7 @@
             (m/assert :left (sut/get-status node1)))
 
           (testing "should block thread until join confirmation from alive nodes then return true"
-            (m/assert true (sut/join node1)))
+            (m/assert true (sut/node-join node1)))
 
           (testing "node1 should send join event to alive node2"
             (no-timeout-check *e1)
@@ -4706,27 +4706,25 @@
             (m/assert (inc current-restart-counter) (sut/get-restart-counter node1)))
 
           (testing "repeat join should do nothing and return nil"
-            (m/assert nil (sut/join node1))))
+            (m/assert nil (sut/node-join node1))))
 
         (catch Exception e
           (print-ex e))
         (finally
           (remove-tap e1-tap-fn)
           (remove-tap e2-tap-fn)
-          (sut/stop node1)
-          (sut/stop node2)
-          (sut/stop node3))))))
+          (sut/node-stop node1)
+          (sut/node-stop node2)
+          (sut/node-stop node3))))))
 
 
 
 
 
+        (is (=  1 1))
 
-
-
-
-(comment
-  (require '[kaocha.repl :as k])
-  (k/run 'org.rssys.swim-test {:kaocha.filter/focus-meta [:event-processing]})
-  (k/run 'org.rssys.swim-test)
-  )
+        (catch Exception e
+          (print-ex e))
+        (finally
+          (remove-tap e1-tap-fn)
+          (sut/node-stop node1))))))
