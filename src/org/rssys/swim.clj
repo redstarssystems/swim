@@ -858,7 +858,6 @@
 
 
 
-;; TODO where to check if new cluster size is less than active nodes in a cluster?
 (defn new-cluster-size-event
   "Returns new NewClusterSizeEvent event. Increase tx of `this` node.
   This event should be created before cluster size changed."
