@@ -414,10 +414,11 @@
 (defn set-payload
   "Set new payload for this node.
   Max size of payload is limited by `*max-payload-size*`."
-  [^NodeObject this payload]
+  [^NodeObject this payload & {:keys [max-payload-size] :or {max-payload-size (:max-payload-size @*config)}}]
   ;;TODO: send event to cluster about new payload
-  (when (> (alength ^bytes (serialize payload)) (:max-payload-size @*config))
-    (throw (ex-info "Payload size is too big" {:max-allowed (:max-payload-size @*config)})))
+  (let [actual-size (alength ^bytes (serialize payload))]
+    (when (> actual-size max-payload-size)
+      (throw (ex-info "Payload size is too big" {:max-allowed max-payload-size :actual-size actual-size}))))
   (d> :set-payload (get-id this) {:payload payload})
   (swap! (:*node this) assoc :payload payload))
 
@@ -945,6 +946,13 @@
 ;; Helper functions
 ;;;;;;;;;;;;;;;;;;;
 
+(defn get-nb-payload
+  "Get neighbour payload. If neighbour not exist returns nil.
+  Returns map."
+  [^NodeObject this ^UUID neighbour-id]
+  (when-let [nb (get-neighbour this neighbour-id)]
+    (.-payload nb)))
+
 
 (defn suitable-restart-counter?
   "Check restart counter is suitable from event or given neighbour.
@@ -1115,6 +1123,22 @@
   [^NodeObject this ^UUID neighbour-id]
   (when-let [nb (get-neighbour this neighbour-id)]
     (upsert-neighbour this (assoc nb :access :indirect))))
+
+
+(defn set-nb-payload
+  "Set payload for neighbour in neighbours map.
+  If neighbour not exist then do nothing.
+  Returns void."
+  [^NodeObject this ^UUID neighbour-id payload &
+   {:keys [max-payload-size] :or {max-payload-size (:max-payload-size @*config)}}]
+  (let [actual-size (alength ^bytes (serialize payload))]
+    (when (> actual-size max-payload-size)
+      (d> :set-nb-payload-too-big-error (get-id this)
+        {:max-allowed max-payload-size :actual-size actual-size :neighbour-id neighbour-id})
+      (throw (ex-info "Payload size for neighbour is too big"
+               {:max-allowed max-payload-size :actual-size actual-size :neighbour-id neighbour-id}))))
+  (when-let [nb (get-neighbour this neighbour-id)]
+    (upsert-neighbour this (assoc nb :payload payload))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1625,7 +1649,31 @@
         (put-event this e)))))
 
 
-;;PayloadEvent
+
+(defmethod event-processing PayloadEvent
+  [^NodeObject this ^PayloadEvent e]
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+    (cond
+
+      (= :unknown-neighbour sender)
+      (d> :payload-event-unknown-neighbour-error (get-id this) e)
+
+      (not (suitable-restart-counter? this e))
+      (d> :payload-event-bad-restart-counter-error (get-id this) e)
+
+      (not (suitable-tx? this e))
+      (d> :payload-event-bad-tx-error (get-id this) e)
+
+      (not (alive-neighbour? sender))
+      (d> :payload-event-not-alive-neighbour-error (get-id this) e)
+
+      :else
+      (do
+        (d> :payload-event (get-id this) e)
+        (set-nb-payload this sender-id (.-payload e))
+        (put-event this e)))))
+
 
 
 

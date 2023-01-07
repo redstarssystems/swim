@@ -1241,6 +1241,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(deftest get-nb-payload-test
+  (testing "get payload for neighbour"
+    (let [this    (sut/new-node-object node1-data cluster)
+          payload {:old-payload 123}
+          nb      (sut/new-neighbour-node (assoc node2-nb-data :payload payload))]
+      (sut/upsert-neighbour this nb)
+
+      (testing "should get payload value for neighbour"
+        (m/assert payload (sut/get-nb-payload this (.-id nb)))))))
+
+
+
 (deftest suitable-restart-counter?-test
   (testing "check restart counter in event"
     (let [node1      (sut/new-node-object node1-data cluster)
@@ -1503,6 +1515,26 @@
         (m/assert direct-access (:access (sut/get-neighbour this (.-id nb))))
         (sut/set-nb-indirect-access this (.-id nb))
         (m/assert indirect-access (:access (sut/get-neighbour this (.-id nb))))))))
+
+
+(deftest set-nb-payload-test
+
+  (testing "set payload for neighbour"
+    (let [this        (sut/new-node-object node1-data cluster)
+          old-payload {:old-payload 123}
+          new-payload {:new-payload 1234}
+          nb          (sut/new-neighbour-node (assoc node2-nb-data :payload old-payload))]
+      (sut/upsert-neighbour this nb)
+
+      (testing "should set new payload value for neighbour"
+        (m/assert old-payload (sut/get-nb-payload this (.-id nb)))
+        (sut/set-nb-payload this (.-id nb) new-payload)
+        (m/assert new-payload (sut/get-nb-payload this (.-id nb))))
+
+      (testing "should rise an exception if payload is too big"
+        (is (thrown-with-msg? Exception #"Payload size for neighbour is too big"
+              (sut/set-nb-payload this (.-id nb)
+                {:long-string (apply str (repeat (:max-payload-size @sut/*config) "a"))})))))))
 
 
 ;;;;;;;;;;;;;;;;;;;
@@ -4365,6 +4397,210 @@
             (sut/stop node1)
             (sut/stop node2)
             (sut/stop node3)))))))
+
+
+
+(deftest ^:event-processing payload-event-test
+
+  (testing "payload event processing"
+
+    (testing "should accept event on alive node"
+      (let [node1       (sut/new-node-object node1-data cluster)
+            node2       (sut/new-node-object node2-data cluster)
+
+            node1-id    (sut/get-id node1)
+            node2-id    (sut/get-id node2)
+
+            new-payload {:hostname "localhost" :cert "abcde"}
+
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event)
+            [*e2 e2-tap-fn] (set-event-catcher node2-id :put-event {:cmd-type 7})]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (sut/set-payload node1 new-payload)
+          (sut/send-event node1 (sut/new-payload-event node1) node2-id)
+
+          (testing "should accept event"
+            (no-timeout-check *e1))
+
+          (testing "node2 should put event for outgoing events queue"
+            (no-timeout-check *e2))
+
+          (testing "should set new payload for neighbour in neighbours map"
+            (m/assert new-payload (sut/get-nb-payload node2 node1-id)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+            (remove-tap e2-tap-fn)
+
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "should reject event from unknown neighbour"
+      (let [node1       (sut/new-node-object node1-data cluster)
+            node2       (sut/new-node-object node2-data cluster)
+
+            node1-id    (sut/get-id node1)
+            node2-id    (sut/get-id node2)
+
+            new-payload {:hostname "localhost" :cert "abcde"}
+
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-unknown-neighbour-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+
+          (sut/set-payload node1 new-payload)
+          (sut/send-event node1 (sut/new-payload-event node1) node2-id)
+
+          (testing "should reject event"
+            (no-timeout-check *e1))
+
+          (testing "should have empty payload for neighbour in neighbours map"
+            (m/assert empty? (sut/get-nb-payload node2 node1-id)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "should reject event with bad restart counter"
+      (let [node1       (sut/new-node-object node1-data cluster)
+            node2       (sut/new-node-object node2-data cluster)
+
+            node1-id    (sut/get-id node1)
+            node2-id    (sut/get-id node2)
+
+            new-payload {:hostname "localhost" :cert "abcde"}
+
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-bad-restart-counter-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (sut/set-payload node1 new-payload)
+          (sut/set-nb-restart-counter node2 node1-id 999)
+          (sut/send-event node1 (sut/new-payload-event node1) node2-id)
+
+          (testing "should reject event"
+            (no-timeout-check *e1))
+
+          (testing "should have old payload for neighbour in neighbours map"
+            (m/assert (:payload node1-nb-data) (sut/get-nb-payload node2 node1-id)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "should reject event with bad tx"
+      (let [node1       (sut/new-node-object node1-data cluster)
+            node2       (sut/new-node-object node2-data cluster)
+
+            node1-id    (sut/get-id node1)
+            node2-id    (sut/get-id node2)
+
+            new-payload {:hostname "localhost" :cert "abcde"}
+
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-bad-tx-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (sut/set-payload node1 new-payload)
+          (sut/set-nb-tx node2 node1-id 999)
+          (sut/send-event node1 (sut/new-payload-event node1) node2-id)
+
+          (testing "should reject event"
+            (no-timeout-check *e1))
+
+          (testing "should have old payload for neighbour in neighbours map"
+            (m/assert (:payload node1-nb-data) (sut/get-nb-payload node2 node1-id)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+            (sut/stop node1)
+            (sut/stop node2)))))
+
+    (testing "should reject event from not alive neighbour"
+      (let [node1       (sut/new-node-object node1-data cluster)
+            node2       (sut/new-node-object node2-data cluster)
+
+            node1-id    (sut/get-id node1)
+            node2-id    (sut/get-id node2)
+
+            new-payload {:hostname "localhost" :cert "abcde"}
+
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-not-alive-neighbour-error)]
+
+        (try
+          (sut/start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/set-alive-status node1)
+          (sut/set-alive-status node2)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (sut/set-payload node1 new-payload)
+          (sut/set-nb-dead-status node2 node1-id)
+          (sut/send-event node1 (sut/new-payload-event node1) node2-id)
+
+          (testing "should reject event"
+            (no-timeout-check *e1))
+
+          (testing "should have old payload for neighbour in neighbours map"
+            (m/assert (:payload node1-nb-data) (sut/get-nb-payload node2 node1-id)))
+
+          (catch Exception e
+            (print-ex e))
+          (finally
+            (remove-tap e1-tap-fn)
+
+            (sut/stop node1)
+            (sut/stop node2)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
