@@ -415,7 +415,6 @@
   "Set new payload for this node.
   Max size of payload is limited by `*max-payload-size*`."
   [^NodeObject this payload & {:keys [max-payload-size] :or {max-payload-size (:max-payload-size @*config)}}]
-  ;;TODO: send event to cluster about new payload
   (let [actual-size (alength ^bytes (serialize payload))]
     (when (> actual-size max-payload-size)
       (throw (ex-info "Payload size is too big" {:max-allowed max-payload-size :actual-size actual-size}))))
@@ -1879,3 +1878,15 @@
   (d> :stop (get-id this) {}))
 
 
+
+(defn node-payload
+  "Get node payload"
+  [^NodeObject this]
+  (get-payload this))
+
+
+(defn node-payload-update
+  "Set node payload and send event with new payload to other nodes"
+  [^NodeObject this new-payload]
+  (set-payload this new-payload)
+  (put-event this (new-payload-event this)))

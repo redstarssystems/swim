@@ -4719,9 +4719,29 @@
 
 
 
+(deftest ^:node-control node-payload-update-test
+  (testing "payload update control command"
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node1-id        (sut/get-id node1)
+          new-payload     {:new :payload}
+          current-payload (sut/get-payload node1)
+          [*e1 e1-tap-fn] (set-event-catcher node1-id :put-event {:cmd-type 7})]
+      (try
+        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
 
+        (testing "before update should have current payload"
+          (m/assert current-payload (sut/node-payload node1)))
 
-        (is (=  1 1))
+        (sut/node-payload-update node1 new-payload)
+
+        (testing "after update should have new payload"
+          (m/assert new-payload (sut/node-payload node1)))
+
+        (testing "after update node should put event about payload update"
+          (no-timeout-check *e1)
+          (m/assert {:node-id node1-id
+                     :data {:event {:payload new-payload}}} @*e1))
 
         (catch Exception e
           (print-ex e))
