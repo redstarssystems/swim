@@ -1798,10 +1798,10 @@
 
         (= 1 cluster-size)
         (do
-          (set-status this :join)
+          (set-join-status this)
           (d> :join (get-id this) {:cluster-size cluster-size})
           (delete-neighbours this)
-          (set-status this :alive)
+          (set-alive-status this)
           true)
 
         (> cluster-size 1)
@@ -1811,7 +1811,7 @@
               nb-random-ids (take n (shuffle alive-nb-ids))
               *join-await-promise (promise)]
 
-          (set-status this :join)
+          (set-join-status this)
 
           (add-watch (:*node this) :join-await-watcher
             (fn [_ _ _ new-state]
@@ -1836,7 +1836,7 @@
               (if (alive-node? this)
                 true
                 (do
-                  (set-status this :left)
+                  (set-left-status this)
                   false)))))))))
 
 
