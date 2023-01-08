@@ -424,6 +424,7 @@
   (swap! (:*node this) assoc :payload payload))
 
 
+
 (defn set-restart-counter
   "Set node restart counter"
   [^NodeObject this ^long restart-counter]
@@ -1295,7 +1296,8 @@
             (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to a neighbours map
               (d> :anti-entropy-event (get-id this) ae-neighbour)
               (upsert-neighbour this ae-neighbour))))       ;; add a new neighbour
-        (set-nb-tx this sender-id (.-tx e))))))
+        (set-nb-tx this sender-id (.-tx e))
+        (set-nb-restart-counter this sender-id (.-restart_counter e))))))
 
 
 
@@ -1355,9 +1357,8 @@
       :else
       (do
         (d> :indirect-ack-event (get-id this) e)
-        (set-nb-tx this sender-id (.-tx e))
-        (set-nb-indirect-access this sender-id)
-        (set-nb-status this sender-id (.-status e))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :access :indirect :restart-counter (.-restart_counter e)
+                                 :status (.-status e)))
         (delete-indirect-ping this sender-id)
         (when (= :alive (.-status e))
           (put-event this (new-alive-event this e)))))))
@@ -1392,7 +1393,7 @@
 
       :else
       (let [_                  (d> :indirect-ping-event (get-id this) e)
-            _                  (set-nb-tx this sender-id (.-tx e))
+            _                  (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
             indirect-ack-event (new-indirect-ack-event this e)]
         (d> :indirect-ack-event (get-id this) indirect-ack-event)
         (send-event this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
@@ -1426,8 +1427,7 @@
       (do
         (d> :ack-event (get-id this) e)
         (delete-ping this sender-id)
-        (set-nb-tx this sender-id (.-tx e))
-        (set-nb-alive-status this sender-id)
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
         (when (= :suspect (:status sender))
           (put-event this (new-alive-event this e)))))))
 
@@ -1464,9 +1464,8 @@
       :else
       (do
         (d> :ping-event (get-id this) e)
-        (upsert-neighbour this (assoc nb :host (.-host e) :port (.-port e)))
-        (set-nb-tx this neighbour-id (.-tx e))
-        (set-nb-alive-status this neighbour-id)
+        (upsert-neighbour this (assoc nb :host (.-host e) :port (.-port e) :tx (.-tx e)
+                                 :restart-counter (.-restart_counter e) :status :alive))
         (let [ack-event (new-ack-event this e)]
           (send-event-ae this ack-event neighbour-id)
           (d> :ack-event (get-id this) ack-event))
@@ -1501,11 +1500,8 @@
     :else
     (let [_           (d> :join-event (get-id this) e)
           nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
-          _           (upsert-neighbour this nb)
-          _           (set-nb-tx this (.-id e) (.-tx e))
-          _           (set-nb-restart-counter this (.-id e) (.-restart_counter e))
-          _           (set-nb-alive-status this (.-id e))
-          _           (set-nb-direct-access this (.-id e))
+          _           (upsert-neighbour this (assoc nb :tx (.-tx e) :restart-counter (.-restart_counter e)
+                                               :status :alive :access :direct))
           alive-event (new-alive-event this e)]
       (send-event-ae this alive-event (.-id e))
       (put-event this alive-event))))
@@ -1520,22 +1516,23 @@
 
 (defmethod event-processing AliveEvent
   [^NodeObject this ^AliveEvent e]
-  (let [sender-nb (or (get-neighbour this (:id e)) :unknown-neighbour)]
+  (let [sender (or (get-neighbour this (:id e)) :unknown-neighbour)]
 
     (cond
 
       (alive-event-join-confirm? this e)
       (do
         (set-status this :alive)
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
         (d> :alive-event-join-confirmed (get-id this) e))
 
       (not (alive-node? this))
       (d> :alive-event-not-alive-node-error (get-id this) e)
 
-      (= :unknown-neighbour sender-nb)
+      (= :unknown-neighbour sender)
       (d> :alive-event-unknown-neighbour-error (get-id this) e)
 
-      (not (alive-neighbour? sender-nb))
+      (not (alive-neighbour? sender))
       (d> :alive-event-not-alive-neighbour-error (get-id this) e)
 
       (not (suitable-restart-counter? this e))
@@ -1548,12 +1545,10 @@
       (let [_            (d> :alive-event (get-id this) e)
             alive-id     (.-neighbour_id e)
             new-alive-nb (new-neighbour-node alive-id (.-neighbour_host e) (.-neighbour_port e))]
-        (set-nb-tx this sender-nb (.-tx e))
-        (upsert-neighbour this new-alive-nb)
-        (set-nb-tx this alive-id (.-neighbour_tx e))
-        (set-nb-alive-status this alive-id)
-        (set-nb-direct-access this alive-id)
-        (set-nb-restart-counter this alive-id (.-neighbour_restart_counter e))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
+        (upsert-neighbour this (assoc new-alive-nb :access :direct :status :alive :tx (.-neighbour_tx e)
+                                 :restart-counter (.-neighbour_restart_counter e)))
+
         (put-event this e)))))
 
 
@@ -1589,7 +1584,7 @@
         (d> :new-cluster-size-event (get-id this) e)
         (set-cluster-size this (.-new_cluster_size e))
         (put-event this e)
-        (set-nb-tx this sender-id (.-tx e))))))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
 
 
 
@@ -1627,7 +1622,7 @@
         (d> :dead-event (get-id this) e)
         (delete-neighbour this (.-neighbour_id e))
         (put-event this e)
-        (set-nb-tx this sender-id (.-tx e))))))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
 
 
 
@@ -1691,7 +1686,7 @@
       :else
       (do
         (d> :payload-event (get-id this) e)
-        (set-nb-payload this sender-id (.-payload e))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :payload (.-payload e)))
         (put-event this e)))))
 
 
@@ -1822,6 +1817,7 @@
 
 
 ;; FIXME: start process of periodic event send from buffer
+
 (defn node-join
   "Join this node to the cluster. Blocks thread until join confirmation from alive nodes.
    If status is already :alive or :join then returns nil and do nothing.
