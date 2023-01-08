@@ -1770,9 +1770,11 @@
 
 (defn stop-auto-rejoin-process
   "Stop auto rejoin process."
-  [^NodeObject this]
+  [^NodeObject this & {:keys [auto-rejoin?] :or {auto-rejoin? false}}]
   (remove-watch (:*node this) :auto-rejoin-process)
-  (d> :auto-rejoin-process-stop (get-id this) {}))
+  (if auto-rejoin?
+    (d> :remove-previous-auto-rejoin-watcher (get-id this) {})
+    (d> :auto-rejoin-process-stop (get-id this) {})))
 
 
 ;; TODO: stop process of periodic event send from buffer
@@ -1801,7 +1803,7 @@
 
           (loop [attempt 0]
             (d> :auto-rejoin-attempt (get-id this) {:attempts attempt})
-            (stop-auto-rejoin-process this)
+            (stop-auto-rejoin-process this {:auto-rejoin? true})
             (if (node-join this)
               (d> :auto-rejoin-complete (get-id this) {:attempts attempt})
               (if (>= attempt auto-rejoin-max-attempts)
