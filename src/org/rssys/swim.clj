@@ -171,7 +171,7 @@
                       :cluster              cluster
                       :status               :stop
                       :neighbours           {}
-                      :restart-counter      (or restart-counter 0)
+                      :restart-counter      (or restart-counter (System/currentTimeMillis))
                       :tx                   0
                       :ping-events          {}               ;; active direct pings
                       :indirect-ping-events {}               ;; active indirect pings

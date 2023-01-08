@@ -250,7 +250,7 @@
            :cluster              cluster
            :status               :stop
            :neighbours           {}
-           :restart-counter      0
+           :restart-counter      pos-int?
            :tx                   0
            :ping-events          {}
            :indirect-ping-events {}
