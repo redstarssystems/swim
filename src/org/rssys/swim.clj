@@ -1358,9 +1358,7 @@
         (d> :indirect-ack-event (get-id this) e)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :access :indirect :restart-counter (.-restart_counter e)
                                  :status (.-status e)))
-        (delete-indirect-ping this sender-id)
-        (when (= :alive (.-status e))
-          (put-event this (new-alive-event this e)))))))
+        (delete-indirect-ping this sender-id)))))
 
 
 (defmethod event-processing IndirectPingEvent
@@ -1426,9 +1424,7 @@
       (do
         (d> :ack-event (get-id this) e)
         (delete-ping this sender-id)
-        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
-        (when (= :suspect (:status sender))
-          (put-event this (new-alive-event this e)))))))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))))))
 
 
 (defmethod event-processing PingEvent

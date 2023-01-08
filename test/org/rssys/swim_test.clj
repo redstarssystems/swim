@@ -2029,8 +2029,7 @@
             node2-id (sut/get-id node2)
             node3-id (sut/get-id node3)
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event)
-            [*e2 e2-tap-fn] (set-event-catcher node2-id :intermediate-node-indirect-ack-event)
-            [*e3 e3-tap-fn] (set-event-catcher node1-id :put-event)]
+            [*e2 e2-tap-fn] (set-event-catcher node2-id :intermediate-node-indirect-ack-event)]
 
         (try
           (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -2070,11 +2069,6 @@
 
             (sut/send-event node3 indirect-ack-event node2-id)
 
-            (testing "node1 should put alive event about node3 to outgoing events buffer"
-              (no-timeout-check *e3)
-              (m/assert {:node-id node1-id
-                         :data    {:event {:neighbour-id node3-id :cmd-type 3}}} @*e3))
-
             (testing "node2 as intermediate node should receive event for node1 from node3"
               (no-timeout-check *e2))
 
@@ -2099,7 +2093,6 @@
           (finally
             (remove-tap e1-tap-fn)
             (remove-tap e2-tap-fn)
-            (remove-tap e3-tap-fn)
             (sut/node-stop node1)
             (sut/node-stop node2)
             (sut/node-stop node3)))))
@@ -2735,8 +2728,7 @@
             node2    (sut/new-node-object node2-data cluster)
             node1-id (sut/get-id node1)
             node2-id (sut/get-id node2)
-            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event)
-            [*e2 e2-tap-fn] (set-event-catcher node1-id :put-event)]
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event)]
 
         (try
           (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -2768,11 +2760,6 @@
             (testing "node1 should receive ack event from node2"
               (no-timeout-check *e1))
 
-            (testing "node1 should put alive event about node2 to outgoing events buffer"
-              (no-timeout-check *e2)
-              (m/assert {:node-id node1-id
-                         :data    {:event {:neighbour-id node2-id :cmd-type 3}}} @*e2))
-
             (testing "node1 should set new status of neighbour node2 by value from event"
               (m/assert :alive (:status (sut/get-neighbour node1 node2-id))))
 
@@ -2787,7 +2774,6 @@
             (print-ex e))
           (finally
             (remove-tap e1-tap-fn)
-            (remove-tap e2-tap-fn)
             (sut/node-stop node1)
             (sut/node-stop node2)))))
 
