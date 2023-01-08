@@ -21,7 +21,8 @@
       SuspectEvent)))
 
 
-;;;;
+(declare thrown-with-msg?)
+
 
 (deftest map->ProbeEvent-test
   (testing "ProbeEvent"
