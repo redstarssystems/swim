@@ -49,7 +49,6 @@
                  ping-events
                  indirect-ping-events
                  payload
-                 scheduler-pool
                  *udp-server
                  outgoing-events
                  ping-round-buffer

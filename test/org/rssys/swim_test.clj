@@ -28,9 +28,7 @@
       PingEvent
       ProbeAckEvent
       ProbeEvent
-      SuspectEvent)
-    (org.rssys.scheduler
-      MutablePool)))
+      SuspectEvent)))
 
 
 (declare thrown-with-msg?)
@@ -255,7 +253,6 @@
            :ping-events          {}
            :indirect-ping-events {}
            :payload              {}
-           :scheduler-pool       #(instance? MutablePool %)
            :*udp-server          nil
            :outgoing-events      []
            :ping-round-buffer    []
@@ -288,7 +285,6 @@
          :ping-events          {}
          :indirect-ping-events {}
          :payload              {}
-         :scheduler-pool       #(instance? MutablePool %)
          :*udp-server          nil
          :outgoing-events      []
          :ping-round-buffer    []

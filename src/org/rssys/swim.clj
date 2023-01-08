@@ -7,7 +7,6 @@
     [org.rssys.domain :as domain]
     [org.rssys.encrypt :as e]
     [org.rssys.event :as event]
-    [org.rssys.scheduler :as scheduler]
     [org.rssys.spec :as spec]
     [org.rssys.udp :as udp]
     [org.rssys.vthread :as vthread])
@@ -58,7 +57,8 @@
          :max-ping-without-ack-before-dead    4             ;; How many pings without ack before node considered as dead
 
 
-         :ping-heartbeat-ms                   300           ;; Send ping+events to neighbours every N ms
+         :ping-heartbeat-ms                   500           ;; Send ping+events to neighbours every N ms
+         :ack-timeout-ms                      150           ;; How much time we wait for an ack event before next ping will be sent
          :max-join-time-ms                    2000          ;; How much time node awaits join confirmation before timeout
          :auto-rejoin-if-dead?                true          ;; After node join, if cluster consider this node as dead, then do rejoin
          :auto-rejoin-max-attempts            10            ;; How many times try to rejoin
@@ -178,7 +178,6 @@
                       :ping-events          {}               ;; active direct pings
                       :indirect-ping-events {}               ;; active indirect pings
                       :payload              {}               ;; data that this node claims in cluster about itself
-                      :scheduler-pool       (scheduler/mk-pool)
                       :*udp-server          nil
                       :outgoing-events      []               ;; outgoing events that we'll send to random logN neighbours next time
                       :ping-round-buffer    []               ;; we take logN neighbour ids to send events from event queue
@@ -1921,9 +1920,8 @@
 (defn node-stop
   "Stop the node and leave the cluster"
   [^NodeObject this]
-  (let [{:keys [*udp-server scheduler-pool]} (get-value this)]
+  (let [{:keys [*udp-server]} (get-value this)]
     (node-leave this)
-    (scheduler/stop-and-reset-pool! scheduler-pool :strategy :kill)
     (swap! (:*node this) assoc
       :*udp-server (when *udp-server (udp/stop *udp-server))
       :ping-events {}

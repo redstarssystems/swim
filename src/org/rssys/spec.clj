@@ -127,7 +127,7 @@
 (s/def ::node
   (s/keys :req-un [::id ::host ::port ::cluster ::status ::neighbours ::restart-counter
                    ::tx ::ping-events ::indirect-ping-events
-                   ::payload ::scheduler-pool ::*udp-server ::outgoing-events
+                   ::payload ::*udp-server ::outgoing-events
                    ::ping-round-buffer ::probe-events]))
 
 
@@ -161,7 +161,6 @@
 (s/def ::ping-round-buffer (s/coll-of ::neighbour-id))
 
 
-(s/def ::scheduler-pool ::object)
 (s/def ::*udp-server ::object)
 
 
