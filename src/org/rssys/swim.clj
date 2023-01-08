@@ -1783,7 +1783,8 @@
 (defn node-leave
   "Leave the cluster"
   [^NodeObject this]
-  (stop-auto-rejoin-process this))
+  (stop-auto-rejoin-process this)
+  (set-left-status this))
 
 
 (declare node-join)
