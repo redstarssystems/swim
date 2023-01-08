@@ -156,7 +156,9 @@
 
 
 (defn new-node-object
-  "Returns new NodeObject instance."
+  "Create new NodeObject.
+  `restart-counter` is an optional parameter. If omitted then it set to current milliseconds value.
+  Returns new NodeObject instance."
 
   (^NodeObject [node-data]
     (when-not (s/valid? ::spec/node node-data)
