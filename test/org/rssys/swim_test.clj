@@ -4798,3 +4798,78 @@
         (finally
           (remove-tap e1-tap-fn)
           (sut/node-stop node1))))))
+
+
+(deftest ^:node-control auto-rejoin-process-test
+
+  (testing "auto rejoin process"
+    (let [node1           (sut/new-node-object node1-data cluster)
+          node2           (sut/new-node-object node2-data cluster)
+          node1-id        (sut/get-id node1)
+          node2-id        (sut/get-id node2)
+          [*e1 e1-tap-fn] (set-event-catcher node1-id :set-status {:new-status :alive})
+          [*e2 e2-tap-fn] (set-event-catcher node2-id :alive-event-join-confirmed)]
+      (try
+
+        (testing "setup two nodes cluster"
+          (sut/set-cluster-size node1 1)
+          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+
+          (testing "node1 should start as single node in cluster"
+            (m/assert true (sut/node-join node1))
+            (no-timeout-check *e1))
+
+          (sut/set-cluster-size node1 3)
+
+          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+
+          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
+          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+
+          (testing "node2 should start in multi nodes cluster"
+            (m/assert true (sut/node-join node2))
+            (testing "node2 should receive alive event from node1"
+              (no-timeout-check *e2)))
+
+          (testing "cluster setup should complete"
+            (m/assert true (sut/alive-node? node1))
+            (m/assert true (sut/alive-node? node2))))
+
+
+        (testing "rejoin process start"
+          (let [[*e3 e3-tap-fn] (set-event-catcher node1-id :set-status {:new-status :left})
+                [*e4 e4-tap-fn] (set-event-catcher node1-id :set-status {:new-status :join})
+                [*e5 e5-tap-fn] (set-event-catcher node2-id :join-event)
+                [*e6 e6-tap-fn] (set-event-catcher node1-id :alive-event-join-confirmed)]
+
+            (sut/send-event node2 (sut/new-dead-event node2 node1-id) node1-id)
+
+            (testing "node1 should receive dead event and leave the cluster"
+              (no-timeout-check *e3))
+
+            (testing "node1 should start rejoin"
+              (no-timeout-check *e4))
+
+            (testing "node2 should receive join event from node1"
+              (no-timeout-check *e5))
+
+            (testing "node1 should receive alive event from node2 for join confirmation"
+              (no-timeout-check *e6))
+
+            (testing "node1 auto rejoin should complete"
+              (m/assert true (sut/alive-node? node1))
+              (m/assert true (sut/alive-node? node2)))
+
+            (remove-tap e3-tap-fn)
+            (remove-tap e4-tap-fn)
+            (remove-tap e5-tap-fn)
+            (remove-tap e6-tap-fn)))
+
+
+        (catch Exception e
+          (print-ex e))
+        (finally
+          (remove-tap e1-tap-fn)
+          (remove-tap e2-tap-fn)
+          (sut/node-stop node1)
+          (sut/node-stop node2))))))
