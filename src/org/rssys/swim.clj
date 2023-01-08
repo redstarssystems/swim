@@ -653,7 +653,8 @@
                                           :restart-counter (get-restart-counter this)
                                           :tx              (get-tx this)
                                           :neighbour-id    neighbour-id
-                                          :attempt-number  attempt-number})]
+                                          :attempt-number  attempt-number
+                                          :ts              (System/currentTimeMillis)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/ping-event ping-event)
       (throw (ex-info "Invalid ping data" (spec/problems (s/explain-data ::spec/ping-event ping-event))))
@@ -705,7 +706,8 @@
                                            :neighbour-id      neighbour-id
                                            :neighbour-host    (:host neighbour)
                                            :neighbour-port    (:port neighbour)
-                                           :attempt-number    attempt-number})]
+                                           :attempt-number    attempt-number
+                                           :ts                (System/currentTimeMillis)})]
         (inc-tx this)
         (if-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
           (throw (ex-info "Invalid indirect ping data"

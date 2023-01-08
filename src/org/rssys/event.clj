@@ -105,20 +105,20 @@
 ;;;;
 
 
-(defrecord PingEvent [cmd-type id host port restart-counter tx neighbour-id attempt-number]
+(defrecord PingEvent [cmd-type id host port restart-counter tx neighbour-id attempt-number ts]
 
            ISwimEvent
 
            (prepare [^PingEvent e]
              [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
-              (.-neighbour_id e) (.-attempt_number e)])
+              (.-neighbour_id e) (.-attempt_number e) (.-ts e)])
 
            (restore [^PingEvent _ v]
              (if (and
                    (vector? v)
-                   (= 8 (count v))
+                   (= 9 (count v))
                    (every? true? (map #(%1 %2) [#(= % (:ping code)) uuid? string? pos-int? nat-int?
-                                                nat-int? uuid? pos-int?] v)))
+                                                nat-int? uuid? pos-int? pos-int?] v)))
                (apply ->PingEvent v)
                (throw (ex-info "PingEvent vector has invalid structure" {:ping-vec v})))))
 
@@ -133,7 +133,8 @@
                    :restart-counter 0
                    :tx              0
                    :neighbour-id    (UUID. 0 1)
-                   :attempt-number  1}))
+                   :attempt-number  1
+                   :ts              1}))
 
 
 ;;;;
@@ -173,7 +174,7 @@
 (defrecord IndirectPingEvent [cmd-type id host port restart-counter tx
                               intermediate-id intermediate-host intermediate-port
                               neighbour-id neighbour-host neighbour-port
-                              attempt-number]
+                              attempt-number ts]
 
            ISwimEvent
 
@@ -181,16 +182,16 @@
              [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
               (.-intermediate_id e) (.-intermediate_host e) (.-intermediate_port e)
               (.-neighbour_id e) (.-neighbour_host e) (.-neighbour_port e)
-              (.-attempt_number e)])
+              (.-attempt_number e) (.-ts e)])
 
            (restore [^IndirectPingEvent _ v]
              (if (and
                    (vector? v)
-                   (= 13 (count v))
+                   (= 14 (count v))
                    (every? true? (map #(%1 %2) [#(= % (:indirect-ping code)) uuid? string? pos-int? nat-int? nat-int?
                                                 uuid? string? pos-int?
                                                 uuid? string? pos-int?
-                                                pos-int?] v)))
+                                                pos-int? pos-int?] v)))
                (apply ->IndirectPingEvent v)
                (throw (ex-info "IndirectPingEvent vector has invalid structure" {:indirect-ping-vec v})))))
 
@@ -210,7 +211,8 @@
                            :neighbour-id      (UUID. 0 2)
                            :neighbour-host    "localhost"
                            :neighbour-port    100
-                           :attempt-number    1}))
+                           :attempt-number    1
+                           :ts                1}))
 
 
 ;;;;

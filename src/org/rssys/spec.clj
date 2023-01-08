@@ -64,7 +64,7 @@
 
 (s/def ::ping-event
   (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
-                   ::neighbour-id ::attempt-number]))
+                   ::neighbour-id ::attempt-number ::ts]))
 
 
 (s/def ::ack-event
@@ -75,7 +75,7 @@
 (s/def ::indirect-ping-event
   (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
                    ::intermediate-id ::intermediate-host ::intermediate-port
-                   ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
+                   ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number ::ts]))
 
 
 (s/def ::indirect-ack-event

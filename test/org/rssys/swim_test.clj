@@ -379,7 +379,8 @@
          :restart-counter 0
          :tx              0
          :neighbour-id    #uuid"00000000-0000-0000-0000-000000000002"
-         :attempt-number  1}
+         :attempt-number  1
+         :ts              pos-int?}
         (sut/get-indirect-ping-event this #uuid "00000000-0000-0000-0000-000000000002"))
 
       (m/assert [] (sut/get-ping-round-buffer this))
