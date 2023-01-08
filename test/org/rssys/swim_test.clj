@@ -3035,8 +3035,7 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event)
             [*e2 e2-tap-fn] (set-event-catcher node2-id :ack-event)
             [*e3 e3-tap-fn] (set-event-catcher node2-id :send-events-udp-size)
-            [*e4 e4-tap-fn] (set-event-catcher node2-id :put-event)
-            [*e5 e5-tap-fn] (set-event-catcher node2-id :upsert-neighbour)]
+            [*e4 e4-tap-fn] (set-event-catcher node2-id :upsert-neighbour)]
 
         (try
           (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -3059,18 +3058,13 @@
 
             (sut/send-event node1 ping-event node2-id)
 
-            (testing "node2 should put alive event about node1 to outgoing events buffer"
-              (no-timeout-check *e4)
-              (m/assert {:node-id node2-id
-                         :data    {:event {:neighbour-id node1-id :cmd-type 3}}} @*e4))
-
             (testing "node2 should receive ping event from node1"
               (no-timeout-check *e1))
 
             (testing "node2 should upsert info about neighbour node1"
-              (no-timeout-check *e5)
+              (no-timeout-check *e4)
               (m/assert {:node-id node2-id
-                         :data    {:neighbour-node {:id node1-id}}} @*e5))
+                         :data    {:neighbour-node {:id node1-id}}} @*e4))
 
             (testing "node2 should set tx for neighbour node1 by tx value from event"
               (m/assert (-> @*e1 :data :tx) (.-tx (sut/get-neighbour node2 node1-id)))
@@ -3094,7 +3088,6 @@
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
             (remove-tap e4-tap-fn)
-            (remove-tap e5-tap-fn)
             (sut/node-stop node1)
             (sut/node-stop node2)))))
 

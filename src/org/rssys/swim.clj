@@ -1463,9 +1463,7 @@
                                  :restart-counter (.-restart_counter e) :status :alive))
         (let [ack-event (new-ack-event this e)]
           (send-event-ae this ack-event neighbour-id)
-          (d> :ack-event (get-id this) ack-event))
-        (when (= :suspect (:status nb))
-          (put-event this (new-alive-event this e)))))))
+          (d> :ack-event (get-id this) ack-event))))))
 
 
 (defmethod event-processing JoinEvent
