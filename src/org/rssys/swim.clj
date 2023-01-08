@@ -1829,11 +1829,12 @@
     3. Block thread and wait for join confirmation event from alive nodes.
        When status became alive or timeout happens (max-join-time-ms) continue thread execution.
     4. If join fails then set status :left
-    5. If join success then start auto rejoin process
+    5. If join success then start auto rejoin process if enabled.
 
    If cluster size = 1:
     0. Delete all neighbours info
     1. Set status for this node as :alive and become single node in the cluster
+    2. Start auto rejoin process if enabled
 
   Returns true if join complete, false if join fails due to timeout or nil if already has join or alive status"
   [^NodeObject this & {:keys [max-join-time-ms auto-rejoin-if-dead?]

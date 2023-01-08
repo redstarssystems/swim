@@ -4856,7 +4856,7 @@
             (testing "node1 should receive alive event from node2 for join confirmation"
               (no-timeout-check *e6))
 
-            (testing "node1 auto rejoin should complete"
+            (testing "node1 should complete auto rejoin process"
               (m/assert true (sut/alive-node? node1))
               (m/assert true (sut/alive-node? node2)))
 
