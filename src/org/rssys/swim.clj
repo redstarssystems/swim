@@ -1296,8 +1296,7 @@
             (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to a neighbours map
               (d> :anti-entropy-event (get-id this) ae-neighbour)
               (upsert-neighbour this ae-neighbour))))       ;; add a new neighbour
-        (set-nb-tx this sender-id (.-tx e))
-        (set-nb-restart-counter this sender-id (.-restart_counter e))))))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
 
 
 
