@@ -4844,7 +4844,7 @@
 
             (sut/send-event node2 (sut/new-dead-event node2 node1-id) node1-id)
 
-            (testing "node1 should receive dead event and leave the cluster"
+            (testing "node1 should receive dead event and set status :left"
               (no-timeout-check *e3))
 
             (testing "node1 should start rejoin"

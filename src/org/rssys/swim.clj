@@ -1775,7 +1775,7 @@
 
 
 (defn stop-auto-rejoin-process
-  "Start auto rejoin process. If node became alive"
+  "Stop auto rejoin process."
   [^NodeObject this]
   (remove-watch (:*node this) :auto-rejoin-process)
   (d> :auto-rejoin-process-stop (get-id this) {}))
@@ -1792,7 +1792,8 @@
 
 
 (defn start-auto-rejoin-process
-  "Start auto rejoin process. If node became alive and cluster "
+  "Start auto rejoin process. This process starts if node has alive status.
+  If alive node receive dead event from cluster then node should set status left and join to cluster again."
   [^NodeObject this & {:keys [auto-rejoin-if-dead? auto-rejoin-max-attempts]
                        :or {auto-rejoin-if-dead? (-> @*config :auto-rejoin-if-dead?)
                             auto-rejoin-max-attempts (-> @*config :auto-rejoin-max-attempts)}}]
