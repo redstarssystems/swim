@@ -60,8 +60,8 @@
          :ping-heartbeat-ms                   500           ;; Send ping+events to neighbours every N ms
          :ack-timeout-ms                      150           ;; How much time we wait for an ack event before next ping will be sent
          :max-join-time-ms                    2000          ;; How much time node awaits join confirmation before timeout
-         :auto-rejoin-if-dead?                true          ;; After node join, if cluster consider this node as dead, then do rejoin
-         :auto-rejoin-max-attempts            10            ;; How many times try to rejoin
+         :rejoin-if-dead?                     true          ;; After node join, if cluster consider this node as dead, then do rejoin
+         :rejoin-max-attempts                 10            ;; How many times try to rejoin
          }))
 
 
@@ -1830,47 +1830,49 @@
     (.-probe_key probe-event)))
 
 
-(defn stop-auto-rejoin-process
-  "Stop auto rejoin process."
+(defn stop-rejoin-watcher
+  "Stop rejoin watcher."
   [^NodeObject this & {:keys [auto-rejoin?] :or {auto-rejoin? false}}]
-  (remove-watch (:*node this) :auto-rejoin-process)
+  (remove-watch (:*node this) :rejoin-watcher)
   (if auto-rejoin?
-    (d> :remove-previous-auto-rejoin-watcher (get-id this) {})
-    (d> :auto-rejoin-process-stop (get-id this) {})))
+    (d> :remove-previous-rejoin-watcher (get-id this) {})
+    (d> :rejoin-watcher-stop (get-id this) {})))
 
 
 ;; TODO: stop process of periodic event send from buffer
 (defn node-leave
   "Leave the cluster"
   [^NodeObject this]
-  (stop-auto-rejoin-process this)
+  (stop-rejoin-watcher this)
   (set-left-status this))
 
 
 (declare node-join)
 
 
-(defn start-auto-rejoin-process
-  "Start auto rejoin process. This process starts if node has alive status.
+(defn start-rejoin-watcher
+  "Start rejoin watcher. This watcher will be started if node has alive status.
+  This watcher intended to rejoin alive node to cluster if it considered as dead.
+  Watcher detect setting :left status for node without leaving cluster. It may happen when dead event arrives.
   If alive node receive dead event from cluster then node should set status left and join to cluster again."
-  [^NodeObject this & {:keys [auto-rejoin-if-dead? auto-rejoin-max-attempts]
-                       :or {auto-rejoin-if-dead? (-> @*config :auto-rejoin-if-dead?)
-                            auto-rejoin-max-attempts (-> @*config :auto-rejoin-max-attempts)}}]
+  [^NodeObject this & {:keys [rejoin-if-dead? rejoin-max-attempts]
+                       :or {rejoin-if-dead?     (-> @*config :rejoin-if-dead?)
+                            rejoin-max-attempts (-> @*config :rejoin-max-attempts)}}]
   (when (alive-node? this)
-    (add-watch (:*node this) :auto-rejoin-process
+    (add-watch (:*node this) :rejoin-watcher
       (fn [_ _ old-state new-state]
         (when (and
                 (= :alive (:status old-state))
                 (= :left (:status new-state))
-                auto-rejoin-if-dead?)
+                rejoin-if-dead?)
 
           (loop [attempt 0]
-            (d> :auto-rejoin-attempt (get-id this) {:attempts attempt})
-            (stop-auto-rejoin-process this {:auto-rejoin? true})
+            (d> :rejoin-attempt (get-id this) {:attempts attempt})
+            (stop-rejoin-watcher this {:auto-rejoin? true})
             (if (node-join this)
-              (d> :auto-rejoin-complete (get-id this) {:attempts attempt})
-              (if (>= attempt auto-rejoin-max-attempts)
-                (d> :auto-rejoin-max-attempts-reached-error (get-id this) {:attempts attempt})
+              (d> :rejoin-complete (get-id this) {:attempts attempt})
+              (if (>= attempt rejoin-max-attempts)
+                (d> :rejoin-max-attempts-reached-error (get-id this) {:attempts attempt})
                 (recur (inc attempt))))))))))
 
 
@@ -1897,9 +1899,9 @@
     2. Start auto rejoin process if enabled
 
   Returns true if join complete, false if join fails due to timeout or nil if already has join or alive status"
-  [^NodeObject this & {:keys [max-join-time-ms auto-rejoin-if-dead?]
+  [^NodeObject this & {:keys [max-join-time-ms rejoin-if-dead?]
                        :or {max-join-time-ms (-> @*config :max-join-time-ms)
-                            auto-rejoin-if-dead? (-> @*config :auto-rejoin-if-dead?)}}]
+                            rejoin-if-dead?  (-> @*config :rejoin-if-dead?)}}]
   (when-not (or (alive-node? this) (= :join (get-status this)))
 
     (set-restart-counter this (inc (get-restart-counter this)))
@@ -1913,7 +1915,7 @@
           (d> :join (get-id this) {:cluster-size cluster-size})
           (delete-neighbours this)
           (set-alive-status this)
-          (when auto-rejoin-if-dead? (start-auto-rejoin-process this))
+          (when rejoin-if-dead? (start-rejoin-watcher this))
           true)
 
         (> cluster-size 1)
@@ -1941,14 +1943,14 @@
           (if (alive-node? this)
             (do
               (remove-watch (:*node this) :join-await-watcher)
-              (when auto-rejoin-if-dead? (start-auto-rejoin-process this))
+              (when rejoin-if-dead? (start-rejoin-watcher this))
               true)
             (do
               (deref *join-await-promise max-join-time-ms :timeout)
               (remove-watch (:*node this) :join-await-watcher)
               (if (alive-node? this)
                 (do
-                  (when auto-rejoin-if-dead? (start-auto-rejoin-process this))
+                  (when rejoin-if-dead? (start-rejoin-watcher this))
                   true)
                 (do
                   (set-left-status this)
