@@ -310,7 +310,7 @@
 
 
 (defn get-ping-round-buffer
-  "Get vector of neighbour ids"
+  "Returns vector of ids intended for pings."
   [^NodeObject this]
   (.-ping_round_buffer (get-value this)))
 
@@ -412,6 +412,12 @@
 (defn set-suspect-status
   [^NodeObject this]
   (set-status this :suspect))
+
+
+(defn set-ping-round-buffer
+  "Set vector of ids intended for pings."
+  [^NodeObject this new-round-buffer]
+  (swap! (:*node this) assoc :ping-round-buffer new-round-buffer))
 
 
 (defn set-payload
@@ -1143,6 +1149,49 @@
                {:max-allowed max-payload-size :actual-size actual-size :neighbour-id neighbour-id}))))
   (when-let [nb (get-neighbour this neighbour-id)]
     (upsert-neighbour this (assoc nb :payload payload))))
+
+
+(defn- random-order-xs
+  "Takes coll and returns lazy sequence of coll elements in random order"
+  [xs]
+  (lazy-cat (shuffle xs) (random-order-xs xs)))
+
+
+(defn- remove-not-alive-nodes!
+  "Remove left or dead node ids from round buffer."
+  [^NodeObject this active-ids-coll]
+  (set-ping-round-buffer this  (filterv #(contains? (into #{} active-ids-coll) %) (get-ping-round-buffer this))))
+
+
+(defn- add-ids-for-next-round!
+  "Add node ids in random order to buffer for next round,
+  if number of elements in round buffer less than required n"
+  [^NodeObject this n active-ids-coll]
+  (when (> n (count (get-ping-round-buffer this)))
+    (let [required-number (* (count active-ids-coll) (inc (quot n (count active-ids-coll))))
+          new-xs (take  required-number (random-order-xs active-ids-coll))]
+      (set-ping-round-buffer this (vec (concat (get-ping-round-buffer this) new-xs))))))
+
+
+(defn- take-random-ids!
+  "Returns n ids from round buffer. Taken elements will be removed from round buffer."
+  [^NodeObject this n]
+  (let [buffer (get-ping-round-buffer this)
+        result (take n buffer)]
+    (set-ping-round-buffer this (vec (drop n buffer)))
+    result))
+
+
+(defn take-ids-for-ping
+  "Returns vector of node ids for ping. Returned number of ids is always <= than alive nodes.
+  `n` - required number of ids.
+  An idea behind this function that we need to achieve a uniform distribution of ping events inside cluster in one round.
+  It guarantees that every node in cluster receive an equal number of pings and there will be no ping starvation."
+  [^NodeObject this n]
+  (let [active-ids-coll (mapv :id (get-alive-neighbours this))]
+    (remove-not-alive-nodes! this active-ids-coll)
+    (add-ids-for-next-round! this n active-ids-coll)
+    (vec (distinct (take-random-ids! this n)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;

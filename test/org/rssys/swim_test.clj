@@ -1534,6 +1534,43 @@
                 {:long-string (apply str (repeat (:max-payload-size @sut/*config) "a"))})))))))
 
 
+(deftest take-ids-for-ping-test
+  (testing "take ids for ping"
+    (let [this                 (sut/new-node-object node1-data (assoc cluster :cluster-size 99))
+          new-node-with-status (fn [status] (sut/new-neighbour-node (assoc node3-nb-data :id (random-uuid) :status status)))]
+
+      (run!
+        #(sut/upsert-neighbour this (new-node-with-status %))
+        [:left :stop :alive :alive :alive :alive :alive :alive :suspect])
+
+      (testing "before test we should have 6 alive nodes"
+        (m/assert 6 (count (sut/get-alive-neighbours this))))
+
+      (testing "take 6 twice should return two different vectors: same ids but in random order"
+        (let [v1 (sut/take-ids-for-ping this 6)
+              v2 (sut/take-ids-for-ping this 6)]
+          (m/assert true (not= v1 v2))
+          (m/assert true (= (sort v1) (sort v2)))))
+
+      (testing "should take first two ids from ping round buffer"
+        (m/assert 2 (count (sut/take-ids-for-ping this 2)))
+        (m/assert 4 (count (sut/get-ping-round-buffer this))))
+
+      (testing "should take next 4 ids from ping round buffer"
+        (m/assert 4 (count (sut/take-ids-for-ping this 4)))
+        (m/assert 0 (count (sut/get-ping-round-buffer this))))
+
+      (testing "not alive ids should be automatically deleted from ping round buffer"
+        (let [random-alive-id (rand-nth (mapv :id  (sut/get-alive-neighbours this)))]
+
+          (testing "set left status for random alive node before test"
+            (sut/set-nb-left-status this random-alive-id)
+
+            (testing "next request should not contain left node id"
+              (let [next-ids (sut/take-ids-for-ping this 6)]
+                (m/assert false (contains? (into #{} next-ids) random-alive-id))))))))))
+
+
 ;;;;;;;;;;;;;;;;;;;
 ;; Send event tests
 ;;;;;;;;;;;;;;;;;;;
