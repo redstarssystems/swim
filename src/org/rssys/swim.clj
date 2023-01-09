@@ -1587,14 +1587,19 @@
       (d> :alive-event-bad-tx-error (get-id this) e)
 
       :else
-      (let [_            (d> :alive-event (get-id this) e)
-            alive-id     (.-neighbour_id e)
-            new-alive-nb (new-neighbour-node alive-id (.-neighbour_host e) (.-neighbour_port e))]
-        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
-        (upsert-neighbour this (assoc new-alive-nb :access :direct :status :alive :tx (.-neighbour_tx e)
-                                 :restart-counter (.-neighbour_restart_counter e)))
+      (let [_        (d> :alive-event (get-id this) e)
+            alive-id (.-neighbour_id e)
+            alive-nb (assoc (new-neighbour-node alive-id (.-neighbour_host e) (.-neighbour_port e))
+                       :tx (.-neighbour_tx e)
+                       :restart-counter (.-neighbour_restart_counter e))]
 
-        (put-event this e)))))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
+
+        (when (or
+                (not (neighbour-exist? this alive-id))
+                (suitable-incarnation? this alive-nb))
+          (upsert-neighbour this alive-nb)
+          (put-event this e))))))
 
 
 
@@ -1663,11 +1668,16 @@
       (d> :dead-event-not-alive-neighbour-error (get-id this) e)
 
       :else
-      (do
+      (let [dead-id (.-neighbour_id e)
+            dead-nb (get-neighbour this dead-id)]
+
         (d> :dead-event (get-id this) e)
-        (set-nb-dead-status this (.-neighbour_id e))
-        (put-event this e)
-        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
+
+        (when (neighbour-exist? this dead-id)
+          (when (suitable-restart-counter? this (assoc dead-nb :restart-counter (.-neighbour_restart_counter e)))
+            (set-nb-dead-status this dead-id)
+            (put-event this e)))))))
 
 
 
