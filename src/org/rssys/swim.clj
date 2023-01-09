@@ -1481,18 +1481,18 @@
 
 (defmethod event-processing PingEvent
   [^NodeObject this ^PingEvent e]
-  (let [neighbour-id (:id e)
-        nb           (or (get-neighbour this neighbour-id) :unknown-neighbour)]
+  (let [sender-id (:id e)
+        sender       (or (get-neighbour this sender-id) :unknown-neighbour)]
 
     (cond
 
       (not (alive-node? this))
       (d> :ping-event-not-alive-node-error (get-id this) e)
 
-      (= :unknown-neighbour nb)
+      (= :unknown-neighbour sender)
       (d> :ping-event-unknown-neighbour-error (get-id this) e)
 
-      (not (alive-neighbour? nb))
+      (not (alive-neighbour? sender))
       (do
         (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-not-alive-neighbour-error (get-id this) e))
@@ -1511,10 +1511,10 @@
       :else
       (do
         (d> :ping-event (get-id this) e)
-        (upsert-neighbour this (assoc nb :host (.-host e) :port (.-port e) :tx (.-tx e)
+        (upsert-neighbour this (assoc sender :host (.-host e) :port (.-port e) :tx (.-tx e)
                                  :restart-counter (.-restart_counter e) :status :alive))
         (let [ack-event (new-ack-event this e)]
-          (send-event-ae this ack-event neighbour-id)
+          (send-event-ae this ack-event sender-id)
           (d> :ack-event (get-id this) ack-event))))))
 
 
