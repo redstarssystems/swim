@@ -1674,7 +1674,7 @@
   Expected event will be delivered to *event-promise. Use `no-timeout-check` macro to detect promise timeout.
   `event-tap-fn` is already bound to 'tap>' mechanism.
   NB: Don't forget to call remove-tap for `event-tap-fn` after test."
-  [node-id event-kw & {:keys [cmd-type new-status]}]
+  [node-id event-kw & {:keys [cmd-type new-status nb-status]}]
   (let [*p    (promise)
         tap-f (fn [v]
                 (when-let [cmd (:org.rssys.swim/cmd v)]
@@ -1686,6 +1686,9 @@
                             true)
                           (if new-status
                             (= new-status (-> v :data :new-status))
+                            true)
+                          (if nb-status
+                            (= nb-status (-> v :data :neighbour-node :status))
                             true))
                     (deliver *p v))))]
     (add-tap tap-f)
@@ -3959,7 +3962,7 @@
 
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event)
             [*e2 e2-tap-fn] (set-event-catcher node3-id :put-event {:cmd-type 6})
-            [*e3 e3-tap-fn] (set-event-catcher node3-id :delete-neighbour)]
+            [*e3 e3-tap-fn] (set-event-catcher node3-id :upsert-neighbour {:nb-status :dead})]
 
         (try
           (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -3985,11 +3988,9 @@
           (testing "node3 should put event for outgoing events queue"
             (no-timeout-check *e2))
 
-          (testing "node3 should delete info about dead neighbour from neighbours map"
+          (testing "node3 should set new status :dead for neighbour in neighbours map"
             (no-timeout-check *e3)
-            (m/assert {:node-id node3-id
-                       :data {:neighbour-id node2-id}} @*e3)
-            (m/assert nil (sut/get-neighbour node3 node2-id)))
+            (m/assert {:status :dead} (sut/get-neighbour node3 node2-id)))
 
           (catch Exception e
             (print-ex e))
@@ -4226,7 +4227,7 @@
 
             [*e1 e1-tap-fn] (set-event-catcher node3-id :left-event)
             [*e2 e2-tap-fn] (set-event-catcher node3-id :put-event {:cmd-type 5})
-            [*e3 e3-tap-fn] (set-event-catcher node3-id :delete-neighbour)]
+            [*e3 e3-tap-fn] (set-event-catcher node3-id :upsert-neighbour {:nb-status :left})]
 
         (try
           (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -4252,11 +4253,9 @@
           (testing "node3 should put event for outgoing events queue"
             (no-timeout-check *e2))
 
-          (testing "node3 should delete info about left neighbour from neighbours map"
+          (testing "node3 should set new status :left for neighbour in neighbours map"
             (no-timeout-check *e3)
-            (m/assert {:node-id node3-id
-                       :data {:neighbour-id node1-id}} @*e3)
-            (m/assert nil (sut/get-neighbour node3 node1-id)))
+            (m/assert {:status :left} (sut/get-neighbour node3 node1-id)))
 
           (catch Exception e
             (print-ex e))

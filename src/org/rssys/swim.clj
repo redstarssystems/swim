@@ -1616,7 +1616,7 @@
       :else
       (do
         (d> :dead-event (get-id this) e)
-        (delete-neighbour this (.-neighbour_id e))
+        (set-nb-dead-status this (.-neighbour_id e))
         (put-event this e)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
 
@@ -1653,7 +1653,7 @@
       :else
       (do
         (d> :left-event (get-id this) e)
-        (delete-neighbour this (.-id e))
+        (set-nb-left-status this (.-id e))
         (put-event this e)))))
 
 
