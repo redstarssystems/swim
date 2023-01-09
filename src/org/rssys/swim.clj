@@ -1358,9 +1358,9 @@
 
       :else
       (do
-        (d> :indirect-ack-event (get-id this) e)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :access :indirect :restart-counter (.-restart_counter e)
-                                 :status (.-status e)))
+                                 :status :alive))
+        (d> :indirect-ack-event (get-id this) e)
         (delete-indirect-ping this sender-id)))))
 
 
