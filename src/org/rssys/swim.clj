@@ -1168,7 +1168,7 @@
   if number of elements in round buffer less than required n"
   [^NodeObject this n alive-ids-coll]
   (when (> n (count (get-ping-round-buffer this)))
-    (let [required-number (* (count alive-ids-coll) (inc (quot n (count alive-ids-coll))))
+    (let [required-number (* (count alive-ids-coll) (inc (or (safe (quot n (count alive-ids-coll))) 1)))
           new-xs (take  required-number (random-order-xs alive-ids-coll))]
       (set-ping-round-buffer this (vec (concat (get-ping-round-buffer this) new-xs))))))
 
