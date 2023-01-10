@@ -1159,17 +1159,17 @@
 
 (defn- remove-not-alive-nodes!
   "Remove left or dead node ids from round buffer."
-  [^NodeObject this active-ids-coll]
-  (set-ping-round-buffer this  (filterv #(contains? (into #{} active-ids-coll) %) (get-ping-round-buffer this))))
+  [^NodeObject this alive-ids-coll]
+  (set-ping-round-buffer this  (filterv #(contains? (into #{} alive-ids-coll) %) (get-ping-round-buffer this))))
 
 
 (defn- add-ids-for-next-round!
   "Add node ids in random order to buffer for next round,
   if number of elements in round buffer less than required n"
-  [^NodeObject this n active-ids-coll]
+  [^NodeObject this n alive-ids-coll]
   (when (> n (count (get-ping-round-buffer this)))
-    (let [required-number (* (count active-ids-coll) (inc (quot n (count active-ids-coll))))
-          new-xs (take  required-number (random-order-xs active-ids-coll))]
+    (let [required-number (* (count alive-ids-coll) (inc (quot n (count alive-ids-coll))))
+          new-xs (take  required-number (random-order-xs alive-ids-coll))]
       (set-ping-round-buffer this (vec (concat (get-ping-round-buffer this) new-xs))))))
 
 
