@@ -4814,7 +4814,7 @@
 
 (deftest ^:node-control auto-rejoin-process-test
 
-  (testing "auto rejoin process"
+  (testing "rejoin process"
     (let [node1           (sut/new-node-object node1-data cluster)
           node2           (sut/new-node-object node2-data cluster)
           node1-id        (sut/get-id node1)
@@ -4859,7 +4859,7 @@
             (testing "node1 should receive dead event and set status :left"
               (no-timeout-check *e3))
 
-            (testing "node1 should start rejoin"
+            (testing "node1 should start rejoin process"
               (no-timeout-check *e4))
 
             (testing "node2 should receive join event from node1"
@@ -4868,7 +4868,7 @@
             (testing "node1 should receive alive event from node2 for join confirmation"
               (no-timeout-check *e6))
 
-            (testing "node1 should complete auto rejoin process"
+            (testing "node1 should complete rejoin process"
               (m/assert true (sut/alive-node? node1))
               (m/assert true (sut/alive-node? node2)))
 

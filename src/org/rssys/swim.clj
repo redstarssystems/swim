@@ -1851,10 +1851,9 @@
 
 
 (defn start-rejoin-watcher
-  "Start rejoin watcher. This watcher will be started if node has alive status.
-  This watcher intended to rejoin alive node to cluster if it considered as dead.
-  Watcher detect setting :left status for node without leaving cluster. It may happen when dead event arrives.
-  If alive node receive dead event from cluster then node should set status left and join to cluster again."
+  "Start rejoin watcher. This watcher will start only if node has alive status.
+  This watcher intended to rejoin node to cluster if it considered as dead.
+  Watcher detect :left node status when dead event arrives and rejoin to cluster."
   [^NodeObject this & {:keys [rejoin-if-dead? rejoin-max-attempts]
                        :or {rejoin-if-dead?     (-> @*config :rejoin-if-dead?)
                             rejoin-max-attempts (-> @*config :rejoin-max-attempts)}}]
@@ -1891,12 +1890,12 @@
     3. Block thread and wait for join confirmation event from alive nodes.
        When status became alive or timeout happens (max-join-time-ms) continue thread execution.
     4. If join fails then set status :left
-    5. If join success then start auto rejoin process if enabled.
+    5. If join success then start rejoin watcher if enabled.
 
    If cluster size = 1:
     0. Delete all neighbours info
     1. Set status for this node as :alive and become single node in the cluster
-    2. Start auto rejoin process if enabled
+    2. Start auto rejoin watcher if enabled
 
   Returns true if join complete, false if join fails due to timeout or nil if already has join or alive status"
   [^NodeObject this & {:keys [max-join-time-ms rejoin-if-dead?]
