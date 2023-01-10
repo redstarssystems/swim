@@ -1188,10 +1188,12 @@
   An idea behind this function that we need to achieve a uniform distribution of ping events inside cluster in one round.
   It guarantees that every node in cluster receive an equal number of pings and there will be no ping starvation."
   [^NodeObject this n]
-  (let [active-ids-coll (mapv :id (get-alive-neighbours this))]
-    (remove-not-alive-nodes! this active-ids-coll)
-    (add-ids-for-next-round! this n active-ids-coll)
-    (vec (distinct (take-random-ids! this n)))))
+  (let [alive-ids-coll (mapv :id (get-alive-neighbours this))]
+    (if (seq alive-ids-coll)
+      (do (remove-not-alive-nodes! this alive-ids-coll)
+          (add-ids-for-next-round! this n alive-ids-coll)
+          (vec (distinct (take-random-ids! this n))))
+      [])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
