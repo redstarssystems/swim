@@ -1089,26 +1089,19 @@
 
 (defn set-nb-dead-status
   [^NodeObject this ^UUID neighbour-id]
+  (d> :set-neighbour-dead-status (get-id this) {:neighbour-id neighbour-id})
   (set-nb-status this neighbour-id :dead))
-
-
-(defn set-nb-stop-status
-  [^NodeObject this ^UUID neighbour-id]
-  (set-nb-status this neighbour-id :stop))
 
 
 (defn set-nb-left-status
   [^NodeObject this ^UUID neighbour-id]
+  (d> :set-neighbour-left-status (get-id this) {:neighbour-id neighbour-id})
   (set-nb-status this neighbour-id :left))
-
-
-(defn set-nb-join-status
-  [^NodeObject this ^UUID neighbour-id]
-  (set-nb-status this neighbour-id :join))
 
 
 (defn set-nb-alive-status
   [^NodeObject this ^UUID neighbour-id]
+  (d> :set-neighbour-alive-status (get-id this) {:neighbour-id neighbour-id})
   (set-nb-status this neighbour-id :alive))
 
 

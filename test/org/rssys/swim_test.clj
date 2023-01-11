@@ -2035,7 +2035,7 @@
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-          (sut/set-nb-stop-status node2 node1-id)
+          (sut/set-nb-left-status node2 node1-id)
 
           (testing "node2 should have one neighbour before anti-entropy event "
             (m/assert 1 (count (sut/get-neighbours node2))))
