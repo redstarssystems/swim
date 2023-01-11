@@ -1330,6 +1330,9 @@
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
     (cond
 
+      (= sender-id (get-id this))
+      :ignore-own-event
+
       (= :unknown-neighbour sender)
       (d> :anti-entropy-event-unknown-neighbour-error (get-id this) e)
 
@@ -1397,6 +1400,9 @@
         (d> :intermediate-node-indirect-ack-event (get-id this) e)
         (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
 
+      (= sender-id (get-id this))
+      :ignore-own-event
+
       (= :unknown-neighbour sender)
       (d> :indirect-ack-event-unknown-neighbour-error (get-id this) e)
 
@@ -1432,6 +1438,9 @@
         (d> :intermediate-node-indirect-ping-event (get-id this) e)
         (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
 
+      (= sender-id (get-id this))
+      :ignore-own-event
+
       (= :unknown-neighbour sender)
       (d> :indirect-ping-event-unknown-neighbour-error (get-id this) e)
 
@@ -1460,6 +1469,9 @@
 
       (not (alive-node? this))
       (d> :ack-event-not-alive-node-error (get-id this) e)
+
+      (= sender-id (get-id this))
+      :ignore-own-event
 
       (= :unknown-neighbour sender)
       (d> :ack-event-unknown-neighbour-error (get-id this) e)
@@ -1492,6 +1504,9 @@
 
       (not (alive-node? this))
       (d> :ping-event-not-alive-node-error (get-id this) e)
+
+      (= sender-id (get-id this))
+      :ignore-own-event
 
       (= :unknown-neighbour sender)
       (d> :ping-event-unknown-neighbour-error (get-id this) e)
@@ -1568,7 +1583,8 @@
 
 (defmethod event-processing AliveEvent
   [^NodeObject this ^AliveEvent e]
-  (let [sender (or (get-neighbour this (:id e)) :unknown-neighbour)]
+  (let [sender-id (.-id e)
+        sender (or (get-neighbour this (:id e)) :unknown-neighbour)]
 
     (cond
 
@@ -1580,6 +1596,9 @@
 
       (not (alive-node? this))
       (d> :alive-event-not-alive-node-error (get-id this) e)
+
+      (= sender-id (get-id this))
+      :ignore-own-event
 
       (= :unknown-neighbour sender)
       (d> :alive-event-unknown-neighbour-error (get-id this) e)
@@ -1621,6 +1640,9 @@
       (not (alive-node? this))
       (d> :new-cluster-size-event-not-alive-node-error (get-id this) e)
 
+      (= sender-id (get-id this))
+      :ignore-own-event
+
       (= :unknown-neighbour sender)
       (d> :new-cluster-size-event-unknown-neighbour-error (get-id this) e)
 
@@ -1661,6 +1683,9 @@
 
       (not (alive-node? this))
       (d> :dead-event-not-alive-node-error (get-id this) e)
+
+      (= sender-id (get-id this))
+      :ignore-own-event
 
       (= :unknown-neighbour sender)
       (d> :dead-event-unknown-neighbour-error (get-id this) e)
@@ -1704,6 +1729,9 @@
       (not (alive-node? this))
       (d> :left-event-not-alive-node-error (get-id this) e)
 
+      (= sender-id (get-id this))
+      :ignore-own-event
+
       (= :unknown-neighbour sender)
       (d> :left-event-unknown-neighbour-error (get-id this) e)
 
@@ -1732,6 +1760,9 @@
 
       (not (alive-node? this))
       (d> :payload-event-not-alive-node-error (get-id this) e)
+
+      (= sender-id (get-id this))
+      :ignore-own-event
 
       (= :unknown-neighbour sender)
       (d> :payload-event-unknown-neighbour-error (get-id this) e)

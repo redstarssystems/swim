@@ -4914,3 +4914,54 @@
           (remove-tap e2-tap-fn)
           (sut/node-stop node1)
           (sut/node-stop node2))))))
+
+
+(comment
+
+
+  (def cluster99 (sut/new-cluster (assoc cluster-data :cluster-size 99)))
+
+  (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster99))
+  (sut/set-cluster-size node1 1)
+  (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+  (sut/node-join node1)
+  (sut/set-cluster-size node1 99)
+
+  (def node2 (sut/new-node-object (dissoc node2-data :restart-counter) cluster99))
+  (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+
+  (sut/node-join node2)
+
+
+  (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster99))
+  (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+
+  (sut/node-join node3)
+
+  (def node4 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000004" :host "127.0.0.1" :port 5379} cluster99))
+  (sut/upsert-neighbour node4 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node4 empty-node-process-fn sut/udp-packet-processor)
+
+  (sut/node-join node4)
+
+
+  (swap! (:*node node2) assoc-in [:cluster :secret-key] (aset-byte (:secret-key (sut/get-cluster node2)) 0 42))
+
+  (sut/get-neighbours node1)
+  (sut/get-neighbours node2)
+
+
+  (sut/node-leave node2)
+
+  (sut/node-leave node3)
+
+
+  (sut/node-stop node1)
+  (sut/node-stop node2)
+  (sut/node-stop node3)
+  (sut/node-stop node4)
+
+  )
+
