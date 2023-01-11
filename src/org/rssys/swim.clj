@@ -1543,7 +1543,8 @@
       (d> :join-event-cluster-size-exceeded-error (get-id this) e))
 
     (and (neighbour-exist? this (.-id e))
-      (not (suitable-tx? this e)))
+      (not (suitable-tx? this e))
+      (= (.-restart_counter e) (:restart-counter (get-neighbour this (.-id e)))))
     (d> :join-event-bad-tx-error (get-id this) e)
 
     :else
