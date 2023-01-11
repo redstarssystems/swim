@@ -494,6 +494,21 @@
               (sut/set-restart-counter this -1)))))))
 
 
+(deftest set-tx-test
+  (testing "set tx"
+    (let [this   (sut/new-node-object node1-data cluster)
+          new-tx 42]
+
+      (testing "should set a new value"
+        (m/dessert new-tx (sut/get-tx this))
+        (sut/set-tx this new-tx)
+        (m/assert new-tx (sut/get-tx this)))
+
+      (testing "should catch invalid values"
+        (is (thrown-with-msg? Exception #"Invalid tx data"
+              (sut/set-tx this -1)))))))
+
+
 (deftest inc-tx-test
   (testing "increment tx"
     (let [this       (sut/new-node-object node1-data cluster)
