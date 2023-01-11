@@ -3386,7 +3386,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :join-event)
             [*e2 e2-tap-fn] (set-event-catcher node2-id :upsert-neighbour)
             [*e3 e3-tap-fn] (set-event-catcher node2-id :put-event)
-            [*e4 e4-tap-fn] (set-event-catcher node1-id :udp-packet-processor)]
+            [*e4 e4-tap-fn] (set-event-catcher node1-id :udp-packet-processor)
+            [*e5 e5-tap-fn] (set-event-catcher node1-id :set-cluster-size)]
 
         (try
           (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
@@ -3409,10 +3410,17 @@
                                          :neighbour-id node1-id}}}
               @*e4))
 
+          (testing "joining node1 should receive actual cluster size from alive node2"
+            (no-timeout-check *e5)
+            (m/assert {:node-id node1-id
+                       :data    {:new-cluster-size pos-int?}} @*e5))
+
           (testing "join event from node1 should happen on node2"
             (no-timeout-check *e1)
             (m/assert {:node-id node2-id
                        :data    {:id node1-id}} @*e1))
+
+
 
           (testing "node2 should upsert new neighbour node1"
             (no-timeout-check *e2)
@@ -3438,6 +3446,7 @@
             (remove-tap e2-tap-fn)
             (remove-tap e3-tap-fn)
             (remove-tap e4-tap-fn)
+            (remove-tap e5-tap-fn)
 
             (sut/node-stop node1)
             (sut/node-stop node2)))))

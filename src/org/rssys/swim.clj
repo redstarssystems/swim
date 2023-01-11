@@ -1552,8 +1552,10 @@
           nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
           _           (upsert-neighbour this (assoc nb :tx (.-tx e) :restart-counter (.-restart_counter e)
                                                :status :alive :access :direct))
-          alive-event (new-alive-event this e)]
-      (send-event-ae this alive-event (.-id e))
+          alive-event (new-alive-event this e)
+          cluster-size-event (new-cluster-size-event this (get-cluster-size this))
+          ae-event (new-anti-entropy-event this)]
+      (send-events this [alive-event cluster-size-event ae-event] (.-host e) (.-port e))
       (put-event this alive-event))))
 
 
