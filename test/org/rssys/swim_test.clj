@@ -3401,13 +3401,14 @@
 
           (testing "node2 should upsert new neighbour node1"
             (no-timeout-check *e2)
-            (testing "status, access, tx and restart counter for new neighbour should be up to date"
+            (testing "status, access and restart counter for new neighbour should be up to date"
               (m/assert {:id              node1-id
                          :status          :alive
                          :restart-counter (-> @*e1 :data :restart-counter)
-                         :tx              (-> @*e1 :data :tx)
                          :access          :direct}
-                (sut/get-neighbour node2 node1-id))))
+                (sut/get-neighbour node2 node1-id)))
+            (testing "tx should be equal or greater than from event"
+              (m/assert true (>= (.-tx (sut/get-neighbour node2 node1-id)) (-> @*e1 :data :tx)))))
 
           (testing "node2 should put alive event about node1 to outgoing events buffer"
             (no-timeout-check *e3)
@@ -3580,7 +3581,11 @@
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
 
-          (sut/set-nb-tx node2 node1-id 999)
+          (testing "before test set outdated restart counter"
+            (sut/set-nb-tx node2 node1-id 999))
+
+          (testing "before test set restart counter to value which will be actual during join operation"
+            (sut/set-nb-restart-counter node2 node1-id (inc (.-restart_counter (sut/get-neighbour node2 node1-id)))))
 
           (testing "should return false cause join fails"
             (m/assert false (sut/node-join node1 {:max-join-time-ms 1})))
@@ -3588,7 +3593,7 @@
           (testing "status should be :left if join fails"
             (m/assert :left (sut/get-status node1)))
 
-          (testing "join event with outdated tx should be rejected on node2"
+          (testing "join event with outdated tx and actual restart counter should be rejected on node2"
             (no-timeout-check *e1)
             (m/assert {:node-id node2-id
                        :data    {:id node1-id}} @*e1))

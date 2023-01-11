@@ -442,6 +442,15 @@
   (swap! (:*node this) assoc :restart-counter restart-counter))
 
 
+(defn set-tx
+  "Set node tx"
+  [^NodeObject this ^long tx]
+  (when-not (s/valid? ::spec/tx tx)
+    (throw (ex-info "Invalid tx data"
+             (->> tx (s/explain-data ::spec/tx) spec/problems))))
+  (d> :set-tx (get-id this) {:tx tx})
+  (swap! (:*node this) assoc :tx tx))
+
 
 (defn inc-tx
   "Increment node tx"
@@ -1884,7 +1893,7 @@
   "Join this node to the cluster. Blocks thread until join confirmation from alive nodes.
    If status is already :alive or :join then returns nil and do nothing.
 
-   Increase restart counter.
+   Increase restart counter. Set tx to 0.
 
    If cluster size > 1:
     1. Set status for this node as :join.
@@ -1906,6 +1915,7 @@
   (when-not (or (alive-node? this) (= :join (get-status this)))
 
     (set-restart-counter this (inc (get-restart-counter this)))
+    (set-tx this 0)
 
     (let [cluster-size (get-cluster-size this)]
       (cond
