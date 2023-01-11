@@ -1995,17 +1995,19 @@
 (defn node-stop
   "Stop the node and leave the cluster"
   [^NodeObject this]
-  (let [{:keys [*udp-server]} (get-value this)]
-    (node-leave this)
-    (swap! (:*node this) assoc
-      :*udp-server (when *udp-server (udp/stop *udp-server))
-      :ping-events {}
-      :outgoing-event-queue []
-      :ping-round-buffer []
-      :tx 0)
-    (set-status this :stop)
-    (when-not (s/valid? ::spec/node (get-value this))
-      (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this)))))))
+  (if (= :stop (get-status this))
+    true
+    (let [{:keys [*udp-server]} (get-value this)]
+      (node-leave this)
+      (swap! (:*node this) assoc
+        :*udp-server (when *udp-server (udp/stop *udp-server))
+        :ping-events {}
+        :outgoing-event-queue []
+        :ping-round-buffer []
+        :tx 0)
+      (set-stop-status this)
+      (when-not (s/valid? ::spec/node (get-value this))
+        (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this))))))))
   (d> :stop (get-id this) {}))
 
 
