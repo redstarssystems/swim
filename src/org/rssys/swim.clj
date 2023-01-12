@@ -1112,6 +1112,7 @@
 
 (defn set-nb-suspect-status
   [^NodeObject this ^UUID neighbour-id]
+  (d> :set-neighbour-suspect-status (get-id this) {:neighbour-id neighbour-id})
   (set-nb-status this neighbour-id :suspect))
 
 
