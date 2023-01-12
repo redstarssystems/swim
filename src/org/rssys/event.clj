@@ -139,20 +139,20 @@
 
 ;;;;
 
-(defrecord AckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx attempt-number]
+(defrecord AckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx attempt-number ts]
 
            ISwimEvent
 
            (prepare [^AckEvent e]
              [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e)
-              (.-neighbour_id e) (.-neighbour_tx e) (.-attempt_number e)])
+              (.-neighbour_id e) (.-neighbour_tx e) (.-attempt_number e) (.-ts e)])
 
            (restore [^AckEvent _ v]
              (if (and
                    (vector? v)
-                   (= 7 (count v))
+                   (= 8 (count v))
                    (every? true? (map #(%1 %2) [#(= % (:ack code)) uuid? nat-int? nat-int?
-                                                uuid? nat-int? pos-int?] v)))
+                                                uuid? nat-int? pos-int? pos-int?] v)))
                (apply ->AckEvent v)
                (throw (ex-info "AckEvent vector has invalid structure" {:ack-vec v})))))
 
@@ -166,7 +166,8 @@
                   :tx              0
                   :neighbour-id    (UUID. 0 1)
                   :neighbour-tx    0
-                  :attempt-number  1}))
+                  :attempt-number  1
+                  :ts 1}))
 
 
 ;;;;

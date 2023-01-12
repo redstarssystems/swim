@@ -533,30 +533,25 @@
     (take-events this (count (get-outgoing-events this)))))
 
 
-(defn upsert-ping
-  "Update existing or insert new active ping event in a map.
-  `neighbour-id` is used as a key in ping events map.
-  Returns key (`neighbour-id`) of ping event in a map"
+(defn insert-ping
+  "Insert new active ping event in a map.
+  [neighbour-id ts] is used as a key in ping events map.
+  Returns ping-id - [neighbour-id ts] as key of ping event in a map"
   [^NodeObject this ^PingEvent ping-event]
   (when-not (s/valid? ::spec/ping-event ping-event)
     (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::spec/ping-event) spec/problems))))
 
-  (let [ping-id            (.-neighbour_id ping-event)
-        previous-ping      (get-ping-event this ping-id)
-        new-attempt-number (if previous-ping
-                             (inc (.-attempt_number previous-ping))
-                             (.-attempt_number ping-event))
-        ping-event'        (assoc ping-event :attempt-number new-attempt-number)]
-    (d> :upsert-ping (get-id this) {:ping-event ping-event'})
-    (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) ping-id ping-event'))
+  (let [ping-id            [(.-neighbour_id ping-event) (.-ts ping-event)]]
+    (d> :upsert-ping (get-id this) {:ping-event ping-event})
+    (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) ping-id ping-event))
     ping-id))
 
 
 (defn delete-ping
   "Delete active ping event from map"
-  [^NodeObject this ^UUID neighbour-id]
-  (d> :delete-ping (get-id this) {:neighbour-id neighbour-id})
-  (swap! (:*node this) assoc :ping-events (dissoc (get-ping-events this) neighbour-id)))
+  [^NodeObject this ping-id]
+  (d> :delete-ping (get-id this) {:neighbour-id (first ping-id) :ts (second ping-id)})
+  (swap! (:*node this) assoc :ping-events (dissoc (get-ping-events this) ping-id)))
 
 
 (defn upsert-indirect-ping
@@ -685,7 +680,8 @@
                                         :tx              (get-tx this)
                                         :neighbour-id    (:id e)
                                         :neighbour-tx    (:tx e)
-                                        :attempt-number  (:attempt-number e)})]
+                                        :attempt-number  (:attempt-number e)
+                                        :ts              (:ts e)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/ack-event ack-event)
       (throw (ex-info "Invalid ack data" (spec/problems (s/explain-data ::spec/ack-event ack-event))))
@@ -1371,7 +1367,7 @@
   "Returns true if ack event corresponds to ping-event from this node,
    otherwise false"
   [^NodeObject this ^AckEvent e]
-  (let [ping-request-exist? (boolean (get-ping-event this (:id e)))
+  (let [ping-request-exist? (boolean (get-ping-event this [(.-id e) (.-ts e)]))
         receiver-this-node? (= (.-neighbour_id e) (get-id this))]
     (and ping-request-exist? receiver-this-node?)))
 
@@ -1491,7 +1487,7 @@
       :else
       (do
         (d> :ack-event (get-id this) e)
-        (delete-ping this sender-id)
+        (delete-ping this [sender-id (.-ts e)])
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))))))
 
 
@@ -1889,7 +1885,92 @@
     (doseq [nb-id neighbour-ids]
       (send-event this left-event nb-id)))
 
-  (set-left-status this))
+;; FIXME: start process of periodic event send from buffer
+
+
+(defn indirect-ack-timeout-watcher
+  "Detect indirect ack timeout. Should run in a separate virtual thread.
+  Returns void."
+  [^NodeObject this neighbour-id ts & {:keys [ack-timeout-ms max-ping-without-ack-before-dead] :or
+                                       {ack-timeout-ms (-> @*config :ack-timeout-ms)
+                                        max-ping-without-ack-before-dead (-> @*config :max-ping-without-ack-before-dead)}}]
+
+  (Thread/sleep ^Long ack-timeout-ms)
+  (when-let [indirect-ping-event (get-indirect-ping-event this neighbour-id)]
+    (let [attempt-number (.-attempt_number indirect-ping-event)]
+      (when (= ts (.-ts indirect-ping-event))
+        (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
+        (delete-indirect-ping this neighbour-id)
+        (if (< attempt-number max-ping-without-ack-before-dead)
+          (let [alive-neighbours   (get-alive-neighbours this)
+                alive-nodes-number (count alive-neighbours)]
+            (if (pos-int? alive-nodes-number)
+              (let [random-alive-nb          (rand-nth alive-neighbours)
+                    next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
+                (upsert-indirect-ping this next-indirect-ping-event)
+                (vthread/vfuture (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
+                (send-event this next-indirect-ping-event neighbour-id))
+              (do
+                (set-nb-dead-status this neighbour-id)
+                (put-event this (new-dead-event this neighbour-id)))))
+          (do
+            (set-nb-dead-status this neighbour-id)
+            (put-event this (new-dead-event this neighbour-id))))))))
+
+
+
+(defn ack-timeout-watcher
+  "Detect ack timeout. Should run in a separate virtual thread.
+  Returns void."
+  [^NodeObject this neighbour-id ts & {:keys [ack-timeout-ms max-ping-without-ack-before-suspect] :or
+                                       {ack-timeout-ms (-> @*config :ack-timeout-ms)
+                                        max-ping-without-ack-before-suspect (-> @*config :max-ping-without-ack-before-suspect)}}]
+
+  (Thread/sleep ^Long ack-timeout-ms)
+  (when-let [ping-event (get-ping-event this [neighbour-id ts])]
+    (let [attempt-number (.-attempt_number ping-event)]
+      (d> :ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
+      (delete-ping this neighbour-id)
+      (if (< attempt-number max-ping-without-ack-before-suspect)
+        (let [next-ping-event (new-ping-event this neighbour-id (inc attempt-number))]
+          (insert-ping this next-ping-event)
+          (vthread/vfuture (ack-timeout-watcher this neighbour-id (.-ts next-ping-event)))
+          (send-event this next-ping-event neighbour-id))
+        (let [_                  (set-nb-suspect-status this neighbour-id)
+              alive-neighbours   (get-alive-neighbours this)
+              alive-nodes-number (count alive-neighbours)]
+          (if (zero? alive-nodes-number)
+            (set-nb-dead-status this neighbour-id)
+            (let [random-alive-nb     (rand-nth alive-neighbours)
+                  indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
+              (upsert-indirect-ping this indirect-ping-event)
+              (vthread/vfuture (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event)))
+              (send-event this indirect-ping-event (:id random-alive-nb)))))))))
+
+
+
+(defn ping-heartbeat
+  "Should run in a separate virtual thread."
+  [^NodeObject this & {:keys [ping-heartbeat-ms] :or {ping-heartbeat-ms (-> @*config :ping-heartbeat-ms)}}]
+  (while (alive-node? this)
+    (try
+      (let [events        (take-events this)
+            n             (calc-n (nodes-in-cluster this))
+            neighbour-ids (take-ids-for-ping this n)]
+        (doseq [neighbour-id neighbour-ids]
+          (let [nb         (get-neighbour this neighbour-id)
+                ping-event (new-ping-event this neighbour-id 1)
+                nb-events  (conj events ping-event)]
+            (insert-ping this ping-event)
+            (vthread/vfuture (ack-timeout-watcher this neighbour-id (.-ts ping-event)))
+            (send-events this nb-events (.-host nb) (.-port nb))
+            (d> :ping-heartbeat (get-id this) {:known-nodes-number  (count (get-alive-neighbours this))
+                                               :events-sent-number  (count nb-events)
+                                               :active-pings-number (count (get-ping-events this))
+                                               :ping-heartbeat-ms   ping-heartbeat-ms}))))
+      (catch Exception e
+        (d> :ping-heartbeat-error (get-id this) {:message (ex-message e)})))
+    (Thread/sleep ^Long ping-heartbeat-ms)))
 
 
 (declare node-join)
@@ -1919,9 +2000,6 @@
                 (d> :rejoin-max-attempts-reached-error (get-id this) {:attempts attempt})
                 (recur (inc attempt))))))))))
 
-
-
-;; FIXME: start process of periodic event send from buffer
 
 (defn node-join
   "Join this node to the cluster. Blocks thread until join confirmation from alive nodes.
@@ -1961,6 +2039,7 @@
           (delete-neighbours this)
           (set-alive-status this)
           (when rejoin-if-dead? (start-rejoin-watcher this))
+          (vthread/vfuture (ping-heartbeat this))
           true)
 
         (> cluster-size 1)
@@ -1989,6 +2068,7 @@
             (do
               (remove-watch (:*node this) :join-await-watcher)
               (when rejoin-if-dead? (start-rejoin-watcher this))
+              (vthread/vfuture (ping-heartbeat this))
               true)
             (do
               (deref *join-await-promise max-join-time-ms :timeout)
@@ -1996,6 +2076,7 @@
               (if (alive-node? this)
                 (do
                   (when rejoin-if-dead? (start-rejoin-watcher this))
+                  (vthread/vfuture (ping-heartbeat this))
                   true)
                 (do
                   (set-left-status this)
@@ -2015,7 +2096,7 @@
           events-vector (conj (take-events this)
                           ping-event
                           (new-anti-entropy-event this))]
-      (upsert-ping this ping-event)
+      (insert-ping this ping-event)
       (send-events this events-vector nb-host nb-port)
       ping-event)
     (do

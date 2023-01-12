@@ -69,7 +69,7 @@
 
 (s/def ::ack-event
   (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                   ::neighbour-id ::neighbour-tx ::attempt-number]))
+                   ::neighbour-id ::neighbour-tx ::attempt-number ::ts]))
 
 
 (s/def ::indirect-ping-event

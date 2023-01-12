@@ -249,7 +249,8 @@
                                         :tx              2
                                         :neighbour-id    #uuid "00000000-0000-0000-0000-000000000001"
                                         :neighbour-tx    3
-                                        :attempt-number  42})]
+                                        :attempt-number  42
+                                        :ts              1})]
 
       (testing "Prepare AckEvent to vector"
         (let [prepared-event (.prepare ack-event)]
@@ -259,7 +260,8 @@
                                      (.-tx ack-event)
                                      (.-neighbour_id ack-event)
                                      (.-neighbour_tx ack-event)
-                                     (.-attempt_number ack-event)]
+                                     (.-attempt_number ack-event)
+                                     (.-ts ack-event)]
             prepared-event)))
 
       (testing "Restore AckEvent from vector"
@@ -269,7 +271,8 @@
                           2
                           #uuid "00000000-0000-0000-0000-000000000001"
                           3
-                          42]
+                          42
+                          1]
               result-ack (.restore (sut/empty-ack) v)]
 
           (testing "Restored AckEvent should be equals to original event"
@@ -286,7 +289,8 @@
                                          2
                                          #uuid "00000000-0000-0000-0000-000000000001"
                                          3
-                                         42])))))))
+                                         42
+                                         1])))))))
 
 
 (deftest empty-ack-test
@@ -296,7 +300,8 @@
                              :tx              nat-int?
                              :neighbour-id    uuid?
                              :neighbour-tx    nat-int?
-                             :attempt-number  pos-int?}
+                             :attempt-number  pos-int?
+                             :ts              pos-int?}
     (sut/empty-ack)))
 
 
