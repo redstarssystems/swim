@@ -577,9 +577,9 @@
 
 (defn delete-indirect-ping
   "Delete active ping event from map"
-  [^NodeObject this indirect-id]
-  (d> :delete-indirect-ping (get-id this) {:indirect-id indirect-id})
-  (swap! (:*node this) assoc :indirect-ping-events (dissoc (get-indirect-ping-events this) indirect-id)))
+  [^NodeObject this neighbour-id]
+  (d> :delete-indirect-ping (get-id this) {:indirect-id neighbour-id})
+  (swap! (:*node this) assoc :indirect-ping-events (dissoc (get-indirect-ping-events this) neighbour-id)))
 
 
 (defn insert-probe
