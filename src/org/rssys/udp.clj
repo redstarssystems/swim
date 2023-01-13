@@ -96,11 +96,14 @@
         {:keys [host port]} @*server]
     (swap! *server assoc :continue? false)
     (add-watch *server :stop-watcher
-      (fn [_ _ _ new-state]
-        (when (= :stopped (:server-state new-state))
+      (fn [_ a _ new-state]
+        (when (or
+                (= :stopped (-> @a :server-state))
+                (= :stopped (:server-state new-state)))
           (deliver *stop-complete :stopped))))
     (send-packet (.getBytes "") host port)                  ;; send empty packet to trigger server
-    (deref *stop-complete 200 :timeout)                    ;; wait for packet reach the server
+    (when-not (= :stopped (deref *stop-complete 200 :timeout))
+      (throw (ex-info "Can't stop server" (bean @*server))))                   ;; wait for packet reach the server
     (remove-watch *server :stop-watcher)
     *server))
 
