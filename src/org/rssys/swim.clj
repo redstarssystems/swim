@@ -1439,8 +1439,6 @@
       (not (suitable-restart-counter? this e))
       (d> :indirect-ping-event-bad-restart-counter-error (get-id this) e)
 
-      (not (suitable-tx? this e))
-      (d> :indirect-ping-event-bad-tx-error (get-id this) e)
 
       (not (= (get-id this) (.-neighbour_id e)))
       (d> :indirect-ping-event-neighbour-id-mismatch-error (get-id this) e)

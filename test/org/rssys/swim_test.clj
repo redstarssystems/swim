@@ -2674,50 +2674,6 @@
             (sut/node-stop node2)
             (sut/node-stop node3)))))
 
-    (testing "destination node should reject event with bad tx"
-      (let [node1    (sut/new-node-object node1-data cluster)
-            node2    (sut/new-node-object node2-data cluster)
-            node3    (sut/new-node-object node3-data cluster)
-            node1-id (sut/get-id node1)
-            node2-id (sut/get-id node2)
-            node3-id (sut/get-id node3)
-            [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-bad-tx-error)]
-
-        (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
-
-          (sut/set-alive-status node1)
-          (sut/set-alive-status node2)
-          (sut/set-alive-status node3)
-
-          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
-          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
-
-          (sut/upsert-neighbour node2 (sut/new-neighbour-node node3-nb-data))
-          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-          (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
-          (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
-
-
-          (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
-
-            (sut/set-nb-tx node3 node1-id 999)
-            (sut/send-event node1 indirect-ping-event node2-id)
-
-            (testing "node3 should reject indirect ping event from node1 with outdated tx"
-              (no-timeout-check *e1)))
-
-          (catch Exception e
-            (print-ex e))
-          (finally
-            (remove-tap e1-tap-fn)
-            (sut/node-stop node1)
-            (sut/node-stop node2)
-            (sut/node-stop node3)))))
 
     (testing "destination node should reject event intended for different node"
       (let [node1    (sut/new-node-object node1-data cluster)
