@@ -57,7 +57,7 @@
          :max-ping-without-ack-before-dead    4             ;; How many pings without ack before node considered as dead
 
 
-         :ping-heartbeat-ms                   1000           ;; Send ping+events to neighbours every N ms
+         :ping-heartbeat-ms                   5000           ;; Send ping+events to neighbours every N ms
          :ack-timeout-ms                      150           ;; How much time we wait for an ack event before next ping will be sent
          :max-join-time-ms                    300          ;; How much time node awaits join confirmation before timeout
          :rejoin-if-dead?                     true          ;; After node join, if cluster consider this node as dead, then do rejoin
@@ -554,32 +554,26 @@
   (swap! (:*node this) assoc :ping-events (dissoc (get-ping-events this) ping-id)))
 
 
-(defn upsert-indirect-ping
-  "Update existing or insert new active indirect ping event in map.
-  `neighbour-id` is used as a key in indirect ping events map.
-  Returns key (`neighbour-id`) of indirect ping event in a map"
-  [^NodeObject this ^IndirectPingEvent indirect-ping-event]
-  (when-not (s/valid? ::spec/indirect-ping-event indirect-ping-event)
+(defn insert-indirect-ping
+  "Insert new active indirect ping event in map.
+  [neighbour-id ts] is used as a key in indirect ping events map.
+  Returns ping-id - [neighbour-id ts] as key of indirect ping event in a map"
+  [^NodeObject this ^IndirectPingEvent e]
+  (when-not (s/valid? ::spec/indirect-ping-event e)
     (throw (ex-info "Invalid indirect ping event data"
-             (->> indirect-ping-event (s/explain-data ::spec/indirect-ping-event) spec/problems))))
-  (let [indirect-key            (.-neighbour_id indirect-ping-event)
-        previous-indirect-ping (get-indirect-ping-event this indirect-key)
-        new-attempt-number     (if previous-indirect-ping
-                                 (inc (.-attempt_number previous-indirect-ping))
-                                 (.-attempt_number indirect-ping-event))
-        indirect-ping-event'   (assoc indirect-ping-event :attempt-number new-attempt-number)]
-    (d> :upsert-indirect-ping (get-id this) {:indirect-ping-event indirect-ping-event'
-                                             :indirect-id         indirect-key})
+             (->> e (s/explain-data ::spec/indirect-ping-event) spec/problems))))
+  (let [indirect-key [(.-neighbour_id e) (.-ts e)]]
+    (d> :upsert-indirect-ping (get-id this) {:indirect-ping-event e :indirect-id indirect-key})
     (swap! (:*node this) assoc :indirect-ping-events
-      (assoc (get-indirect-ping-events this) indirect-key indirect-ping-event'))
+      (assoc (get-indirect-ping-events this) indirect-key e))
     indirect-key))
 
 
 (defn delete-indirect-ping
   "Delete active ping event from map"
-  [^NodeObject this neighbour-id]
-  (d> :delete-indirect-ping (get-id this) {:indirect-id neighbour-id})
-  (swap! (:*node this) assoc :indirect-ping-events (dissoc (get-indirect-ping-events this) neighbour-id)))
+  [^NodeObject this ping-id]
+  (d> :delete-indirect-ping (get-id this) {:neighbour-id (first ping-id) :ts (second ping-id)})
+  (swap! (:*node this) assoc :indirect-ping-events (dissoc (get-indirect-ping-events this) ping-id)))
 
 
 (defn insert-probe
@@ -743,7 +737,8 @@
                                       :neighbour-id      (.-id e)
                                       :neighbour-host    (.-host e)
                                       :neighbour-port    (.-port e)
-                                      :attempt-number    (.-attempt_number e)})]
+                                      :attempt-number    (.-attempt_number e)
+                                      :ts                (.-ts e)})]
     (inc-tx this)
     (if-not (s/valid? ::spec/indirect-ack-event indirect-ack-event)
       (throw (ex-info "Invalid indirect ack data"
@@ -1359,7 +1354,7 @@
 (defn- expected-indirect-ack-event?
   "Returns true if we sent indirect-ping-event before, otherwise false"
   [^NodeObject this ^IndirectAckEvent e]
-  (let [indirect-ping-request-exist? (boolean (get-indirect-ping-event this (:id e)))
+  (let [indirect-ping-request-exist? (boolean (get-indirect-ping-event this [(.-id e) (.-ts e)]))
         receiver-this-node?          (= (.-neighbour_id e) (get-id this))]
     (and indirect-ping-request-exist? receiver-this-node?)))
 
@@ -1417,7 +1412,7 @@
         (upsert-neighbour this (assoc sender :tx (.-tx e) :access :indirect :restart-counter (.-restart_counter e)
                                  :status :alive))
         (d> :indirect-ack-event (get-id this) e)
-        (delete-indirect-ping this sender-id)))))
+        (delete-indirect-ping this [sender-id (.-ts e)])))))
 
 
 (defmethod event-processing IndirectPingEvent
@@ -1904,6 +1899,7 @@
                                         max-ping-without-ack-before-dead (-> @*config :max-ping-without-ack-before-dead)}}]
 
   (Thread/sleep ^Long ack-timeout-ms)
+
   (when-let [indirect-ping-event (get-indirect-ping-event this neighbour-id)]
     (let [attempt-number (.-attempt_number indirect-ping-event)]
       (when (= ts (.-ts indirect-ping-event))
@@ -1915,7 +1911,7 @@
             (if (pos-int? alive-nodes-number)
               (let [random-alive-nb          (rand-nth alive-neighbours)
                     next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
-                (upsert-indirect-ping this next-indirect-ping-event)
+                (insert-indirect-ping this next-indirect-ping-event)
                 (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
                 (send-event this next-indirect-ping-event neighbour-id))
               (do
@@ -1951,7 +1947,7 @@
             (set-nb-dead-status this neighbour-id)
             (let [random-alive-nb     (rand-nth alive-neighbours)
                   indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
-              (upsert-indirect-ping this indirect-ping-event)
+              (insert-indirect-ping this indirect-ping-event)
               (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event)))
               (send-event this indirect-ping-event (:id random-alive-nb)))))))))
 

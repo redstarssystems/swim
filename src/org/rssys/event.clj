@@ -221,7 +221,7 @@
 (defrecord IndirectAckEvent [cmd-type id host port restart-counter tx status
                              intermediate-id intermediate-host intermediate-port
                              neighbour-id neighbour-host neighbour-port
-                             attempt-number]
+                             attempt-number ts]
 
            ISwimEvent
 
@@ -229,17 +229,17 @@
              [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e) (.-status e)
               (.-intermediate_id e) (.-intermediate_host e) (.-intermediate_port e)
               (.-neighbour_id e) (.-neighbour_host e) (.-neighbour_port e)
-              (.-attempt_number e)])
+              (.-attempt_number e) (.-ts e)])
 
            (restore [^IndirectAckEvent _ v]
              (if (and
                    (vector? v)
-                   (= 14 (count v))
+                   (= 15 (count v))
                    (every? true? (map #(%1 %2) [#(= % (:indirect-ack code))
                                                 uuid? string? pos-int? nat-int? nat-int? keyword?
                                                 uuid? string? pos-int?
                                                 uuid? string? pos-int?
-                                                pos-int?] v)))
+                                                pos-int? pos-int?] v)))
                (apply ->IndirectAckEvent v)
                (throw (ex-info "IndirectAckEvent vector has invalid structure" {:indirect-ping-vec v})))))
 
@@ -260,7 +260,8 @@
                           :neighbour-id      (UUID. 0 2)
                           :neighbour-host    "localhost"
                           :neighbour-port    100
-                          :attempt-number    1}))
+                          :attempt-number    1
+                          :ts                1}))
 
 
 ;;;;

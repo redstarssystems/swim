@@ -325,7 +325,7 @@
       (m/assert [] (sut/get-outgoing-events this))
 
       (sut/insert-ping this (event/empty-ping))
-      (sut/upsert-indirect-ping this (event/empty-indirect-ping))
+      (sut/insert-indirect-ping this (event/empty-indirect-ping))
 
       (m/assert
         {[#uuid"00000000-0000-0000-0000-000000000001" 1]
@@ -340,7 +340,7 @@
         (sut/get-ping-events this))
 
       (m/assert ^:matcho/strict
-        {#uuid "00000000-0000-0000-0000-000000000002"
+        {[#uuid "00000000-0000-0000-0000-000000000002" 1]
          {:cmd-type          14
           :id                #uuid "00000000-0000-0000-0000-000000000000"
           :host              "localhost"
@@ -353,7 +353,8 @@
           :neighbour-host    "localhost"
           :neighbour-id      #uuid "00000000-0000-0000-0000-000000000002"
           :neighbour-port    100
-          :attempt-number    1}}
+          :attempt-number    1
+          :ts                1}}
         (sut/get-indirect-ping-events this))
 
       (m/assert
@@ -377,7 +378,7 @@
          :neighbour-id    #uuid"00000000-0000-0000-0000-000000000002"
          :attempt-number  1
          :ts              pos-int?}
-        (sut/get-indirect-ping-event this #uuid "00000000-0000-0000-0000-000000000002"))
+        (sut/get-indirect-ping-event this [#uuid "00000000-0000-0000-0000-000000000002" 1]))
 
       (m/assert [] (sut/get-ping-round-buffer this))
 
@@ -690,37 +691,32 @@
         (m/assert nil (sut/get-ping-event this ping-id))))))
 
 
-(deftest upsert-indirect-ping-test
+(deftest insert-indirect-ping-test
 
-  (testing "upsert indirect ping"
+  (testing "insert indirect ping"
     (let [this                (sut/new-node-object node1-data cluster)
           indirect-ping-event (event/empty-indirect-ping)
-          ping-id             (.-neighbour_id indirect-ping-event)]
+          ping-id             [(.-neighbour_id indirect-ping-event) (.-ts indirect-ping-event)]]
 
-      (testing "should return key (`neighbour-id`) after upsert"
+      (testing "should return key [neighbour-id ts] after upsert"
         (m/assert nil (sut/get-indirect-ping-event this ping-id))
-        (m/assert ping-id (sut/upsert-indirect-ping this indirect-ping-event)))
+        (m/assert ping-id (sut/insert-indirect-ping this indirect-ping-event)))
 
       (testing "should save indirect ping event in a map"
         (m/assert indirect-ping-event (sut/get-indirect-ping-event this ping-id)))
 
-      (testing "should increment attempt number if indirect ping event is already in a map"
-        (sut/upsert-indirect-ping this indirect-ping-event)
-        (sut/upsert-indirect-ping this indirect-ping-event)
-        (m/assert {:attempt-number 3} (sut/get-indirect-ping-event this ping-id)))
-
       (testing "should catch invalid indirect ping event data"
         (is (thrown-with-msg? Exception #"Invalid indirect ping event data"
-              (sut/upsert-indirect-ping this {:a :bad-value})))))))
+              (sut/insert-indirect-ping this {:a :bad-value})))))))
 
 
 (deftest delete-indirect-ping-test
   (testing "delete indirect ping"
     (let [this                (sut/new-node-object node1-data cluster)
           indirect-ping-event (event/empty-indirect-ping)
-          ping-id             (.-neighbour_id indirect-ping-event)]
+          ping-id             [(.-neighbour_id indirect-ping-event) (.-ts indirect-ping-event)]]
 
-      (sut/upsert-indirect-ping this indirect-ping-event)
+      (sut/insert-indirect-ping this indirect-ping-event)
 
       (testing "should delete indirect ping event from map"
         (m/assert indirect-ping-event (sut/get-indirect-ping-event this ping-id))
@@ -2101,13 +2097,13 @@
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
                 node3-tx            (.-tx (sut/get-neighbour node1 node3-id))
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)
                 indirect-ack-event  (sut/new-indirect-ack-event node3 indirect-ping-event)]
 
             (testing "node1 should have indirect ping request in indirect ping map before process indirect ack event"
               (m/assert
                 {:id node1-id :intermediate-id node2-id :neighbour-id node3-id}
-                (sut/get-indirect-ping-event node1 node3-id)))
+                (sut/get-indirect-ping-event node1 [node3-id (.-ts indirect-ping-event)])))
 
             (testing "node1 should have direct access (default) for neighbour node3 before process indirect ack event"
               (m/assert :direct (:access (sut/get-neighbour node1 node3-id))))
@@ -2174,7 +2170,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)
                 indirect-ack-event  (sut/new-indirect-ack-event node3 indirect-ping-event)]
 
             (sut/send-event node3 indirect-ack-event node2-id)
@@ -2183,7 +2179,7 @@
               (no-timeout-check *e1))
 
             (testing "indirect ping event should be still in map"
-              (m/dessert empty? (sut/get-indirect-ping-event node1 node3-id))))
+              (m/dessert empty? (sut/get-indirect-ping-event node1 [node3-id (.-ts indirect-ping-event)]))))
 
           (catch Exception e
             (print-ex e))
@@ -2221,7 +2217,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)
                 indirect-ack-event  (sut/new-indirect-ack-event node3 indirect-ping-event)]
 
             (sut/send-event node3 indirect-ack-event node2-id)
@@ -2265,7 +2261,7 @@
           (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)
                 indirect-ack-event  (sut/new-indirect-ack-event node3 indirect-ping-event)]
 
 
@@ -2311,7 +2307,7 @@
           (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)
                 indirect-ack-event  (sut/new-indirect-ack-event node3 indirect-ping-event)]
 
             (sut/set-nb-restart-counter node1 node3-id 999)
@@ -2356,7 +2352,7 @@
           (sut/upsert-neighbour node3 (sut/new-neighbour-node node2-nb-data))
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)
                 indirect-ack-event  (sut/new-indirect-ack-event node3 indirect-ping-event)]
 
             (sut/set-nb-tx node1 node3-id 999)
@@ -2454,7 +2450,7 @@
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
                 node1-tx            (.-tx (sut/get-neighbour node3 node1-id))
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)]
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
 
             (sut/send-event node1 indirect-ping-event node2-id)
 
@@ -2526,7 +2522,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)]
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
 
             (sut/send-event node1 indirect-ping-event node2-id)
 
@@ -2573,7 +2569,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)]
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
 
             (sut/send-event node1 indirect-ping-event node2-id)
 
@@ -2617,7 +2613,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)]
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
 
             (sut/delete-neighbour node3 node1-id)           ;; make node1 unknown for node3
             (sut/send-event node1 indirect-ping-event node2-id)
@@ -2662,7 +2658,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)]
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
 
             (sut/set-nb-restart-counter node3 node1-id 999)
             (sut/send-event node1 indirect-ping-event node2-id)
@@ -2707,7 +2703,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)]
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
 
             (sut/set-nb-tx node3 node1-id 999)
             (sut/send-event node1 indirect-ping-event node2-id)
@@ -2751,7 +2747,7 @@
 
 
           (let [indirect-ping-event (sut/new-indirect-ping-event node1 node2-id node3-id 1)
-                _                   (sut/upsert-indirect-ping node1 indirect-ping-event)]
+                _                   (sut/insert-indirect-ping node1 indirect-ping-event)]
 
             (sut/send-event node1 (assoc indirect-ping-event :neighbour-id #uuid "00000000-0000-0000-0000-000000000999") node2-id)
 
@@ -3357,7 +3353,7 @@
               (assoc ping-event :neighbour-id #uuid "00000000-0000-0000-0000-000000000999")
               node2-id)
 
-            (testing "node2 should reject ping event inteded for other node"
+            (testing "node2 should reject ping event intended for other node"
               (no-timeout-check *e1)))
 
           (catch Exception e
@@ -4911,35 +4907,90 @@
           (sut/node-stop node2))))))
 
 
+;; TODO after stop almost all nodes, two alive nodes permanently sends indirect ping
+;; TODO measure increase of packet rate depending on number of nodes
+;; TODO measure time of round trip ping-ack
+;; FIXME stop node. When we start 10+ nodes cluster and then try to stop them we see huge timeout/hang.
+;; FIXME in 7+ nodes cluster we see periodically nodes have status left. Why nodes miss each other?
+
 (comment
 
+  (def nodes
+    (mapv
+      (fn [n]
+       (let [uuid (UUID. 1 n)
+             port (+ 5377 n)
+             node (sut/new-node-object {:id uuid :host "127.0.0.1" :port port} cluster)]
+         (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
+         (sut/node-start node empty-node-process-fn sut/udp-packet-processor)
+         (sut/node-join node)
+         ;;(Thread/sleep 200)
+         node))
+      (range 0 97)))
 
-  (def cluster99 (sut/new-cluster (assoc cluster-data :cluster-size 99)))
+  (mapv #(sut/get-status %) nodes)
+  (count (filterv #{:alive} (mapv #(sut/get-status %) nodes)))
+  (count (filterv #{:join} (mapv #(sut/get-status %) nodes)))
+  (count (filterv #{:left} (mapv #(sut/get-status %) nodes)))
+  (count (filterv #{:stop} (mapv #(sut/get-status %) nodes)))
+  (mapv #(sut/node-stop %) nodes)
 
-  (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster99))
+  (clojure.inspector/inspect-tree @(:*node (first nodes)))
+  (clojure.inspector/inspect @(:*node (first nodes)))
+  (clojure.inspector/inspect-table @(:*node (first nodes)))
+
+
+  (doseq [node nodes]
+    (sut/node-leave node))
+
+  (doseq [node nodes]
+    (sut/node-stop node))
+
+
+
+  (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster))
   (sut/set-cluster-size node1 1)
   (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
   (sut/node-join node1)
   (sut/set-cluster-size node1 99)
 
-  (def node2 (sut/new-node-object (dissoc node2-data :restart-counter) cluster99))
+  (sut/node-stop node1)
+
+
+
+  (def node2 (sut/new-node-object (dissoc node2-data :restart-counter) cluster))
   (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
   (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
   (sut/node-join node2)
 
 
-  (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster99))
+  (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster))
   (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
   (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
 
   (sut/node-join node3)
 
-  (def node4 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000004" :host "127.0.0.1" :port 5379} cluster99))
+
+  (def node4 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000004" :host "127.0.0.1" :port 5379} cluster))
   (sut/upsert-neighbour node4 (sut/new-neighbour-node node1-nb-data))
   (sut/node-start node4 empty-node-process-fn sut/udp-packet-processor)
 
   (sut/node-join node4)
+
+
+  (def node5 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000005" :host "127.0.0.1" :port 5380} cluster))
+  (sut/upsert-neighbour node5 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node5 empty-node-process-fn sut/udp-packet-processor)
+
+  (sut/node-join node5)
+
+
+  (def node6 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000006" :host "127.0.0.1" :port 5381} cluster))
+  (sut/upsert-neighbour node6 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node6 empty-node-process-fn sut/udp-packet-processor)
+
+  (sut/node-join node6)
 
 
   (swap! (:*node node2) assoc-in [:cluster :secret-key] (aset-byte (:secret-key (sut/get-cluster node2)) 0 42))
@@ -4948,6 +4999,7 @@
   (sut/get-neighbours node2)
 
 
+  (sut/node-leave node1)
   (sut/node-leave node2)
 
   (sut/node-leave node3)
@@ -4957,6 +5009,8 @@
   (sut/node-stop node2)
   (sut/node-stop node3)
   (sut/node-stop node4)
+  (sut/node-stop node5)
+  (sut/node-stop node6)
 
   )
 

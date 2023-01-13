@@ -422,7 +422,8 @@
                                       :neighbour-id      #uuid "00000000-0000-0000-0000-000000000003"
                                       :neighbour-host    "127.0.0.1"
                                       :neighbour-port    5378
-                                      :attempt-number    42})]
+                                      :attempt-number    42
+                                      :ts                1})]
 
       (testing "Prepare IndirectAckEvent to vector"
         (let [prepared-event (.prepare indirect-ack-event)]
@@ -439,7 +440,8 @@
                                      (.-neighbour_id indirect-ack-event)
                                      (.-neighbour_host indirect-ack-event)
                                      (.-neighbour_port indirect-ack-event)
-                                     (.-attempt_number indirect-ack-event)]
+                                     (.-attempt_number indirect-ack-event)
+                                     (.-ts indirect-ack-event)]
             prepared-event)))
 
       (testing "Restore IndirectAckEvent from vector"
@@ -456,7 +458,8 @@
                  #uuid "00000000-0000-0000-0000-000000000003"
                  "127.0.0.1"
                  5378
-                 42]
+                 42
+                 1]
               result-indirect-ack
               (.restore (sut/empty-indirect-ack) v)]
 
@@ -481,7 +484,8 @@
                                                   #uuid "00000000-0000-0000-0000-000000000003"
                                                   "127.0.0.1"
                                                   5378
-                                                  42])))))))
+                                                  42
+                                                  1])))))))
 
 
 (deftest empty-indirect-ack-test
@@ -498,7 +502,8 @@
                              :neighbour-id      uuid?
                              :neighbour-host    string?
                              :neighbour-port    pos-int?
-                             :attempt-number    pos-int?}
+                             :attempt-number    pos-int?
+                             :ts                pos-int?}
     (sut/empty-indirect-ack)))
 
 
