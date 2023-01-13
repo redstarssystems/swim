@@ -1,7 +1,7 @@
 (ns org.rssys.udp
   "UDP server functions"
   (:require
-    [org.rssys.vthread :refer [vfuture]])
+    [org.rssys.vthread :refer [vthread]])
   (:import
     (java.net
       DatagramPacket
@@ -60,7 +60,7 @@
                            :server-packet-count 0})
           server-socket (DatagramSocket. port (InetAddress/getByName host))]
       (.setSoTimeout server-socket timeout)
-      (vfuture
+      (vthread
         (when *server-ready-promise (deliver *server-ready-promise *server))
         (while (-> @*server :continue?)
           (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
@@ -69,7 +69,7 @@
               (.receive server-socket packet)
               (swap! *server update :server-packet-count inc)
               (if (pos? (.getLength packet))
-                (vfuture (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
+                (vthread (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
                 :nothing)                                    ;; do not process empty packets
               (catch SocketTimeoutException _)
               (catch Exception e
