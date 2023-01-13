@@ -81,7 +81,7 @@
 (s/def ::indirect-ack-event
   (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::status ::host ::port
                    ::intermediate-id ::intermediate-host ::intermediate-port
-                   ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number]))
+                   ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number ::ts]))
 
 
 ;; alive node is a neighbour
@@ -146,11 +146,14 @@
 
 
 ;; buffer for ping events we sent and waiting for an ack
-(s/def ::ping-events (s/map-of ::neighbour-id ::ping-event))
+
+(s/def ::ping-key (s/tuple ::neighbour-id ::ts))
+
+(s/def ::ping-events (s/map-of ::ping-key ::ping-event))
 
 
 ;; buffer for indirect pings we sent and waiting for an ack
-(s/def ::indirect-ping-events (s/map-of ::neighbour-id ::indirect-ping-event))
+(s/def ::indirect-ping-events (s/map-of ::ping-key ::indirect-ping-event))
 
 
 ;; buffer for outgoing events which we propagate via piggieback with ping events
