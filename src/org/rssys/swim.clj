@@ -1878,16 +1878,17 @@
 (defn node-leave
   "Leave the cluster"
   [^NodeObject this]
-  (if (= :left (get-status this))
-    true
-    (let [_ (stop-rejoin-watcher this)
-          n             (calc-n (nodes-in-cluster this))
-          neighbour-ids (take-ids-for-ping this n)
-          left-event    (new-left-event this)]
-      (doseq [nb-id neighbour-ids]
-        (send-event this left-event nb-id))
-      (set-left-status this)
-      true)))
+  (let [status (get-status this)]
+    (if (or (= :left status) (= :stop status))
+      true
+      (let [_             (stop-rejoin-watcher this)
+            n             (calc-n (nodes-in-cluster this))
+            neighbour-ids (take-ids-for-ping this n)
+            left-event    (new-left-event this)]
+        (doseq [nb-id neighbour-ids]
+          (send-event this left-event nb-id))
+        (set-left-status this)
+        true))))
 
 
 
