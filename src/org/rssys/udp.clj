@@ -100,7 +100,7 @@
         (when (= :stopped (:server-state new-state))
           (deliver *stop-complete :stopped))))
     (send-packet (.getBytes "") host port)                  ;; send empty packet to trigger server
-    (deref *stop-complete 2000 :timeout)                    ;; wait for packet reach the server
+    (deref *stop-complete 200 :timeout)                    ;; wait for packet reach the server
     (remove-watch *server :stop-watcher)
     *server))
 
