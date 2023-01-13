@@ -1824,7 +1824,7 @@
             node2    (sut/new-node-object node2-data cluster)
             node1-id (sut/get-id node1)
             node2-id (sut/get-id node2)
-            [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-neighbour-cluster-size-exceeded-error)]
+            [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event-cluster-size-exceeded-error)]
 
         (try
           (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)

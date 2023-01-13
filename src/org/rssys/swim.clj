@@ -1315,7 +1315,10 @@
     (if (expected-probe-event? this e)
       (do (upsert-probe-ack this e)
           (when (not (alive-node? this))
-            (upsert-neighbour this nb))
+            (if (not (cluster-size-exceed? this))
+              (upsert-neighbour this nb)
+              (d> :probe-ack-event-cluster-size-exceeded-error (get-id this) {:nodes-in-cluster (nodes-in-cluster this)
+                                                                              :cluster-size     (get-cluster-size this)})))
           (d> :probe-ack-event (get-id this) nb))
       (d> :probe-ack-event-probe-never-send-error (get-id this) e))))
 
