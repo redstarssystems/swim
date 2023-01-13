@@ -93,17 +93,23 @@
   Returns: *server."
   [*server]
   (let [*stop-complete (promise)
-        {:keys [host port]} @*server]
-    (swap! *server assoc :continue? false)
+        {:keys [host port]}  @*server]
+
     (add-watch *server :stop-watcher
       (fn [_ a _ new-state]
         (when (or
-                (= :stopped (-> @a :server-state))
-                (= :stopped (:server-state new-state)))
-          (deliver *stop-complete :stopped))))
+                   (= :stopped (-> @a :server-state))
+                   (= :stopped (:server-state new-state)))
+          (deliver *stop-complete :stopped)
+          @*stop-complete)))
+
+    (swap! *server assoc :continue? false)
+
     (send-packet (.getBytes "") host port)                  ;; send empty packet to trigger server
-    (when-not (= :stopped (deref *stop-complete 200 :timeout))
-      (throw (ex-info "Can't stop server" (bean @*server))))                   ;; wait for packet reach the server
+
+    (deref *stop-complete 300 :timeout)
+    (when-not (= :stopped @*stop-complete  )
+      (throw (ex-info "Can't stop server" @*server)))                   ;; wait for packet reach the server
     (remove-watch *server :stop-watcher)
     *server))
 
