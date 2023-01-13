@@ -2119,8 +2119,9 @@
     true
     (let [{:keys [*udp-server]} (get-value this)]
       (node-leave this)
+      (when *udp-server (udp/stop *udp-server))
       (swap! (:*node this) assoc
-        :*udp-server (when *udp-server (udp/stop *udp-server))
+        :*udp-server nil
         :ping-events {}
         :outgoing-event-queue []
         :ping-round-buffer []

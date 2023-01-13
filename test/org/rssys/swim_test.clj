@@ -1590,7 +1590,7 @@
 (defn empty-node-process-fn
   "Run empty node process"
   [^NodeObject this]
-  (while (-> this sut/get-value :*udp-server deref :continue?)
+  (while (and (-> this sut/get-value :*udp-server) (-> this sut/get-value :*udp-server deref :continue?))
     (Thread/sleep 5)))
 
 
