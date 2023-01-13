@@ -9,7 +9,7 @@
     [org.rssys.event :as event]
     [org.rssys.spec :as spec]
     [org.rssys.udp :as udp]
-    [org.rssys.vthread :as vthread])
+    [org.rssys.vthread :refer [vthread]])
   (:import
     (clojure.lang
       Keyword
@@ -1850,7 +1850,7 @@
       (when-not (s/valid? ::spec/node (get-value this))
         (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
       (swap! *stat assoc :bad-udp-counter 0)
-      (vthread/vfuture (node-process-fn this))
+      (vthread (node-process-fn this))
       (d> :start (get-id this) {}))
     (catch Exception e
       (throw (ex-info (format "Can't start node: %s" (get-id this)) {:cause (ex-cause e)} e)))))
@@ -1918,7 +1918,7 @@
               (let [random-alive-nb          (rand-nth alive-neighbours)
                     next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
                 (upsert-indirect-ping this next-indirect-ping-event)
-                (vthread/vfuture (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
+                (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
                 (send-event this next-indirect-ping-event neighbour-id))
               (do
                 (set-nb-dead-status this neighbour-id)
@@ -1940,11 +1940,11 @@
   (when-let [ping-event (get-ping-event this [neighbour-id ts])]
     (let [attempt-number (.-attempt_number ping-event)]
       (d> :ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
-      (delete-ping this neighbour-id)
+      (delete-ping this [neighbour-id ts])
       (if (< attempt-number max-ping-without-ack-before-suspect)
         (let [next-ping-event (new-ping-event this neighbour-id (inc attempt-number))]
           (insert-ping this next-ping-event)
-          (vthread/vfuture (ack-timeout-watcher this neighbour-id (.-ts next-ping-event)))
+          (vthread (ack-timeout-watcher this neighbour-id (.-ts next-ping-event)))
           (send-event this next-ping-event neighbour-id))
         (let [_                  (set-nb-suspect-status this neighbour-id)
               alive-neighbours   (get-alive-neighbours this)
@@ -1954,7 +1954,7 @@
             (let [random-alive-nb     (rand-nth alive-neighbours)
                   indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
               (upsert-indirect-ping this indirect-ping-event)
-              (vthread/vfuture (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event)))
+              (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event)))
               (send-event this indirect-ping-event (:id random-alive-nb)))))))))
 
 
@@ -1972,7 +1972,7 @@
                 ping-event (new-ping-event this neighbour-id 1)
                 nb-events  (conj events ping-event)]
             (insert-ping this ping-event)
-            (vthread/vfuture (ack-timeout-watcher this neighbour-id (.-ts ping-event)))
+            (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event)))
             (send-events this nb-events (.-host nb) (.-port nb))
             (d> :ping-heartbeat (get-id this) {:known-nodes-number  (count (get-alive-neighbours this))
                                                :events-sent-number  (count nb-events)
@@ -2049,7 +2049,7 @@
           (delete-neighbours this)
           (set-alive-status this)
           (when rejoin-if-dead? (start-rejoin-watcher this))
-          (vthread/vfuture (ping-heartbeat this))
+          (vthread (ping-heartbeat this))
           true)
 
         (> cluster-size 1)
@@ -2078,7 +2078,7 @@
             (do
               (remove-watch (:*node this) :join-await-watcher)
               (when rejoin-if-dead? (start-rejoin-watcher this))
-              (vthread/vfuture (ping-heartbeat this))
+              (vthread (ping-heartbeat this))
               true)
             (do
               (deref *join-await-promise max-join-time-ms :timeout)
@@ -2086,7 +2086,7 @@
               (if (alive-node? this)
                 (do
                   (when rejoin-if-dead? (start-rejoin-watcher this))
-                  (vthread/vfuture (ping-heartbeat this))
+                  (vthread (ping-heartbeat this))
                   true)
                 (do
                   (set-left-status this)
