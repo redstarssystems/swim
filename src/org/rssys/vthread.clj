@@ -23,3 +23,9 @@
   [& body]
   `(.submit ^ExecutorService unbounded-executor ^Callable (^{:once true} fn* [] ~@body)))
 
+
+(defmacro vthread
+  "Takes a body of expressions and invoke the body in another virtual thread."
+  [& body]
+  `(Thread/startVirtualThread ^Runnable (^{:once true} fn* [] ~@body)))
+
