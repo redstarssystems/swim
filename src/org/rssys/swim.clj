@@ -1900,26 +1900,25 @@
 
   (Thread/sleep ^Long ack-timeout-ms)
 
-  (when-let [indirect-ping-event (get-indirect-ping-event this neighbour-id)]
+  (when-let [indirect-ping-event (get-indirect-ping-event this [neighbour-id ts])]
     (let [attempt-number (.-attempt_number indirect-ping-event)]
-      (when (= ts (.-ts indirect-ping-event))
-        (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
-        (delete-indirect-ping this neighbour-id)
-        (if (< attempt-number max-ping-without-ack-before-dead)
-          (let [alive-neighbours   (get-alive-neighbours this)
-                alive-nodes-number (count alive-neighbours)]
-            (if (pos-int? alive-nodes-number)
-              (let [random-alive-nb          (rand-nth alive-neighbours)
-                    next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
-                (insert-indirect-ping this next-indirect-ping-event)
-                (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
-                (send-event this next-indirect-ping-event neighbour-id))
-              (do
-                (set-nb-dead-status this neighbour-id)
-                (put-event this (new-dead-event this neighbour-id)))))
-          (do
-            (set-nb-dead-status this neighbour-id)
-            (put-event this (new-dead-event this neighbour-id))))))))
+      (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
+      (delete-indirect-ping this [neighbour-id ts])
+      (if (< attempt-number max-ping-without-ack-before-dead)
+        (let [alive-neighbours   (get-alive-neighbours this)
+              alive-nodes-number (count alive-neighbours)]
+          (if (pos-int? alive-nodes-number)
+            (let [random-alive-nb          (rand-nth (remove (fn [nb] (= (:id nb) neighbour-id)) alive-neighbours))
+                  next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
+              (insert-indirect-ping this next-indirect-ping-event)
+              (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
+              (send-event this next-indirect-ping-event neighbour-id))
+            (do
+              (set-nb-dead-status this neighbour-id)
+              (put-event this (new-dead-event this neighbour-id)))))
+        (do
+          (set-nb-dead-status this neighbour-id)
+          (put-event this (new-dead-event this neighbour-id)))))))
 
 
 
@@ -1945,7 +1944,7 @@
               alive-nodes-number (count alive-neighbours)]
           (if (zero? alive-nodes-number)
             (set-nb-dead-status this neighbour-id)
-            (let [random-alive-nb     (rand-nth alive-neighbours)
+            (let [random-alive-nb     (rand-nth (remove (fn [nb] (= (:id nb) neighbour-id)) alive-neighbours))
                   indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
               (insert-indirect-ping this indirect-ping-event)
               (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event)))
@@ -2119,8 +2118,10 @@
       (swap! (:*node this) assoc
         :*udp-server nil
         :ping-events {}
-        :outgoing-event-queue []
+        :indirect-ping-events {}
+        :outgoing-events []
         :ping-round-buffer []
+        :probe-events {}
         :tx 0)
       (set-stop-status this)
       (when-not (s/valid? ::spec/node (get-value this))
