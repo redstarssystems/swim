@@ -61,22 +61,23 @@
           server-socket (DatagramSocket. port (InetAddress/getByName host))]
       (.setSoTimeout server-socket timeout)
       (vthread
-        (when *server-ready-promise (deliver *server-ready-promise *server))
-        (while (-> @*server :continue?)
-          (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
-                packet (DatagramPacket. buffer (alength buffer))]
-            (try
-              (.receive server-socket packet)
-              (swap! *server update :server-packet-count inc)
-              (if (pos? (.getLength packet))
-                (vthread (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
-                :nothing)                                    ;; do not process empty packets
-              (catch SocketTimeoutException _)
-              (catch Exception e
-                (.close server-socket)
-                (throw e)))))
-        (.close server-socket)
-        (swap! *server assoc :server-state :stopped))
+        (do
+          (when *server-ready-promise (deliver *server-ready-promise *server))
+          (while (-> @*server :continue?)
+            (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
+                  packet (DatagramPacket. buffer (alength buffer))]
+              (try
+                (.receive server-socket packet)
+                (swap! *server update :server-packet-count inc)
+                (if (pos? (.getLength packet))
+                  (vthread (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
+                  :nothing)                                 ;; do not process empty packets
+                (catch SocketTimeoutException _)
+                (catch Exception e
+                  (.close server-socket)
+                  (throw e)))))
+          (.close server-socket)
+          (swap! *server assoc :server-state :stopped)))
       *server)
     (catch Exception e
       (throw (ex-info "Can't start node" {:host host :port port} e)))))
