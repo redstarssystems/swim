@@ -542,7 +542,7 @@
     (throw (ex-info "Invalid ping event data" (->> ping-event (s/explain-data ::spec/ping-event) spec/problems))))
 
   (let [ping-id            [(.-neighbour_id ping-event) (.-ts ping-event)]]
-    (d> :upsert-ping (get-id this) {:ping-event ping-event})
+    (d> :insert-ping (get-id this) {:ping-event ping-event})
     (swap! (:*node this) assoc :ping-events (assoc (get-ping-events this) ping-id ping-event))
     ping-id))
 
