@@ -4880,18 +4880,13 @@
          (sut/node-join node)
          ;;(Thread/sleep 100)
          node))
-      (range 0 64)))
+      (range 0 16)))
 
   (mapv #(sut/get-status %) nodes)
   (count (filterv #{:alive} (mapv #(sut/get-status %) nodes)))
   (count (filterv #{:join} (mapv #(sut/get-status %) nodes)))
   (count (filterv #{:left} (mapv #(sut/get-status %) nodes)))
   (count (filterv #{:stop} (mapv #(sut/get-status %) nodes)))
-  (mapv #(sut/node-stop %) nodes)
-
-  (clojure.inspector/inspect-tree @(:*node (first nodes)))
-  (clojure.inspector/inspect @(:*node (first nodes)))
-  (clojure.inspector/inspect-table @(:*node (first nodes)))
 
 
   (doseq [node nodes]
@@ -4899,7 +4894,6 @@
 
   (doseq [node nodes]
     (org.rssys.vthread/vthread (sut/node-stop node)))
-
 
 
   (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster))
@@ -4917,9 +4911,6 @@
   (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
   (sut/node-join node2)
-
-  (sut/node-stop node1)
-
 
 
   (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster))

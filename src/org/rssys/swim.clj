@@ -1788,19 +1788,21 @@
   Events will be processed one by one and dispatched to corresponding event handler.
   Returns void."
   [^NodeObject this ^bytes encrypted-data]
-  (let [secret-key     (-> this get-cluster :secret-key)
-        decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes encrypted-data)) ;; Ignore bad messages
-        events-vector  (deserialize ^bytes decrypted-data)]
-    (if (vector? events-vector)
-      (doseq [serialized-event events-vector]
-        (let [event (restore-event serialized-event)]
-          (inc-tx this)                                     ;; Every incoming event must increment tx on this node
-          (d> :udp-packet-processor (get-id this) {:event event})
-          (event-processing this event)))
-      (d> :udp-packet-processor-error (get-id this) {:msg             "Bad events vector structure"
-                                                     :events-vector   events-vector
-                                                     :bad-udp-counter (:bad-udp-counter
-                                                                        (swap! *stat update :bad-udp-counter inc))}))))
+  (when-let [*server (-> this get-value :*udp-server)]
+    (when (-> *server deref :continue?)
+      (let [secret-key     (-> this get-cluster :secret-key)
+            decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes encrypted-data)) ;; Ignore bad messages
+            events-vector  (deserialize ^bytes decrypted-data)]
+        (if (vector? events-vector)
+          (doseq [serialized-event events-vector]
+            (let [event (restore-event serialized-event)]
+              (inc-tx this)                                  ;; Every incoming event must increment tx on this node
+              (d> :udp-packet-processor (get-id this) {:event event})
+              (event-processing this event)))
+          (d> :udp-packet-processor-error (get-id this) {:msg             "Bad events vector structure"
+                                                         :events-vector   events-vector
+                                                         :bad-udp-counter (:bad-udp-counter
+                                                                            (swap! *stat update :bad-udp-counter inc))}))))))
 
 
 ;; TODO: run periodic process for clean probe ack events - remember uuid key for non empty maps.
@@ -1840,7 +1842,7 @@
       (when-not (s/valid? ::spec/node (get-value this))
         (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
       (swap! *stat assoc :bad-udp-counter 0)
-      (vthread (node-process-fn this))
+      ;;(vthread (node-process-fn this))
       (d> :start (get-id this) {}))
     (catch Exception e
       (throw (ex-info (format "Can't start node: %s" (get-id this)) {:cause (ex-cause e)} e)))))
