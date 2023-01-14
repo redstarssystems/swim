@@ -4863,10 +4863,8 @@
           (sut/node-stop node2))))))
 
 
-;; TODO after stop almost all nodes, two alive nodes permanently sends indirect ping
 ;; TODO measure increase of packet rate depending on number of nodes
 ;; TODO measure time of round trip ping-ack
-;; FIXME stop node. When we start 10+ nodes cluster and then try to stop them we see huge timeout/hang.
 ;; FIXME in 7+ nodes cluster we see periodically nodes have status left. Why nodes miss each other?
 
 (comment
@@ -4880,9 +4878,9 @@
          (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
          (sut/node-start node empty-node-process-fn sut/udp-packet-processor)
          (sut/node-join node)
-         ;;(Thread/sleep 200)
+         ;;(Thread/sleep 100)
          node))
-      (range 0 97)))
+      (range 0 64)))
 
   (mapv #(sut/get-status %) nodes)
   (count (filterv #{:alive} (mapv #(sut/get-status %) nodes)))
@@ -4897,10 +4895,10 @@
 
 
   (doseq [node nodes]
-    (sut/node-leave node))
+    (org.rssys.vthread/vthread (sut/node-leave node)))
 
   (doseq [node nodes]
-    (sut/node-stop node))
+    (org.rssys.vthread/vthread (sut/node-stop node)))
 
 
 
@@ -4919,6 +4917,9 @@
   (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
 
   (sut/node-join node2)
+
+  (sut/node-stop node1)
+
 
 
   (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster))

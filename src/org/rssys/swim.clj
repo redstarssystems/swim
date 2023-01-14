@@ -1903,10 +1903,10 @@
       (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
       (delete-indirect-ping this [neighbour-id ts])
       (if (< attempt-number max-ping-without-ack-before-dead)
-        (let [alive-neighbours   (get-alive-neighbours this)
+        (let [alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
               alive-nodes-number (count alive-neighbours)]
           (if (pos-int? alive-nodes-number)
-            (let [random-alive-nb          (rand-nth (remove (fn [nb] (= (:id nb) neighbour-id)) alive-neighbours))
+            (let [random-alive-nb          (rand-nth alive-neighbours)
                   next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
               (insert-indirect-ping this next-indirect-ping-event)
               (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
@@ -1938,11 +1938,11 @@
           (vthread (ack-timeout-watcher this neighbour-id (.-ts next-ping-event)))
           (send-event this next-ping-event neighbour-id))
         (let [_                  (set-nb-suspect-status this neighbour-id)
-              alive-neighbours   (get-alive-neighbours this)
+              alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
               alive-nodes-number (count alive-neighbours)]
           (if (zero? alive-nodes-number)
             (set-nb-dead-status this neighbour-id)
-            (let [random-alive-nb     (rand-nth (remove (fn [nb] (= (:id nb) neighbour-id)) alive-neighbours))
+            (let [random-alive-nb     (rand-nth alive-neighbours)
                   indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
               (insert-indirect-ping this indirect-ping-event)
               (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event)))
