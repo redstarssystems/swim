@@ -1345,9 +1345,9 @@
       (let [neighbour-vec (->> e (.-anti_entropy_data) (mapv vec->neighbour))]
         (doseq [ae-neighbour neighbour-vec]
           (when-not (get-neighbour this (:id ae-neighbour))
-            (when-not (= (get-id this) (:id ae-neighbour))  ;; we don't want to put itself to a neighbours map
+            (when-not (= (get-id this) (:id ae-neighbour)) ;; we don't want to put itself to a neighbours map
               (d> :anti-entropy-event (get-id this) ae-neighbour)
-              (upsert-neighbour this ae-neighbour))))       ;; add a new neighbour
+              (upsert-neighbour this ae-neighbour))))      ;; add a new neighbour
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
 
 
@@ -1489,7 +1489,7 @@
 (defmethod event-processing PingEvent
   [^NodeObject this ^PingEvent e]
   (let [sender-id (:id e)
-        sender       (or (get-neighbour this sender-id) :unknown-neighbour)]
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
     (cond
 
@@ -1554,13 +1554,13 @@
     (d> :join-event-bad-tx-error (get-id this) e)
 
     :else
-    (let [_           (d> :join-event (get-id this) e)
-          nb          (new-neighbour-node (.-id e) (.-host e) (.-port e))
-          _           (upsert-neighbour this (assoc nb :tx (.-tx e) :restart-counter (.-restart_counter e)
-                                               :status :alive :access :direct))
-          alive-event (new-alive-event this e)
+    (let [_                  (d> :join-event (get-id this) e)
+          nb                 (new-neighbour-node (.-id e) (.-host e) (.-port e))
+          _                  (upsert-neighbour this (assoc nb :tx (.-tx e) :restart-counter (.-restart_counter e)
+                                                      :status :alive :access :direct))
+          alive-event        (new-alive-event this e)
           cluster-size-event (new-cluster-size-event this (get-cluster-size this))
-          ae-event (new-anti-entropy-event this)]
+          ae-event           (new-anti-entropy-event this)]
       (send-events this [alive-event cluster-size-event ae-event] (.-host e) (.-port e))
       (put-event this alive-event))))
 
@@ -1575,7 +1575,7 @@
 (defmethod event-processing AliveEvent
   [^NodeObject this ^AliveEvent e]
   (let [sender-id (.-id e)
-        sender (or (get-neighbour this (:id e)) :unknown-neighbour)]
+        sender    (or (get-neighbour this (:id e)) :unknown-neighbour)]
 
     (cond
 
@@ -1622,9 +1622,9 @@
 
 (defmethod event-processing NewClusterSizeEvent
   [^NodeObject this ^NewClusterSizeEvent e]
-  (let [sender-id (:id e)
-        sender    (or (get-neighbour this sender-id) :unknown-neighbour)
-        new-size (.-new_cluster_size e)
+  (let [sender-id    (:id e)
+        sender       (or (get-neighbour this sender-id) :unknown-neighbour)
+        new-size     (.-new_cluster_size e)
         alive-number (nodes-in-cluster this)]
     (cond
 
@@ -1797,7 +1797,7 @@
         (if (vector? events-vector)
           (doseq [serialized-event events-vector]
             (let [event (restore-event serialized-event)]
-              (inc-tx this)                                  ;; Every incoming event must increment tx on this node
+              (inc-tx this)                                ;; Every incoming event must increment tx on this node
               (d> :udp-packet-processor (get-id this) {:event event})
               (event-processing this event)))
           (d> :udp-packet-processor-error (get-id this) {:msg             "Bad events vector structure"
@@ -2048,10 +2048,10 @@
           true)
 
         (> cluster-size 1)
-        (let [n             (calc-n cluster-size)
-              join-event    (new-join-event this)
-              alive-nb-ids  (mapv :id (get-alive-neighbours this))
-              nb-random-ids (take n (shuffle alive-nb-ids))
+        (let [n                   (calc-n cluster-size)
+              join-event          (new-join-event this)
+              alive-nb-ids        (mapv :id (get-alive-neighbours this))
+              nb-random-ids       (take n (shuffle alive-nb-ids))
               *join-await-promise (promise)]
 
           (set-join-status this)
@@ -2127,8 +2127,7 @@
         :tx 0)
       (set-stop-status this)
       (when-not (s/valid? ::spec/node (get-value this))
-        (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this))))))))
-  (d> :stop (get-id this) {}))
+        (throw (ex-info "Invalid node data" (spec/problems (s/explain-data ::spec/node (:*node this)))))))))
 
 
 
