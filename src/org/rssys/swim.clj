@@ -844,6 +844,7 @@
       (some->>
         (get-neighbours this)
         vals
+        (filter (fn [nb] (= :alive (:status nb))))
         shuffle
         (take num)
         (map neighbour->vec)
