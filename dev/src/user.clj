@@ -1,6 +1,7 @@
 (ns user
   (:require
     [bogus.core]
+    [clojure.pprint :refer [pprint]]
     [hashp.core]
     [puget.printer :refer [cprint] :rename {cprint cprn}]))
 
@@ -12,12 +13,21 @@
     (cprn "-----------------------------------------------------")))
 
 
-(defn exclude-prn>
+(defn filtered-prn>
   [v]
   (when-not (#{:udp-packet-processor :upsert-neighbour :send-events-udp-size}
               (:org.rssys.swim/cmd v))
     (cprn v)
     (cprn "-----------------------------------------------------")))
+
+
+(defn file-prn>
+  [v]
+  (when (:org.rssys.swim/cmd v)
+    (let [fname (str "log/" (:node-id v) ".txt")
+          content (with-out-str (pprint v))]
+      (spit fname content :append true)
+      (spit fname "\n-----------------------------------------------------\n" :append true))))
 
 
 (defn run-dev
@@ -32,10 +42,16 @@
   (tap> {:org.rssys.swim/cmd true :a 1 :b "2"})
 
   (add-tap t-prn>)
-  (add-tap exclude-prn>)
+  (add-tap filtered-prn>)
+
+  (add-tap file-prn>)
+
+  (require '[taoensso.tufte :as tufte :refer (defnp p profiled profile)])
+  (tufte/add-basic-println-handler! {})
 
   (remove-tap t-prn>)
-  (remove-tap exclude-prn>)
+  (remove-tap filtered-prn>)
+  (remove-tap file-prn>)
   )
 
 
