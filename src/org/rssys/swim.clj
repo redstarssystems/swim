@@ -1831,9 +1831,10 @@
 (defn node-start
   "Start the node and run `node-process-fn` in a separate virtual thread.
    Params:
-    * `node-process-fn` - fn with one arg `this` for main node process. It may look for :continue? flag in UDP server.
-    * `incoming-data-processor-fn` fn to process incoming UDP packets with two args: `this` and `encrypted-data`"
-  [^NodeObject this node-process-fn incoming-data-processor-fn]
+    * `incoming-data-processor-fn` fn to process incoming UDP packets with two args: `this` and `encrypted-data`.
+    Keys:
+     * `node-process-fn` - fn with one arg `this` for any user node process. It may look for :continue? flag in UDP server."
+  [^NodeObject this incoming-data-processor-fn & {:keys [node-process-fn]}]
   (try
     (when (= (get-status this) :stop)
       (set-left-status this)
@@ -1843,7 +1844,7 @@
       (when-not (s/valid? ::spec/node (get-value this))
         (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
       (swap! *stat assoc :bad-udp-counter 0)
-      ;;(vthread (node-process-fn this))
+      (when node-process-fn (vthread (node-process-fn this)))
       (d> :start (get-id this) {}))
     (catch Exception e
       (throw (ex-info (format "Can't start node: %s" (get-id this)) {:cause (ex-cause e)} e)))))

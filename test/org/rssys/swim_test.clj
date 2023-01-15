@@ -1609,8 +1609,8 @@
           event3 (sut/new-anti-entropy-event node1)
           events [event1 event2 event3]]
       (try
-        (sut/node-start node2 empty-node-process-fn set-incoming-data-to-payload-processor-fn)
-        (sut/node-start node1 empty-node-process-fn #(do [%1 %2]))
+        (sut/node-start node2  set-incoming-data-to-payload-processor-fn)
+        (sut/node-start node1  #(do [%1 %2]))
 
         (testing "should transform all given events and send them to node2"
           (let [*expecting-event (promise)
@@ -1649,7 +1649,7 @@
           neighbour (sut/new-neighbour-node node2-nb-data)
           event     (sut/new-cluster-size-event this 5)]
       (try
-        (sut/node-start this empty-node-process-fn #(do [%1 %2]))
+        (sut/node-start this  #(do [%1 %2]))
         (sut/upsert-neighbour this neighbour)
 
         (testing "using host:port should return number of bytes sent"
@@ -1675,7 +1675,7 @@
           neighbour (sut/new-neighbour-node node2-nb-data)
           event     (sut/new-cluster-size-event this 5)]
       (try
-        (sut/node-start this empty-node-process-fn #(do [%1 %2]))
+        (sut/node-start this  #(do [%1 %2]))
         (sut/upsert-neighbour this neighbour)
 
         (testing "using host:port"
@@ -1748,8 +1748,8 @@
           [*e1 e1-tap-fn] (set-event-catcher node2-id :udp-packet-processor)]
       (try
 
-        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node1  sut/udp-packet-processor)
+        (sut/node-start node2  sut/udp-packet-processor)
 
         (let [probe-key (sut/node-probe node1 (sut/get-host node2) (sut/get-port node2))]
 
@@ -1785,8 +1785,8 @@
             [*e3 e3-tap-fn] (set-event-catcher node1-id :upsert-neighbour)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (testing "should receive ProbeAck event on node1"
             (let [probe-key (sut/node-probe node1 (sut/get-host node2) (sut/get-port node2))]
@@ -1823,8 +1823,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event-cluster-size-exceeded-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-cluster-size node1 1)
           (sut/node-probe node1 (sut/get-host node2) (sut/get-port node2))
@@ -1849,8 +1849,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :probe-ack-event-probe-never-send-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/send-event node2 (sut/new-probe-ack-event node2 probe-event) (sut/get-host node1) (sut/get-port node1))
 
@@ -1873,8 +1873,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :upsert-probe-ack)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
           (sut/set-alive-status node1)
 
           (testing "should receive ProbeAck event on node1"
@@ -1910,8 +1910,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node2-id :upsert-neighbour)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
@@ -1948,8 +1948,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
 
@@ -1976,8 +1976,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-bad-restart-counter-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node
@@ -2006,8 +2006,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node
@@ -2037,8 +2037,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-not-alive-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
@@ -2076,9 +2076,9 @@
             [*e2 e2-tap-fn] (set-event-catcher node2-id :intermediate-node-indirect-ack-event)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2151,9 +2151,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-not-alive-node-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -2198,9 +2198,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :indirect-ack-event-not-alive-node-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-left-status node2)
@@ -2243,9 +2243,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2289,9 +2289,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-bad-restart-counter-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2334,9 +2334,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2379,9 +2379,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :indirect-ack-event-not-expected-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2430,9 +2430,9 @@
             [*e4 e4-tap-fn] (set-event-catcher node2-id :intermediate-node-indirect-ping-event)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2503,9 +2503,9 @@
             [*e4 e4-tap-fn] (set-event-catcher node2-id :intermediate-node-indirect-ping-event)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2550,9 +2550,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :indirect-ping-event-not-alive-node-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-left-status node2)
@@ -2594,9 +2594,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2639,9 +2639,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-bad-restart-counter-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2684,9 +2684,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :indirect-ping-event-neighbour-id-mismatch-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2731,8 +2731,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2785,8 +2785,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-node-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -2826,8 +2826,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-node-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -2862,8 +2862,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2894,8 +2894,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-alive-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2928,8 +2928,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-bad-restart-counter-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2963,8 +2963,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -2998,8 +2998,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-not-expected-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3038,8 +3038,8 @@
             [*e4 e4-tap-fn] (set-event-catcher node2-id :upsert-neighbour)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3098,8 +3098,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-not-alive-node-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-left-status node2)
@@ -3129,8 +3129,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3162,8 +3162,8 @@
             [*e3 e3-tap-fn] (set-event-catcher node1-id :udp-packet-processor)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3211,8 +3211,8 @@
             [*e3 e3-tap-fn] (set-event-catcher node1-id :udp-packet-processor {:cmd-type 6})]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3259,8 +3259,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3292,8 +3292,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-neighbour-id-mismatch-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3338,8 +3338,8 @@
             [*e5 e5-tap-fn] (set-event-catcher node1-id :set-cluster-size)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3408,8 +3408,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :join-event-not-alive-node-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-dead-status node2)
@@ -3447,8 +3447,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node1-id :udp-packet-processor {:cmd-type 6})]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3495,8 +3495,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node1-id :udp-packet-processor {:cmd-type 6})]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3543,8 +3543,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :join-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3591,8 +3591,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node1-id :alive-event-join-confirmed)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3634,9 +3634,9 @@
             [*e2 e2-tap-fn] (set-event-catcher node3-id :alive-event)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-left-status node1)
           (sut/set-alive-status node2)
@@ -3700,9 +3700,9 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3763,9 +3763,9 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3818,8 +3818,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3856,8 +3856,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3895,8 +3895,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3934,8 +3934,8 @@
             new-cluster-size-event (sut/new-cluster-size-event node1 new-size)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -3978,9 +3978,9 @@
             [*e3 e3-tap-fn] (set-event-catcher node3-id :upsert-neighbour {:nb-status :dead})]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4028,9 +4028,9 @@
             [*e2 e2-tap-fn] (set-event-catcher node1-id :set-status {:new-status :left})]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4075,9 +4075,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4113,9 +4113,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-bad-restart-counter-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4153,9 +4153,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4193,9 +4193,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-not-alive-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4243,9 +4243,9 @@
             [*e3 e3-tap-fn] (set-event-catcher node3-id :upsert-neighbour {:nb-status :left})]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4289,9 +4289,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :left-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4326,9 +4326,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :left-event-bad-restart-counter-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4365,9 +4365,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :left-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4405,9 +4405,9 @@
             [*e1 e1-tap-fn] (set-event-catcher node3-id :dead-event-not-alive-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
+          (sut/node-start node3  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4455,8 +4455,8 @@
             [*e2 e2-tap-fn] (set-event-catcher node2-id :put-event {:cmd-type 7})]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4498,8 +4498,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-unknown-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4535,8 +4535,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-bad-restart-counter-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4574,8 +4574,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-bad-tx-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4613,8 +4613,8 @@
             [*e1 e1-tap-fn] (set-event-catcher node2-id :payload-event-not-alive-neighbour-error)]
 
         (try
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/set-alive-status node1)
           (sut/set-alive-status node2)
@@ -4653,7 +4653,7 @@
           node1-id (sut/get-id node1)
           [*e1 e1-tap-fn] (set-event-catcher node1-id :join)]
       (try
-        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node1  sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
@@ -4704,9 +4704,9 @@
           [*e2 e2-tap-fn] (set-event-catcher node1-id :set-status {:new-status :join})]
 
       (try
-        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
-        (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
-        (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node1  sut/udp-packet-processor)
+        (sut/node-start node2  sut/udp-packet-processor)
+        (sut/node-start node3  sut/udp-packet-processor)
 
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
@@ -4765,7 +4765,7 @@
           current-payload (sut/get-payload node1)
           [*e1 e1-tap-fn] (set-event-catcher node1-id :put-event {:cmd-type 7})]
       (try
-        (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+        (sut/node-start node1  sut/udp-packet-processor)
         (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
 
         (testing "before update should have current payload"
@@ -4801,7 +4801,7 @@
 
         (testing "setup two nodes cluster"
           (sut/set-cluster-size node1 1)
-          (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node1  sut/udp-packet-processor)
 
           (testing "node1 should start as single node in cluster"
             (m/assert true (sut/node-join node1))
@@ -4809,7 +4809,7 @@
 
           (sut/set-cluster-size node1 3)
 
-          (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+          (sut/node-start node2  sut/udp-packet-processor)
 
           (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
           (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
@@ -4869,17 +4869,17 @@
 
 (comment
 
-  (def nodes
-    (mapv
-      (fn [n]
-       (let [uuid (UUID. 1 n)
-             port (+ 5377 n)
-             node (sut/new-node-object {:id uuid :host "127.0.0.1" :port port} cluster)]
-         (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
-         (sut/node-start node empty-node-process-fn sut/udp-packet-processor)
-         (sut/node-join node)
-         ;;(Thread/sleep 100)
-         node))
+   (def nodes
+     (mapv
+       (fn [n]
+         (let [uuid (UUID. 1 n)
+               port (+ 5377 n)
+               node (sut/new-node-object {:id uuid :host "127.0.0.1" :port port} cluster)]
+           (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
+           (sut/node-start node  sut/udp-packet-processor)
+           (sut/node-join node)
+           ;;(Thread/sleep 100)
+           node))
       (range 0 16)))
 
   (mapv #(sut/get-status %) nodes)
@@ -4898,7 +4898,7 @@
 
   (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster))
   (sut/set-cluster-size node1 1)
-  (sut/node-start node1 empty-node-process-fn sut/udp-packet-processor)
+  (sut/node-start node1  sut/udp-packet-processor)
   (sut/node-join node1)
   (sut/set-cluster-size node1 99)
 
@@ -4908,35 +4908,35 @@
 
   (def node2 (sut/new-node-object (dissoc node2-data :restart-counter) cluster))
   (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-  (sut/node-start node2 empty-node-process-fn sut/udp-packet-processor)
+  (sut/node-start node2  sut/udp-packet-processor)
 
   (sut/node-join node2)
 
 
   (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster))
   (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
-  (sut/node-start node3 empty-node-process-fn sut/udp-packet-processor)
+  (sut/node-start node3  sut/udp-packet-processor)
 
   (sut/node-join node3)
 
 
   (def node4 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000004" :host "127.0.0.1" :port 5379} cluster))
   (sut/upsert-neighbour node4 (sut/new-neighbour-node node1-nb-data))
-  (sut/node-start node4 empty-node-process-fn sut/udp-packet-processor)
+  (sut/node-start node4  sut/udp-packet-processor)
 
   (sut/node-join node4)
 
 
   (def node5 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000005" :host "127.0.0.1" :port 5380} cluster))
   (sut/upsert-neighbour node5 (sut/new-neighbour-node node1-nb-data))
-  (sut/node-start node5 empty-node-process-fn sut/udp-packet-processor)
+  (sut/node-start node5  sut/udp-packet-processor)
 
   (sut/node-join node5)
 
 
   (def node6 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000006" :host "127.0.0.1" :port 5381} cluster))
   (sut/upsert-neighbour node6 (sut/new-neighbour-node node1-nb-data))
-  (sut/node-start node6 empty-node-process-fn sut/udp-packet-processor)
+  (sut/node-start node6  sut/udp-packet-processor)
 
   (sut/node-join node6)
 
