@@ -3332,7 +3332,7 @@
 
             [*e1 e1-tap-fn] (set-event-catcher node2-id :join-event)
             [*e2 e2-tap-fn] (set-event-catcher node2-id :upsert-neighbour)
-            [*e3 e3-tap-fn] (set-event-catcher node2-id :put-event)
+            [*e3 e3-tap-fn] (set-event-catcher node2-id :put-event {:cmd-type 3})
             [*e4 e4-tap-fn] (set-event-catcher node1-id :udp-packet-processor)
             [*e5 e5-tap-fn] (set-event-catcher node1-id :set-cluster-size)]
 
