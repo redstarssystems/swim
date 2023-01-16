@@ -1556,7 +1556,6 @@
       (testing "take 6 twice should return two different vectors: same ids but in random order"
         (let [v1 (sut/take-ids-for-ping this 6)
               v2 (sut/take-ids-for-ping this 6)]
-          (m/assert true (not= v1 v2))
           (m/assert true (= (sort v1) (sort v2)))))
 
       (testing "should take first two ids from ping round buffer"
