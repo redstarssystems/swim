@@ -2123,6 +2123,7 @@
       (swap! (:*node this) assoc
         :*udp-server nil
         :ping-events {}
+        :neighbours {}
         :indirect-ping-events {}
         :outgoing-events []
         :ping-round-buffer []
