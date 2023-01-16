@@ -1504,12 +1504,12 @@
 
       (not (alive-neighbour? sender))
       (do
-        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
+        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-not-alive-neighbour-error (get-id this) e))
 
       (not (suitable-restart-counter? this e))
       (do
-        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
+        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-bad-restart-counter-error (get-id this) e))
 
       (not (suitable-tx? this e))
@@ -1530,16 +1530,18 @@
 
 (defmethod event-processing JoinEvent
   [^NodeObject this ^JoinEvent e]
-  (cond
+  (let [sender-id (:id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+    (cond
 
     (not (alive-node? this))
     (d> :join-event-not-alive-node-error (get-id this) e)
 
-    (and (neighbour-exist? this (.-id e))
-      (not (suitable-restart-counter? this e)))
-    (do
-      (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
-      (d> :join-event-bad-restart-counter-error (get-id this) e))
+     (and (neighbour-exist? this (.-id e))
+       (not (suitable-restart-counter? this e)))
+     (do
+       (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
+       (d> :join-event-bad-restart-counter-error (get-id this) e))
 
     (and
       (not (neighbour-exist? this (.-id e)))
