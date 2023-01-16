@@ -43,6 +43,7 @@
       SuspectEvent)))
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Common functions and constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1534,37 +1535,37 @@
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
     (cond
 
-    (not (alive-node? this))
-    (d> :join-event-not-alive-node-error (get-id this) e)
+      (not (alive-node? this))
+      (d> :join-event-not-alive-node-error (get-id this) e)
 
-     (and (neighbour-exist? this (.-id e))
-       (not (suitable-restart-counter? this e)))
-     (do
-       (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
-       (d> :join-event-bad-restart-counter-error (get-id this) e))
+      (and (neighbour-exist? this (.-id e))
+        (not (suitable-restart-counter? this e)))
+      (do
+        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
+        (d> :join-event-bad-restart-counter-error (get-id this) e))
 
-    (and
-      (not (neighbour-exist? this (.-id e)))
-      (cluster-size-exceed? this))
-    (do
-      (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
-      (d> :join-event-cluster-size-exceeded-error (get-id this) e))
+      (and
+        (not (neighbour-exist? this (.-id e)))
+        (cluster-size-exceed? this))
+      (do
+        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
+        (d> :join-event-cluster-size-exceeded-error (get-id this) e))
 
-    (and (neighbour-exist? this (.-id e))
-      (not (suitable-tx? this e))
-      (= (.-restart_counter e) (:restart-counter (get-neighbour this (.-id e)))))
-    (d> :join-event-bad-tx-error (get-id this) e)
+      (and (neighbour-exist? this (.-id e))
+        (not (suitable-tx? this e))
+        (= (.-restart_counter e) (:restart-counter (get-neighbour this (.-id e)))))
+      (d> :join-event-bad-tx-error (get-id this) e)
 
-    :else
-    (let [_                  (d> :join-event (get-id this) e)
-          nb                 (new-neighbour-node (.-id e) (.-host e) (.-port e))
-          _                  (upsert-neighbour this (assoc nb :tx (.-tx e) :restart-counter (.-restart_counter e)
-                                                      :status :alive :access :direct))
-          alive-event        (new-alive-event this e)
-          cluster-size-event (new-cluster-size-event this (get-cluster-size this))
-          ae-event           (new-anti-entropy-event this)]
-      (send-events this [alive-event cluster-size-event ae-event] (.-host e) (.-port e))
-      (put-event this alive-event))))
+      :else
+      (let [_                  (d> :join-event (get-id this) e)
+            nb                 (new-neighbour-node (.-id e) (.-host e) (.-port e))
+            _                  (upsert-neighbour this (assoc nb :tx (.-tx e) :restart-counter (.-restart_counter e)
+                                                        :status :alive :access :direct))
+            alive-event        (new-alive-event this e)
+            cluster-size-event (new-cluster-size-event this (get-cluster-size this))
+            ae-event           (new-anti-entropy-event this)]
+        (send-events this [alive-event cluster-size-event ae-event] (.-host e) (.-port e))
+        (put-event this alive-event)))))
 
 
 (defn- alive-event-join-confirm?
