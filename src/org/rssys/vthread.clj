@@ -16,6 +16,10 @@
 
 (defonce unbounded-executor (Executors/newThreadPerTaskExecutor (thread-factory "common-virtual-pool-")))
 
+(set-agent-send-executor! unbounded-executor)
+
+(set-agent-send-off-executor! unbounded-executor)
+
 
 (defmacro vfuture
   "Takes a body of expressions and invoke the body in another virtual thread.
