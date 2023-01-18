@@ -1,5 +1,7 @@
 (ns org.rssys.monitoring
-  (:require [prometheus.core :as prometheus]))
+  (:require
+    [prometheus.core :as prometheus]))
+
 
 (def registry (prometheus/new-registry))
 
