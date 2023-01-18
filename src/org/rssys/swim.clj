@@ -7,9 +7,11 @@
     [org.rssys.domain :as domain]
     [org.rssys.encrypt :as e]
     [org.rssys.event :as event]
+    [org.rssys.monitoring :as monitoring]
     [org.rssys.spec :as spec]
     [org.rssys.udp :as udp]
-    [org.rssys.vthread :refer [vthread]])
+    [org.rssys.vthread :refer [vthread]]
+    [prometheus.core :as prometheus])
   (:import
     (clojure.lang
       Keyword
@@ -1481,10 +1483,11 @@
       (d> :ack-event-not-expected-error (get-id this) e)
 
       :else
-      (do
+      (let [diff (- (System/currentTimeMillis) (.-ts e))]
         (d> :ack-event (get-id this) e)
         (delete-ping this [sender-id (.-ts e)])
-        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))))))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
+        (prometheus/histogram monitoring/registry :ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
 
 
 (defmethod event-processing PingEvent
