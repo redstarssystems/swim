@@ -5,9 +5,7 @@
  :paths     ["src" "resources"]
 
  :deps      {org.clojure/clojure       {:mvn/version "1.11.1"}
-             com.cognitect/transit-clj {:mvn/version "1.0.329"}
-             prometheus/prometheus      {:git/url "https://github.com/HealthSamurai/prometheus.clj"
-                                         :sha "da2265539b1e65ac5b6d3a570f9f12a95b54361f"}}
+             com.cognitect/transit-clj {:mvn/version "1.0.329"}}
 
  :aliases   {
              :repl        {:extra-deps  {nrepl/nrepl                {:mvn/version "1.0.0"}
