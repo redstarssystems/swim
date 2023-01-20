@@ -184,3 +184,6 @@
         (print-line out (str (name m) "_count") lbls cnt)
         (print-line out (str (name m) "_sum") lbls sum)))
     (.toString out)))
+
+
+(defonce registry (new-registry))
