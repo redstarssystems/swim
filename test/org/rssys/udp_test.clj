@@ -10,7 +10,9 @@
       InetAddress
       SocketTimeoutException)
     (java.time
-      Instant)))
+      Instant)
+    (java.util
+      UUID)))
 
 
 (defn test-udp-server
@@ -68,7 +70,7 @@
         messages              #{"one" "two" "three" "four" "abcdefg" "12345"}
         *results              (atom #{})
         process-message-fn    (fn [data] (swap! *results conj (String. ^bytes data)))
-        *server               (sut/start host port process-message-fn {:*server-ready-promise *server-ready-promise})]
+        *server               (sut/start (UUID. 0 1) host port process-message-fn {:*server-ready-promise *server-ready-promise})]
     @*server-ready-promise                                  ;; wait until server is ready
     (doseq [m messages]
       (sut/send-packet (.getBytes ^String m) host port)
@@ -83,7 +85,8 @@
 
       (testing "server map should have correct structure"
         (m/assert ^:matcho/strict
-          {:host                string?
+          {:node-id             uuid?
+           :host                string?
            :port                number?
            :start-time          #(instance? Instant %)
            :max-packet-size     number?

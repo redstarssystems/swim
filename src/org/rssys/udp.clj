@@ -1,6 +1,7 @@
 (ns org.rssys.udp
   "UDP server functions"
   (:require
+    [org.rssys.metric :as metric]
     [org.rssys.vthread :refer [vthread]])
   (:import
     (java.net
@@ -30,7 +31,8 @@
   Server will process each incoming UDP packets with call-back function in a new Virtual Thread (Java 19+).
   Empty UDP packets are ignored.
   Returns an atom with a server map with running server parameters:
-    {:host                 `host`
+    {:node-id              uuid
+     :host                 `host`
      :port                 `port`
      :start-time           (Instant/now)
      :max-packet-size      `max-packet-size`
@@ -47,11 +49,12 @@
   * `timeout` - time in ms which server waits for incoming packet, default 0 (infinite).
   * `max-packet-size` - max UDP packet size we are ready to accept, default is 1024.
   * `*server-ready-promise` - if promise is present then deliver *server when server is ready to accept UDP."
-  [host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
-                              :or   {timeout 0 max-packet-size 1024}}]
+  [node-id host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
+                                      :or   {timeout 0 max-packet-size 1024}}]
   (try
     (let [*server       (atom
-                          {:host                host
+                          {:node-id             node-id
+                           :host                host
                            :port                port
                            :start-time          (Instant/now)
                            :max-packet-size     max-packet-size
@@ -60,6 +63,8 @@
                            :server-packet-count 0})
           server-socket (DatagramSocket. port (InetAddress/getByName host))]
       (.setSoTimeout server-socket timeout)
+      (metric/gauge metric/registry :process-udp-packet-ms {:node-id node-id} 0)
+      (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} 0)
       (vthread
         (do
           (when *server-ready-promise (deliver *server-ready-promise *server))
@@ -70,7 +75,15 @@
                 (.receive server-socket packet)
                 (swap! *server update :server-packet-count inc)
                 (if (pos? (.getLength packet))
-                  (vthread (process-cb-fn (byte-array (.getLength packet) (.getData packet))))
+                  (vthread
+                    (let [start-ts (System/currentTimeMillis)
+                          _ (process-cb-fn (byte-array (.getLength packet) (.getData packet)))
+                          end-ts   (System/currentTimeMillis)
+                          diff-max-ts (metric/get-metric metric/registry :process-udp-packet-max-ms {:node-id node-id})
+                          diff-ts (- end-ts start-ts)]
+                      (metric/gauge metric/registry :process-udp-packet-ms {:node-id node-id} diff-ts)
+                      (when (> diff-ts diff-max-ts)
+                        (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} diff-ts))))
                   :nothing)                                 ;; do not process empty packets
                 (catch SocketTimeoutException _)
                 (catch Exception e
