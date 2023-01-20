@@ -1,63 +1,80 @@
 (ns org.rssys.metric
   (:require
-    [clojure.string :as str]))
+    [clojure.string :as string]))
 
-(defn new-registry []
+
+(defn new-registry
+  []
   (agent {}))
 
-(defn reg-object [reg key object]
+
+(defn reg-object
+  [reg key object]
   (send reg assoc-in [:object key] object))
 
-(defn get-object [reg key]
+
+(defn get-object
+  [reg key]
   (get-in @reg [:object key]))
+
 
 (defn set-counter
   ([reg metric labels v]
-   (send reg assoc-in [:counter metric labels] v))
+    (send reg assoc-in [:counter metric labels] v))
   ([reg ns metric labels v]
-   (send reg assoc-in [ns :counter metric labels] v)))
+    (send reg assoc-in [ns :counter metric labels] v)))
+
 
 (defn counter
   ([reg metric labels]
-   (send reg update-in [:counter metric labels] (fn [x] (inc (or x 0)))))
+    (send reg update-in [:counter metric labels] (fn [x] (inc (or x 0)))))
   ([reg ns metric labels]
-   (send reg update-in [ns :counter metric labels] (fn [x] (inc (or x 0))))))
+    (send reg update-in [ns :counter metric labels] (fn [x] (inc (or x 0))))))
+
 
 (defn counter-add
   ([reg metric labels inc]
-   (send reg update-in [:counter metric labels] (fn [x] (+ (or x 0) inc))))
+    (send reg update-in [:counter metric labels] (fn [x] (+ (or x 0) inc))))
   ([reg ns metric labels inc]
-   (send reg update-in [ns :counter metric labels] (fn [x] (+ (or x 0) inc)))))
+    (send reg update-in [ns :counter metric labels] (fn [x] (+ (or x 0) inc)))))
+
 
 (defn gauge
   ([reg metric labels v]
-   (send reg assoc-in [:gauge metric labels] v))
+    (send reg assoc-in [:gauge metric labels] v))
   ([reg ns metric labels v]
-   (send reg assoc-in [ns :gauge metric labels] v)))
+    (send reg assoc-in [ns :gauge metric labels] v)))
+
 
 (defn get-metric
   ([reg metric]
-   (or
-     (get-in @reg [:counter metric])
-     (get-in @reg [:gauge metric])
-     (get-in @reg [:histogram metric])))
+    (or
+      (get-in @reg [:counter metric])
+      (get-in @reg [:gauge metric])
+      (get-in @reg [:histogram metric])))
   ([reg metric labels]
-   (or
-     (get-in @reg [:counter metric labels])
-     (get-in @reg [:gauge metric labels])
-     (get-in @reg [:histogram metric labels]))))
+    (or
+      (get-in @reg [:counter metric labels])
+      (get-in @reg [:gauge metric labels])
+      (get-in @reg [:histogram metric labels]))))
 
-(defn register-metric-meta [reg metric meta-name value]
+
+(defn register-metric-meta
+  [reg metric meta-name value]
   (when-not (get-in @reg [:meta metric meta-name])
     (send reg assoc-in [:meta metric meta-name] value)))
 
-(defn register-metric-meta! [reg metric meta-name value]
+
+(defn register-metric-meta!
+  [reg metric meta-name value]
   (send reg assoc-in [:meta metric meta-name] value))
+
 
 (def default-buckets [0.005 0.01 0.025 0.05 0.1 0.25 0.5 1.0 2.5 5.0 10])
 
 
-(defn find-bound [buckets val]
+(defn find-bound
+  [buckets val]
   (loop [[x & rst] buckets]
     (if (nil? x)
       nil
@@ -65,40 +82,45 @@
         x
         (recur rst)))))
 
+
 (defn histogram
   ([reg metric labels val]
-   (let [buckets (or (get-in @reg [:meta metric :buckets]) default-buckets)
-         bnd (find-bound buckets val)]
-     (send reg (fn [reg]
-                 (-> reg
-                   (cond-> bnd (update-in [:histogram metric labels :le bnd] (fn [x] (inc (or x 0)))))
-                   (update-in [:histogram metric labels :count] (fn [x] (inc (or x 0))))
-                   (update-in [:histogram metric labels :sum] (fn [x] (+ (or x 0) val))))))))
+    (let [buckets (or (get-in @reg [:meta metric :buckets]) default-buckets)
+          bnd (find-bound buckets val)]
+      (send reg (fn [reg]
+                  (-> reg
+                    (cond-> bnd (update-in [:histogram metric labels :le bnd] (fn [x] (inc (or x 0)))))
+                    (update-in [:histogram metric labels :count] (fn [x] (inc (or x 0))))
+                    (update-in [:histogram metric labels :sum] (fn [x] (+ (or x 0) val))))))))
   ([reg ns metric labels val]
-   (let [buckets (or (get-in @reg [:meta metric :buckets]) default-buckets)
-         bnd (find-bound buckets val)]
-     (send reg (fn [reg]
-                 (-> reg
-                   (cond-> bnd (update-in [ns :histogram metric labels :le bnd] (fn [x] (inc (or x 0)))))
-                   (update-in [ns :histogram metric labels :count] (fn [x] (inc (or x 0))))
-                   (update-in [ns :histogram metric labels :sum] (fn [x] (+ (or x 0) val)))))))))
+    (let [buckets (or (get-in @reg [:meta metric :buckets]) default-buckets)
+          bnd (find-bound buckets val)]
+      (send reg (fn [reg]
+                  (-> reg
+                    (cond-> bnd (update-in [ns :histogram metric labels :le bnd] (fn [x] (inc (or x 0)))))
+                    (update-in [ns :histogram metric labels :count] (fn [x] (inc (or x 0))))
+                    (update-in [ns :histogram metric labels :sum] (fn [x] (+ (or x 0) val)))))))))
 
 
-(defn escape-help-comment [s]
+(defn escape-help-comment
+  [s]
   (-> s
-    (str/replace "\n" "\\n")
-    (str/replace "\\" "\\\\")))
+    (string/replace "\n" "\\n")
+    (string/replace "\\" "\\\\")))
 
-(defn escape-label-value [s]
+
+(defn escape-label-value
+  [s]
   (if s
     (-> s
-      (str/replace "\\" "\\\\")
-      (str/replace "\n" "\\n")
-      (str/replace "\"" "\\\""))
+      (string/replace "\\" "\\\\")
+      (string/replace "\n" "\\n")
+      (string/replace "\"" "\\\""))
     "\"\""))
 
 
-(defn print-labels [^StringBuilder out lbls]
+(defn print-labels
+  [^StringBuilder out lbls]
   (when-not (empty? lbls)
     (.append out "{")
     (loop [[[k v :as l]  & rest] lbls]
@@ -113,20 +135,25 @@
     (.append out "}")))
 
 
-(defn print-line [^StringBuilder out nm lbls v]
+(defn print-line
+  [^StringBuilder out nm lbls v]
   (.append out nm)
   (print-labels out lbls)
   (.append out " ")
   (.append out (str v))
   (.append out "\n"))
 
-(defn help-line [^StringBuilder out registry m]
+
+(defn help-line
+  [^StringBuilder out registry m]
   (when-let [help-message (get-in registry [:meta m :help])]
     (.append out "# HELP ")
     (.append out (escape-help-comment help-message))
     (.append out "\n")))
 
-(defn serialize [reg & [ns]]
+
+(defn serialize
+  [reg & [ns]]
   (let [^StringBuilder out (StringBuilder.)
         registry (if ns (get @reg ns) @reg)]
     (doseq [[m ms] (:counter registry)]
