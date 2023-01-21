@@ -50,7 +50,7 @@
   * `max-packet-size` - max UDP packet size we are ready to accept, default is 1024.
   * `*server-ready-promise` - if promise is present then deliver *server when server is ready to accept UDP."
   [node-id host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
-                                      :or   {timeout 5 max-packet-size 1024}}]
+                                      :or   {timeout 500 max-packet-size 1024}}]
   (try
     (let [*server       (atom
                           {:node-id         node-id
