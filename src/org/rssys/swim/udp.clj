@@ -50,7 +50,7 @@
   * `max-packet-size` - max UDP packet size we are ready to accept, default is 1024.
   * `*server-ready-promise` - if promise is present then deliver *server when server is ready to accept UDP."
   [node-id host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
-                                      :or   {timeout 0 max-packet-size 1024}}]
+                                      :or   {timeout 5 max-packet-size 1024}}]
   (try
     (let [*server       (atom
                           {:node-id         node-id
@@ -62,7 +62,7 @@
                            :continue?       true
                            :packet-count    0})
           server-socket (DatagramSocket. port (InetAddress/getByName host))]
-      (.setSoTimeout server-socket 5)
+      (.setSoTimeout server-socket timeout)
       (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} 0)
       (vthread
         (do
@@ -103,9 +103,25 @@
   "Stops given `*server`.
   Returns: *server."
   [*server]
-  (let [{:keys [host port]} @*server]
+  (let [*stop-complete (promise)
+        {:keys [host port]} @*server]
+
+    (add-watch *server :stop-watcher
+      (fn [_ a _ new-state]
+        (when (or
+                (= :stopped (-> @a :server-state))
+                (= :stopped (:server-state new-state)))
+          (deliver *stop-complete :stopped)
+          @*stop-complete)))
+
     (swap! *server assoc :continue? false)
+
     (send-packet (.getBytes "") host port)                 ;; send empty packet to trigger server
+
+    (deref *stop-complete 300 :timeout)
+    (when-not (= :stopped @*stop-complete)
+      (throw (ex-info "Can't stop server" @*server)))      ;; wait for packet reach the server
+    (remove-watch *server :stop-watcher)
     *server))
 
 
