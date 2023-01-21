@@ -4876,7 +4876,7 @@
 
   (add-node! *node-number *nodes)
 
-  (org.rssys.metric/serialize org.rssys.metric/registry)
+  (org.rssys.swim.metric/serialize org.rssys.swim.metric/registry)
   (sut/node-reset-metrics! node1)
   (deref user/*max-ping-ack-round-trip)
 
