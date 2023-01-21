@@ -4802,13 +4802,13 @@
             (m/assert true (sut/alive-node? node2))))
 
 
-        (testing "rejoin process start"
+        (testing "node1 rejoin process start"
           (let [[*e3 e3-tap-fn] (set-event-catcher node1-id :set-status {:new-status :left})
                 [*e4 e4-tap-fn] (set-event-catcher node1-id :set-status {:new-status :join})
                 [*e5 e5-tap-fn] (set-event-catcher node2-id :join-event)
                 [*e6 e6-tap-fn] (set-event-catcher node1-id :alive-event-join-confirmed)]
 
-            (sut/send-event node2 (sut/new-dead-event node2 node1-id) node1-id)
+            (sut/send-event node2 (sut/new-dead-event node2 node1-id) (sut/get-host node1) (sut/get-port node1))
 
             (testing "node1 should receive dead event and set status :left"
               (no-timeout-check *e3))
