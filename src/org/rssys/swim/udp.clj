@@ -62,7 +62,7 @@
                            :continue?       true
                            :packet-count    0})
           server-socket (DatagramSocket. port (InetAddress/getByName host))]
-      (.setSoTimeout server-socket timeout)
+      (.setSoTimeout server-socket 5)
       (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} 0)
       (vthread
         (do
