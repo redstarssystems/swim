@@ -3637,6 +3637,7 @@
                                   :neighbour-id node1-id}}} @*e1))
 
           (sut/send-events node2 (sut/take-events node2) (sut/get-host node3) (sut/get-port node3))
+          (sut/send-events node2 (sut/take-events node2) (sut/get-host node3) (sut/get-port node3))
 
           (testing "node3 should receive alive event about node1 from node2"
             (no-timeout-check *e2)
@@ -4808,6 +4809,7 @@
                 [*e5 e5-tap-fn] (set-event-catcher node2-id :join-event)
                 [*e6 e6-tap-fn] (set-event-catcher node1-id :alive-event-join-confirmed)]
 
+            (sut/send-event node2 (sut/new-dead-event node2 node1-id) (sut/get-host node1) (sut/get-port node1))
             (sut/send-event node2 (sut/new-dead-event node2 node1-id) (sut/get-host node1) (sut/get-port node1))
 
             (testing "node1 should receive dead event and set status :left"
