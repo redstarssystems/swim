@@ -1521,7 +1521,7 @@
         (d> :ping-event (get-id this) e)
         (upsert-neighbour this (assoc sender :host (.-host e) :port (.-port e) :tx (.-tx e) :restart-counter (.-restart_counter e)))
         (let [ack-event (new-ack-event this e)]
-          (send-event-ae this ack-event sender-id)
+          (send-event-ae this ack-event (.-host sender) (.-port sender))
           (d> :ack-event (get-id this) ack-event))))))
 
 
