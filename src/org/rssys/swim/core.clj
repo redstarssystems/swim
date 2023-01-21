@@ -1945,10 +1945,11 @@
       (d> :ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
       (delete-ping this [neighbour-id ts])
       (if (< attempt-number max-ping-without-ack-before-suspect)
-        (let [next-ping-event (new-ping-event this neighbour-id (inc attempt-number))]
-          (insert-ping this next-ping-event)
-          (vthread (ack-timeout-watcher this neighbour-id (.-ts next-ping-event)))
-          (send-event this next-ping-event neighbour-id))
+        (when-let [nb (get-neighbour this neighbour-id)]
+          (let [next-ping-event (new-ping-event this neighbour-id (inc attempt-number))]
+           (insert-ping this next-ping-event)
+           (vthread (ack-timeout-watcher this neighbour-id (.-ts next-ping-event)))
+           (send-event this next-ping-event (.-host nb) (.-port nb))))
         (let [_                  (set-nb-suspect-status this neighbour-id)
               alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
               alive-nodes-number (count alive-neighbours)]
