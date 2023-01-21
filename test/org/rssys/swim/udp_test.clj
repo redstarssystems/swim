@@ -1,8 +1,8 @@
-(ns org.rssys.udp-test
+(ns org.rssys.swim.udp-test
   (:require
     [clojure.test :refer [deftest is testing]]
     [matcho.core :as m]
-    [org.rssys.udp :as sut])
+    [org.rssys.swim.udp :as sut])
   (:import
     (java.net
       DatagramPacket
@@ -85,14 +85,14 @@
 
       (testing "server map should have correct structure"
         (m/assert ^:matcho/strict
-          {:node-id             uuid?
-           :host                string?
-           :port                number?
-           :start-time          #(instance? Instant %)
-           :max-packet-size     number?
-           :server-state        :stopped
-           :continue?           boolean?
-           :server-packet-count pos?}
+          {:node-id         uuid?
+           :host            string?
+           :port            number?
+           :start-time      #(instance? Instant %)
+           :max-packet-size number?
+           :server-state    :stopped
+           :continue?       boolean?
+           :packet-count    pos?}
           @*server))
 
       (testing "should stop server"

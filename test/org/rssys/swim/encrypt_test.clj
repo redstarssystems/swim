@@ -1,8 +1,8 @@
-(ns org.rssys.encrypt-test
+(ns org.rssys.swim.encrypt-test
   (:require
     [clojure.test :as test :refer [deftest testing is]]
     [matcho.core :as m]
-    [org.rssys.encrypt :as sut])
+    [org.rssys.swim.encrypt :as sut])
   (:import
     (javax.crypto
       Cipher)))

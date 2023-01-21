@@ -1,4 +1,4 @@
-(ns org.rssys.domain
+(ns org.rssys.swim.domain
   (:import
     (java.io
       Writer)))

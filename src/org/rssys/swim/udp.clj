@@ -1,8 +1,8 @@
-(ns org.rssys.udp
+(ns org.rssys.swim.udp
   "UDP server functions"
   (:require
-    [org.rssys.metric :as metric]
-    [org.rssys.vthread :refer [vthread]])
+    [org.rssys.swim.metric :as metric]
+    [org.rssys.swim.vthread :refer [vthread]])
   (:import
     (java.net
       DatagramPacket
@@ -53,17 +53,16 @@
                                       :or   {timeout 0 max-packet-size 1024}}]
   (try
     (let [*server       (atom
-                          {:node-id             node-id
-                           :host                host
-                           :port                port
-                           :start-time          (Instant/now)
-                           :max-packet-size     max-packet-size
-                           :server-state        :running
-                           :continue?           true
-                           :server-packet-count 0})
+                          {:node-id         node-id
+                           :host            host
+                           :port            port
+                           :start-time      (Instant/now)
+                           :max-packet-size max-packet-size
+                           :server-state    :running
+                           :continue?       true
+                           :packet-count    0})
           server-socket (DatagramSocket. port (InetAddress/getByName host))]
       (.setSoTimeout server-socket timeout)
-      (metric/gauge metric/registry :process-udp-packet-ms {:node-id node-id} 0)
       (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} 0)
       (vthread
         (do
@@ -73,7 +72,7 @@
                   packet (DatagramPacket. buffer (alength buffer))]
               (try
                 (.receive server-socket packet)
-                (swap! *server update :server-packet-count inc)
+                (swap! *server update :packet-count inc)
                 (if (pos? (.getLength packet))
                   (vthread
                     (let [start-ts (System/currentTimeMillis)
@@ -81,8 +80,7 @@
                           end-ts   (System/currentTimeMillis)
                           diff-max-ts (metric/get-metric metric/registry :process-udp-packet-max-ms {:node-id node-id})
                           diff-ts (- end-ts start-ts)]
-                      (metric/gauge metric/registry :process-udp-packet-ms {:node-id node-id} diff-ts)
-                      (when (> diff-ts diff-max-ts)
+                      (when (and diff-max-ts (> diff-ts diff-max-ts))
                         (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} diff-ts))))
                   :nothing)                                 ;; do not process empty packets
                 (catch SocketTimeoutException _)
@@ -114,4 +112,4 @@
 
 (defn packets-received
   [*server-map]
-  (-> @*server-map :server-packet-count))
+  (-> @*server-map :packet-count))

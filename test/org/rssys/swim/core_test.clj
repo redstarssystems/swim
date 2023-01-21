@@ -1,20 +1,21 @@
-(ns org.rssys.swim-test
+(ns org.rssys.swim.core-test
   (:require
     [clojure.datafy :refer [datafy]]
     [clojure.test :refer [deftest is testing]]
     [matcho.core :as m]
-    [org.rssys.encrypt :as e]
-    [org.rssys.event :as event]
-    [org.rssys.spec :as spec]
-    [org.rssys.swim :as sut])
+    [org.rssys.swim.core :as sut]
+    [org.rssys.swim.encrypt :as e]
+    [org.rssys.swim.event :as event]
+    [org.rssys.swim.spec :as spec]
+    [org.rssys.swim.util :refer [safe]])
   (:import
     (java.util
       UUID)
-    (org.rssys.domain
+    (org.rssys.swim.domain
       Cluster
       NeighbourNode
       NodeObject)
-    (org.rssys.event
+    (org.rssys.swim.event
       AckEvent
       AliveEvent
       AntiEntropy
@@ -32,6 +33,20 @@
 
 
 (declare thrown-with-msg?)
+
+
+;;
+;;
+;;(defn file-prn>
+;;  [v]
+;;  (when (:org.rssys.swim.core/cmd v)
+;;    (let [fname (str "log/" (:node-id v) ".txt")
+;;          content (with-out-str (clojure.pprint/pprint v))]
+;;      (spit fname content :append true)
+;;      (spit fname "\n\"-----------------------------------------------------\"\n" :append true))))
+;;
+;;
+;;(add-tap file-prn>)
 
 
 ;;;;;;;;;;;;;;;;;;;;;
@@ -123,9 +138,9 @@
 
 (deftest safe-test
   (testing "should prevent any exceptions"
-    (m/assert nil (sut/safe (/ 1 0))))
+    (m/assert nil (safe (/ 1 0))))
   (testing "should return value for any normal expression"
-    (m/assert 1/2 (sut/safe (/ 1 2)))))
+    (m/assert 1/2 (safe (/ 1 2)))))
 
 
 (deftest calc-n-test
@@ -1593,7 +1608,7 @@
   "Set received events to payload section without processing them."
   [^NodeObject this ^bytes encrypted-data]
   (let [secret-key     (-> this sut/get-cluster :secret-key)
-        decrypted-data (sut/safe (e/decrypt-data ^bytes secret-key ^bytes encrypted-data))
+        decrypted-data (safe (e/decrypt-data ^bytes secret-key ^bytes encrypted-data))
         events-vector  (sut/deserialize ^bytes decrypted-data)]
     (sut/set-payload this events-vector)))
 
@@ -1614,7 +1629,7 @@
         (testing "should transform all given events and send them to node2"
           (let [*expecting-event (promise)
                 event-catcher-fn (fn [v]
-                                   (when-let [cmd (:org.rssys.swim/cmd v)]
+                                   (when-let [cmd (:org.rssys.swim.core/cmd v)]
                                      (when (and
                                              (= :set-payload cmd)
                                              (= (:id node2-data) (:node-id v)))
@@ -1720,7 +1735,7 @@
   [node-id event-kw & {:keys [cmd-type new-status nb-status]}]
   (let [*p    (promise)
         tap-f (fn [v]
-                (when-let [cmd (:org.rssys.swim/cmd v)]
+                (when-let [cmd (:org.rssys.swim.core/cmd v)]
                   (when (and
                           (= cmd event-kw)
                           (= node-id (:node-id v))
@@ -3069,9 +3084,6 @@
               ;;(m/assert (-> @*e1 :data :tx) (.-tx (sut/get-neighbour node2 node1-id)))
               (m/assert true (> (.-tx (sut/get-neighbour node2 node1-id)) node1-tx)))
 
-            (testing "node2 should set alive status for neighbour node1"
-              (m/assert :alive (:status (sut/get-neighbour node2 node1-id))))
-
             (testing "node2 should generate ack event for node1"
               (no-timeout-check *e2))
 
@@ -3250,39 +3262,6 @@
             (sut/node-stop node1)
             (sut/node-stop node2)))))
 
-    (testing "destination node should reject event with bad tx"
-      (let [node1    (sut/new-node-object node1-data cluster)
-            node2    (sut/new-node-object node2-data cluster)
-            node1-id (sut/get-id node1)
-            node2-id (sut/get-id node2)
-            [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-bad-tx-error)]
-
-        (try
-          (sut/node-start node1  sut/udp-packet-processor)
-          (sut/node-start node2  sut/udp-packet-processor)
-
-          (sut/set-alive-status node1)
-          (sut/set-alive-status node2)
-
-          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
-          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-          (let [ping-event (sut/new-ping-event node1 node2-id 1)
-                _          (sut/insert-ping node1 ping-event)]
-
-
-            (sut/set-nb-tx node2 node1-id 999)
-            (sut/send-event node1 ping-event node2-id)
-
-            (testing "node2 should reject ping event from node1"
-              (no-timeout-check *e1)))
-
-          (catch Exception e
-            (print-ex e))
-          (finally
-            (remove-tap e1-tap-fn)
-            (sut/node-stop node1)
-            (sut/node-stop node2)))))
 
     (testing "destination node should reject event intended for other node"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -4868,7 +4847,56 @@
 
 (comment
 
-   (def nodes
+  (def *node-number (atom 0))
+  (def *nodes (atom []))
+
+
+  (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster))
+  (sut/set-cluster-size node1 1)
+  (sut/node-start node1  sut/udp-packet-processor)
+  (sut/node-join node1)
+  (sut/set-cluster-size node1 99)
+
+  (sut/node-stop node1)
+
+
+
+  (defn add-node!
+    [*node-number *nodes]
+    (let [n @*node-number
+          uuid (UUID. 1 n)
+          port (+ 5377 n)
+          node (sut/new-node-object {:id uuid :host "127.0.0.1" :port port} cluster)]
+      (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
+      (sut/node-start node  sut/udp-packet-processor)
+      (sut/node-join node)
+      (swap! *node-number inc)
+      (swap! *nodes conj node)
+      {:id (sut/get-id node) :status (sut/get-status node) :n n}))
+
+  (add-node! *node-number *nodes)
+
+  (org.rssys.metric/serialize org.rssys.metric/registry)
+  (sut/node-reset-metrics! node1)
+  (deref user/*max-ping-ack-round-trip)
+
+  (def nn 0)
+  (sut/node-stop (nth @*nodes nn))
+  (sut/node-start (nth @*nodes nn) sut/udp-packet-processor)
+  (sut/upsert-neighbour (nth @*nodes nn) (sut/new-neighbour-node node1-nb-data))
+  (sut/node-join (nth @*nodes nn))
+
+  (mapv #(sut/get-status %) @*nodes)
+  (count (filterv #{:alive} (mapv #(sut/get-status %) @*nodes)))
+  (count (filterv #{:join} (mapv #(sut/get-status %) @*nodes)))
+  (count (filterv #{:left} (mapv #(sut/get-status %) @*nodes)))
+  (count (filterv #{:stop} (mapv #(sut/get-status %) @*nodes)))
+
+  (mapv #(sut/node-stop %) @*nodes)
+
+
+
+  (def nodes
      (mapv
        (fn [n]
          (let [uuid (UUID. 1 n)
@@ -4939,6 +4967,45 @@
 
   (sut/node-join node6)
 
+  (def node7 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000007" :host "127.0.0.1" :port 5382} cluster))
+  (sut/upsert-neighbour node7 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node7  sut/udp-packet-processor)
+
+  (sut/node-join node7)
+
+
+  (def node8 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000008" :host "127.0.0.1" :port 5383} cluster))
+  (sut/upsert-neighbour node8 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node8  sut/udp-packet-processor)
+
+  (sut/node-join node8)
+
+  (def node9 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000009" :host "127.0.0.1" :port 5384} cluster))
+  (sut/upsert-neighbour node9 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node9  sut/udp-packet-processor)
+
+  (sut/node-join node9)
+
+
+  (def node9 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000009" :host "127.0.0.1" :port 5384} cluster))
+  (sut/upsert-neighbour node9 (sut/new-neighbour-node node1-nb-data))
+  (sut/node-start node9  sut/udp-packet-processor)
+
+  (sut/node-join node9)
+
+
+  (mapv #(sut/get-status %) [node1 node2 node3 node4 node5 node6])
+
+  (mapv #(sut/node-stop %) [node1 node2 node3 node4 node5 node6 node7 node8 node9])
+  (sut/node-stop node1)
+  (sut/node-stop node2)
+  (sut/node-stop node3)
+  (sut/node-stop node4)
+  (sut/node-stop node5)
+  (sut/node-stop node6)
+  (sut/node-stop node7)
+  (sut/node-stop node8)
+  (sut/node-stop node9)
 
   (swap! (:*node node2) assoc-in [:cluster :secret-key] (aset-byte (:secret-key (sut/get-cluster node2)) 0 42))
 

@@ -7,7 +7,7 @@
 
 (defn t-prn>
   [v]
-  (when (:org.rssys.swim/cmd v)
+  (when (:org.rssys.swim.core/cmd v)
     (cprn v)
     (cprn "-----------------------------------------------------")))
 
@@ -15,7 +15,7 @@
 (defn filtered-prn>
   [v]
   (when-not (#{:udp-packet-processor :upsert-neighbour :send-events-udp-size}
-              (:org.rssys.swim/cmd v))
+              (:org.rssys.swim.core/cmd v))
     (cprn v)
     (cprn "-----------------------------------------------------")))
 
@@ -26,7 +26,7 @@
 (defn ping-ack-round-trip>
   [v]
 
-  (when (#{:ping-ack-round-trip} (:org.rssys.swim/cmd v))
+  (when (#{:ping-ack-round-trip} (:org.rssys.swim.core/cmd v))
     (when (> (:data v) @*max-ping-ack-round-trip)
       (reset! *max-ping-ack-round-trip (:data v)))
 
@@ -36,7 +36,7 @@
 
 (defn file-prn>
   [v]
-  (when (:org.rssys.swim/cmd v)
+  (when (:org.rssys.swim.core/cmd v)
     (let [fname (str "log/" (:node-id v) ".txt")
           content (with-out-str (pprint v))]
       (spit fname content :append true)
@@ -52,7 +52,7 @@
   (set! *warn-on-reflection* true)
   (run-dev)
   (add-tap (bound-fn* puget.printer/cprint))
-  (tap> {:org.rssys.swim/cmd true :a 1 :b "2"})
+  (tap> {:org.rssys.swim.core/cmd true :a 1 :b "2"})
 
   (add-tap ping-ack-round-trip>)
   (add-tap t-prn>)

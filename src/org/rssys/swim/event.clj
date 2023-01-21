@@ -1,4 +1,4 @@
-(ns org.rssys.event
+(ns org.rssys.swim.event
   "SWIM protocol events"
   (:require
     [clojure.set])

@@ -1,4 +1,4 @@
-(ns org.rssys.encrypt
+(ns org.rssys.swim.encrypt
   "Cryptographic functions"
   (:import
     (java.io

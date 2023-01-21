@@ -1,4 +1,4 @@
-(ns org.rssys.spec
+(ns org.rssys.swim.spec
   "SWIM spec"
   (:require
     [clojure.spec.alpha :as s]))

@@ -1,17 +1,17 @@
-(ns org.rssys.swim
+(ns org.rssys.swim.core
   "SWIM protocol implementation"
   (:require
     [clojure.set]
     [clojure.spec.alpha :as s]
     [cognitect.transit :as transit]
-    [org.rssys.domain :as domain]
-    [org.rssys.encrypt :as e]
-    [org.rssys.event :as event]
-    [org.rssys.monitoring :as monitoring]
-    [org.rssys.spec :as spec]
-    [org.rssys.udp :as udp]
-    [org.rssys.vthread :refer [vthread]]
-    [prometheus.core :as prometheus])
+    [org.rssys.swim.domain :as domain]
+    [org.rssys.swim.encrypt :as e]
+    [org.rssys.swim.event :as event]
+    [org.rssys.swim.metric :as metric]
+    [org.rssys.swim.spec :as spec]
+    [org.rssys.swim.udp :as udp]
+    [org.rssys.swim.util :refer [exec-time safe]]
+    [org.rssys.swim.vthread :refer [vthread]])
   (:import
     (clojure.lang
       Keyword
@@ -22,12 +22,12 @@
       ByteArrayOutputStream)
     (java.util
       UUID)
-    (org.rssys.domain
+    (org.rssys.swim.domain
       Cluster
       NeighbourNode
       Node
       NodeObject)
-    (org.rssys.event
+    (org.rssys.swim.event
       AckEvent
       AliveEvent
       AntiEntropy
@@ -83,13 +83,6 @@
            :ts      (System/currentTimeMillis)
            :node-id node-id
            :data    data})))
-
-
-(defmacro safe
-  [& body]
-  `(try
-     ~@body
-     (catch Exception _#)))
 
 
 (defn calc-n
@@ -835,7 +828,7 @@
   This data is propagated from node to node and thus nodes can get knowledge about unknown nodes.
   To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
   if node has older data.
-  Returns vector of known neighbors size of `num` if any or empty vector.
+  Returns vector of known alive neighbors size of `num` if any or empty vector.
   Any item in returned vector is vectorized NeighbourNode.
   If key :neighbour-id present then returns anti-entropy data for this neighbour only"
   [^NodeObject this & {:keys [num neighbour-id] :or {num (:max-anti-entropy-items @*config)}}]
@@ -1412,11 +1405,12 @@
       (d> :indirect-ack-event-not-expected-error (get-id this) e)
 
       :else
-      (do
+      (let [diff (- (System/currentTimeMillis) (.-ts e))]
         (upsert-neighbour this (assoc sender :tx (.-tx e) :access :indirect :restart-counter (.-restart_counter e)
                                  :status :alive))
         (d> :indirect-ack-event (get-id this) e)
-        (delete-indirect-ping this [sender-id (.-ts e)])))))
+        (delete-indirect-ping this [sender-id (.-ts e)])
+        (metric/histogram metric/registry :indirect-ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
 
 
 (defmethod event-processing IndirectPingEvent
@@ -1487,7 +1481,7 @@
         (d> :ack-event (get-id this) e)
         (delete-ping this [sender-id (.-ts e)])
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
-        (prometheus/histogram monitoring/registry :ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
+        (metric/histogram metric/registry :ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
 
 
 (defmethod event-processing PingEvent
@@ -1516,8 +1510,8 @@
         (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-bad-restart-counter-error (get-id this) e))
 
-      (not (suitable-tx? this e))
-      (d> :ping-event-bad-tx-error (get-id this) e)
+      ;;(not (suitable-tx? this e))
+      ;;(d> :ping-event-bad-tx-error (get-id this) e)
 
       (not (= (get-id this) (.-neighbour_id e)))
       (d> :ping-event-neighbour-id-mismatch-error (get-id this) e)
@@ -1525,8 +1519,7 @@
       :else
       (do
         (d> :ping-event (get-id this) e)
-        (upsert-neighbour this (assoc sender :host (.-host e) :port (.-port e) :tx (.-tx e)
-                                 :restart-counter (.-restart_counter e) :status :alive))
+        (upsert-neighbour this (assoc sender :host (.-host e) :port (.-port e) :tx (.-tx e) :restart-counter (.-restart_counter e)))
         (let [ack-event (new-ack-event this e)]
           (send-event-ae this ack-event sender-id)
           (d> :ack-event (get-id this) ack-event))))))
@@ -1833,6 +1826,14 @@
 ;; NodeObject control functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn node-reset-metrics!
+  [^NodeObject this]
+  (send metric/registry {})
+  (metric/counter metric/registry :rejoin-number {:node-id (get-id this)})
+  (metric/register-metric-meta metric/registry :ping-ack-round-trip-ms :buckets [0 5 30 50 100 200 500 1000 2000])
+  (metric/register-metric-meta metric/registry :indirect-ping-ack-round-trip-ms :buckets [0 5 30 50 100 200 500 1000 2000])
+  (metric/gauge metric/registry :ping-heartbeat-ms {:node-id (get-id this)} 0))
+
 
 (defn node-start
   "Start the node and run `node-process-fn` in a separate virtual thread.
@@ -1842,11 +1843,12 @@
      * `node-process-fn` - fn with one arg `this` for any user node process. It may look for :continue? flag in UDP server."
   [^NodeObject this incoming-data-processor-fn & {:keys [node-process-fn]}]
   (try
+
     (when (= (get-status this) :stop)
       (set-left-status this)
       (swap! (:*node this) assoc :tx 1)
       (let [{:keys [host port]} (get-value this)]
-        (swap! (:*node this) assoc :*udp-server (udp/start host port (partial incoming-data-processor-fn this))))
+        (swap! (:*node this) assoc :*udp-server (udp/start (get-id this) host port (partial incoming-data-processor-fn this))))
       (when-not (s/valid? ::spec/node (get-value this))
         (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
       (swap! *stat assoc :bad-udp-counter 0)
@@ -1965,20 +1967,21 @@
   [^NodeObject this & {:keys [ping-heartbeat-ms] :or {ping-heartbeat-ms (-> @*config :ping-heartbeat-ms)}}]
   (while (alive-node? this)
     (try
-      (let [events        (take-events this)
-            n             (calc-n (nodes-in-cluster this))
-            neighbour-ids (take-ids-for-ping this n)]
-        (doseq [neighbour-id neighbour-ids]
-          (let [nb         (get-neighbour this neighbour-id)
-                ping-event (new-ping-event this neighbour-id 1)
-                nb-events  (conj events ping-event)]
-            (insert-ping this ping-event)
-            (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event)))
-            (send-events this nb-events (.-host nb) (.-port nb))
-            (d> :ping-heartbeat (get-id this) {:known-nodes-number  (count (get-alive-neighbours this))
-                                               :events-sent-number  (count nb-events)
-                                               :active-pings-number (count (get-ping-events this))
-                                               :ping-heartbeat-ms   ping-heartbeat-ms}))))
+      (exec-time {:node-id (get-id this)} :ping-heartbeat-ms
+        (let [events        (take-events this)
+              n             (calc-n (nodes-in-cluster this))
+              neighbour-ids (take-ids-for-ping this n)]
+          (doseq [neighbour-id neighbour-ids]
+            (let [nb         (get-neighbour this neighbour-id)
+                  ping-event (new-ping-event this neighbour-id 1)
+                  nb-events  (conj events ping-event)]
+              (insert-ping this ping-event)
+              (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event)))
+              (send-events this nb-events (.-host nb) (.-port nb))
+              (d> :ping-heartbeat (get-id this) {:known-nodes-number  (count (get-alive-neighbours this))
+                                                 :events-sent-number  (count nb-events)
+                                                 :active-pings-number (count (get-ping-events this))
+                                                 :ping-heartbeat-ms   ping-heartbeat-ms})))))
       (catch Exception e
         (d> :ping-heartbeat-error (get-id this) {:message (ex-message e)})))
     (Thread/sleep ^Long ping-heartbeat-ms)))
@@ -2004,6 +2007,7 @@
 
           (loop [attempt 0]
             (d> :rejoin-attempt (get-id this) {:attempts attempt})
+            (metric/counter-add metric/registry :rejoin-number {:node-id (get-id this)} 1)
             (stop-rejoin-watcher this {:auto-rejoin? true})
             (if (node-join this)
               (d> :rejoin-complete (get-id this) {:attempts attempt})
@@ -2122,7 +2126,7 @@
     true
     (let [{:keys [*udp-server]} (get-value this)]
       (node-leave this)
-      (when *udp-server (udp/stop *udp-server))
+      (when *udp-server (exec-time (get-id this) :stop-time-ms (udp/stop *udp-server)))
       (swap! (:*node this) assoc
         :*udp-server nil
         :ping-events {}

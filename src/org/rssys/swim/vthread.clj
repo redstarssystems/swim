@@ -1,4 +1,4 @@
-(ns org.rssys.vthread
+(ns org.rssys.swim.vthread
   (:import
     (java.util.concurrent
       ExecutorService

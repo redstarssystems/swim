@@ -1,10 +1,10 @@
-(ns org.rssys.event-test
+(ns org.rssys.swim.event-test
   (:require
     [clojure.test :refer [deftest is testing]]
     [matcho.core :as m :refer [match]]
-    [org.rssys.event :as sut])
+    [org.rssys.swim.event :as sut])
   (:import
-    (org.rssys.event
+    (org.rssys.swim.event
       AckEvent
       AliveEvent
       AntiEntropy

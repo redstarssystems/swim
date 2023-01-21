@@ -1,4 +1,4 @@
-(ns org.rssys.metric
+(ns org.rssys.swim.metric
   (:require
     [clojure.string :as string]))
 
