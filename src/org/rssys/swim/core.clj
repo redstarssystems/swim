@@ -1904,88 +1904,94 @@
 (defn indirect-ack-timeout-watcher
   "Detect indirect ack timeout. Should run in a separate virtual thread.
   Returns void."
-  [^NodeObject this neighbour-id ts & {:keys [ack-timeout-ms max-ping-without-ack-before-dead] :or
+  [^NodeObject this neighbour-id ts restart-counter-this & {:keys [ack-timeout-ms max-ping-without-ack-before-dead] :or
                                        {ack-timeout-ms (-> @*config :ack-timeout-ms)
                                         max-ping-without-ack-before-dead (-> @*config :max-ping-without-ack-before-dead)}}]
 
   (Thread/sleep ^Long ack-timeout-ms)
 
-  (when-let [indirect-ping-event (get-indirect-ping-event this [neighbour-id ts])]
-    (let [attempt-number (.-attempt_number indirect-ping-event)]
-      (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
-      (delete-indirect-ping this [neighbour-id ts])
-      (if (< attempt-number max-ping-without-ack-before-dead)
-        (let [alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
-              alive-nodes-number (count alive-neighbours)]
-          (if (pos-int? alive-nodes-number)
-            (let [random-alive-nb          (rand-nth alive-neighbours)
-                  next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
-              (insert-indirect-ping this next-indirect-ping-event)
-              (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event)))
-              (send-event this next-indirect-ping-event neighbour-id))
-            (do
-              (set-nb-dead-status this neighbour-id)
-              (put-event this (new-dead-event this neighbour-id)))))
-        (do
-          (set-nb-dead-status this neighbour-id)
-          (put-event this (new-dead-event this neighbour-id)))))))
+  (when (= (get-restart-counter this) restart-counter-this)
+    (when-let [indirect-ping-event (get-indirect-ping-event this [neighbour-id ts])]
+     (let [attempt-number (.-attempt_number indirect-ping-event)]
+       (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
+       (delete-indirect-ping this [neighbour-id ts])
+       (if (< attempt-number max-ping-without-ack-before-dead)
+         (let [alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
+               alive-nodes-number (count alive-neighbours)]
+           (if (pos-int? alive-nodes-number)
+             (when (= (get-restart-counter this) restart-counter-this)
+               (let [random-alive-nb          (rand-nth alive-neighbours)
+                    next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
+                (insert-indirect-ping this next-indirect-ping-event)
+                (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event) restart-counter-this))
+                (send-event this next-indirect-ping-event neighbour-id)))
+             (when (= (get-restart-counter this) restart-counter-this)
+               (set-nb-dead-status this neighbour-id)
+               (put-event this (new-dead-event this neighbour-id)))))
+         (when (= (get-restart-counter this) restart-counter-this)
+           (set-nb-dead-status this neighbour-id)
+           (put-event this (new-dead-event this neighbour-id))))))))
 
 
 
 (defn ack-timeout-watcher
   "Detect ack timeout. Should run in a separate virtual thread.
   Returns void."
-  [^NodeObject this neighbour-id ts & {:keys [ack-timeout-ms max-ping-without-ack-before-suspect] :or
+  [^NodeObject this neighbour-id ts restart-counter-this & {:keys [ack-timeout-ms max-ping-without-ack-before-suspect] :or
                                        {ack-timeout-ms (-> @*config :ack-timeout-ms)
                                         max-ping-without-ack-before-suspect (-> @*config :max-ping-without-ack-before-suspect)}}]
 
   (Thread/sleep ^Long ack-timeout-ms)
-  (when-let [ping-event (get-ping-event this [neighbour-id ts])]
-    (let [attempt-number (.-attempt_number ping-event)]
-      (d> :ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
-      (delete-ping this [neighbour-id ts])
-      (if (< attempt-number max-ping-without-ack-before-suspect)
-        (when-let [nb (get-neighbour this neighbour-id)]
-          (let [next-ping-event (new-ping-event this neighbour-id (inc attempt-number))]
-           (insert-ping this next-ping-event)
-           (vthread (ack-timeout-watcher this neighbour-id (.-ts next-ping-event)))
-           (send-event this next-ping-event (.-host nb) (.-port nb))))
-        (let [_                  (set-nb-suspect-status this neighbour-id)
-              alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
-              alive-nodes-number (count alive-neighbours)]
-          (if (zero? alive-nodes-number)
-            (set-nb-dead-status this neighbour-id)
-            (let [random-alive-nb     (rand-nth alive-neighbours)
-                  indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
-              (insert-indirect-ping this indirect-ping-event)
-              (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event)))
-              (send-event this indirect-ping-event (:id random-alive-nb)))))))))
+  (when (= (get-restart-counter this) restart-counter-this)
+    (when-let [ping-event (get-ping-event this [neighbour-id ts])]
+     (let [attempt-number (.-attempt_number ping-event)]
+       (d> :ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
+       (delete-ping this [neighbour-id ts])
+       (if (< attempt-number max-ping-without-ack-before-suspect)
+         (when-let [nb (get-neighbour this neighbour-id)]
+           (when (= (get-restart-counter this) restart-counter-this)
+             (let [next-ping-event (new-ping-event this neighbour-id (inc attempt-number))]
+              (insert-ping this next-ping-event)
+              (vthread (ack-timeout-watcher this neighbour-id (.-ts next-ping-event) restart-counter-this))
+              (send-event this next-ping-event (.-host nb) (.-port nb)))))
+         (let [_                  (set-nb-suspect-status this neighbour-id)
+               alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
+               alive-nodes-number (count alive-neighbours)]
+           (if (zero? alive-nodes-number)
+             (set-nb-dead-status this neighbour-id)
+             (when (= (get-restart-counter this) restart-counter-this)
+               (let [random-alive-nb     (rand-nth alive-neighbours)
+                    indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
+                (insert-indirect-ping this indirect-ping-event)
+                (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event) restart-counter-this))
+                (send-event this indirect-ping-event (:id random-alive-nb)))))))))))
 
 
 
 (defn ping-heartbeat
   "Should run in a separate virtual thread."
-  [^NodeObject this & {:keys [ping-heartbeat-ms] :or {ping-heartbeat-ms (-> @*config :ping-heartbeat-ms)}}]
-  (while (alive-node? this)
+  [^NodeObject this restart-counter-this & {:keys [ping-heartbeat-ms] :or {ping-heartbeat-ms (-> @*config :ping-heartbeat-ms)}}]
+  (while (and (alive-node? this) (= (get-restart-counter this) restart-counter-this) )
     (try
-      (exec-time {:node-id (get-id this)} :ping-heartbeat-ms
+      (Thread/sleep ^Long ping-heartbeat-ms)
+      (when (= (get-restart-counter this) restart-counter-this)
         (let [events        (take-events this)
-              n             (calc-n (nodes-in-cluster this))
-              neighbour-ids (take-ids-for-ping this n)]
-          (doseq [neighbour-id neighbour-ids]
-            (let [nb         (get-neighbour this neighbour-id)
+             n             (calc-n (nodes-in-cluster this))
+             neighbour-ids (take-ids-for-ping this n)]
+         (doseq [neighbour-id neighbour-ids]
+           (when (= (get-restart-counter this) restart-counter-this)
+             (let [nb         (get-neighbour this neighbour-id)
                   ping-event (new-ping-event this neighbour-id 1)
                   nb-events  (conj events ping-event)]
               (insert-ping this ping-event)
-              (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event)))
+              (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event) restart-counter-this))
               (send-events this nb-events (.-host nb) (.-port nb))
               (d> :ping-heartbeat (get-id this) {:known-nodes-number  (count (get-alive-neighbours this))
                                                  :events-sent-number  (count nb-events)
                                                  :active-pings-number (count (get-ping-events this))
-                                                 :ping-heartbeat-ms   ping-heartbeat-ms})))))
+                                                 :ping-heartbeat-ms   ping-heartbeat-ms}))))))
       (catch Exception e
-        (d> :ping-heartbeat-error (get-id this) {:message (ex-message e)})))
-    (Thread/sleep ^Long ping-heartbeat-ms)))
+        (d> :ping-heartbeat-error (get-id this) {:message (ex-message e)})))))
 
 
 (declare node-join)
@@ -2055,7 +2061,7 @@
           (delete-neighbours this)
           (set-alive-status this)
           (when rejoin-if-dead? (start-rejoin-watcher this))
-          (vthread (ping-heartbeat this))
+          (vthread (ping-heartbeat this (get-restart-counter this)))
           true)
 
         (> cluster-size 1)
@@ -2084,7 +2090,7 @@
             (do
               (remove-watch (:*node this) :join-await-watcher)
               (when rejoin-if-dead? (start-rejoin-watcher this))
-              (vthread (ping-heartbeat this))
+              (vthread (ping-heartbeat this (get-restart-counter this)))
               true)
             (do
               (deref *join-await-promise max-join-time-ms :timeout)
@@ -2092,7 +2098,7 @@
               (if (alive-node? this)
                 (do
                   (when rejoin-if-dead? (start-rejoin-watcher this))
-                  (vthread (ping-heartbeat this))
+                  (vthread (ping-heartbeat this (get-restart-counter this)))
                   true)
                 (do
                   (set-left-status this)
