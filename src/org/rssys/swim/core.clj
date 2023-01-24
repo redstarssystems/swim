@@ -1875,7 +1875,8 @@
       (set-left-status this)
       (swap! (:*node this) assoc :tx 1)
       (let [{:keys [host port]} (get-value this)]
-        (swap! (:*node this) assoc :*udp-server (udp/start (get-id this) host port (partial incoming-data-processor-fn this))))
+        (swap! (:*node this) assoc :*udp-server
+          (udp/start (get-id this) host port (partial incoming-data-processor-fn this) {:max-packet-size (:max-udp-size @*config)})))
       (when-not (s/valid? ::spec/node (get-value this))
         (throw (ex-info "Invalid node data" (->> this :*node (s/explain-data ::spec/node) spec/problems))))
       (swap! *stat assoc :bad-udp-counter 0)
