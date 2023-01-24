@@ -2,6 +2,7 @@
   "UDP server functions"
   (:require
     [org.rssys.swim.metric :as metric]
+    [org.rssys.swim.util :refer [exec-time safe]]
     [org.rssys.swim.vthread :refer [vthread]])
   (:import
     (java.net
@@ -65,30 +66,28 @@
       (.setSoTimeout server-socket timeout)
       (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} 0)
       (vthread
-        (do
-          (when *server-ready-promise (deliver *server-ready-promise *server))
-          (while (-> @*server :continue?)
-            (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
-                  packet (DatagramPacket. buffer (alength buffer))]
-              (try
-                (.receive server-socket packet)
-                (swap! *server update :packet-count inc)
-                (if (pos? (.getLength packet))
-                  (vthread
-                    (let [start-ts (System/currentTimeMillis)
-                          _ (process-cb-fn (byte-array (.getLength packet) (.getData packet)))
-                          end-ts   (System/currentTimeMillis)
-                          diff-max-ts (metric/get-metric metric/registry :process-udp-packet-max-ms {:node-id node-id})
-                          diff-ts (- end-ts start-ts)]
-                      (when (and diff-max-ts (> diff-ts diff-max-ts))
-                        (metric/gauge metric/registry :process-udp-packet-max-ms {:node-id node-id} diff-ts))))
-                  :nothing)                                 ;; do not process empty packets
-                (catch SocketTimeoutException _)
-                (catch Exception e
-                  (.close server-socket)
-                  (throw e)))))
-          (.close server-socket)
-          (swap! *server assoc :server-state :stopped)))
+        (when *server-ready-promise (deliver *server-ready-promise *server))
+        (while (-> @*server :continue?)
+          (let [buffer ^bytes (make-array Byte/TYPE max-packet-size)
+                packet (DatagramPacket. buffer (alength buffer))]
+            (try
+              (.receive server-socket packet)
+              (vthread
+                (let [start-time (- (.getEpochSecond (Instant/now)) (.getEpochSecond (:start-time @*server)))
+                      packets-since-start (double (:packet-count @*server))
+                      packet-per-sec (or (safe (int (Math/floor (/ packets-since-start start-time)))) 0)]
+                  (swap! *server update :packet-count inc)
+                  (safe (metric/gauge metric/registry :packet-per-sec {:node-id node-id} packet-per-sec))
+                   (when (pos? (.getLength packet))
+                     (let [data (byte-array (.getLength packet) (.getData packet))]
+                       (exec-time node-id :process-udp-packet-max-ms (process-cb-fn data))))))
+              (catch SocketTimeoutException _)
+              (catch Exception e
+                (.close server-socket)
+                (throw e)))))
+
+        (exec-time node-id :udp-socket-close-ms (.close server-socket))
+        (swap! *server assoc :server-state :stopped))
       *server)
     (catch Exception e
       (throw (ex-info "Can't start node" {:host host :port port} e)))))
