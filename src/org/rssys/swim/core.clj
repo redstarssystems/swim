@@ -1320,6 +1320,9 @@
   [^NodeObject this ^AntiEntropy e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+
+    (metric/counter-add metric/registry :anti-entropy-event-count {:node-id (get-id this)} 1)
+
     (cond
 
       (= sender-id (get-id this))
@@ -1379,6 +1382,8 @@
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
+    (metric/counter-add metric/registry :indirect-ack-event-count {:node-id (get-id this)} 1)
+
     (cond
 
       (not (alive-node? this))
@@ -1410,13 +1415,15 @@
                                  :status :alive))
         (d> :indirect-ack-event (get-id this) e)
         (delete-indirect-ping this [sender-id (.-ts e)])
-        (metric/histogram metric/registry :indirect-ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
+        #_(metric/histogram metric/registry :indirect-ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
 
 
 (defmethod event-processing IndirectPingEvent
   [^NodeObject this ^IndirectPingEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+
+    (metric/counter-add metric/registry :indirect-ping-event-count {:node-id (get-id this)} 1)
 
     (cond
 
@@ -1453,6 +1460,9 @@
   [^NodeObject this ^AckEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+
+    (metric/counter-add metric/registry :ack-event-count {:node-id (get-id this)} 1)
+
     (cond
 
       (not (alive-node? this))
@@ -1477,17 +1487,22 @@
       (d> :ack-event-not-expected-error (get-id this) e)
 
       :else
-      (let [diff (- (System/currentTimeMillis) (.-ts e))]
+      (let [diff (- (System/currentTimeMillis) (.-ts e))
+            current-delay (or (metric/get-metric metric/registry :ping-ack-roundtrip-max-ms {:label (str (get-id this))}) 0)]
         (d> :ack-event (get-id this) e)
         (delete-ping this [sender-id (.-ts e)])
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
-        (metric/histogram metric/registry :ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
+        (when (> diff current-delay)
+          (metric/gauge metric/registry :ping-ack-roundtrip-max-ms {:label (str (get-id this))} diff))
+        #_(metric/histogram metric/registry :ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
 
 
 (defmethod event-processing PingEvent
   [^NodeObject this ^PingEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+
+    (metric/counter-add metric/registry :ping-event-count {:node-id (get-id this)} 1)
 
     (cond
 
@@ -1529,6 +1544,9 @@
   [^NodeObject this ^JoinEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+
+    (metric/counter-add metric/registry :join-event-count {:node-id (get-id this)} 1)
+
     (cond
 
       (not (alive-node? this))
@@ -1575,6 +1593,8 @@
   [^NodeObject this ^AliveEvent e]
   (let [sender-id (.-id e)
         sender    (or (get-neighbour this (:id e)) :unknown-neighbour)]
+
+    (metric/counter-add metric/registry :alive-event-count {:node-id (get-id this)} 1)
 
     (cond
 
@@ -1625,6 +1645,7 @@
         sender       (or (get-neighbour this sender-id) :unknown-neighbour)
         new-size     (.-new_cluster_size e)
         alive-number (nodes-in-cluster this)]
+    (metric/counter-add metric/registry :new-cluster-size-event-count {:node-id (get-id this)} 1)
     (cond
 
       (not (alive-node? this))
@@ -1661,6 +1682,7 @@
   [^NodeObject this ^DeadEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+    (metric/counter-add metric/registry :dead-event-count {:node-id (get-id this)} 1)
     (cond
 
       (= (get-id this) (.-neighbour_id e))
@@ -1714,6 +1736,7 @@
   [^NodeObject this ^LeftEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+    (metric/counter-add metric/registry :left-event-count {:node-id (get-id this)} 1)
     (cond
 
       (not (alive-node? this))
@@ -1746,6 +1769,7 @@
   [^NodeObject this ^PayloadEvent e]
   (let [sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+    (metric/counter-add metric/registry :payload-event-count {:node-id (get-id this)} 1)
     (cond
 
       (not (alive-node? this))
@@ -1831,7 +1855,7 @@
   (send metric/registry {})
   (metric/counter metric/registry :rejoin-number {:node-id (get-id this)})
   (metric/register-metric-meta metric/registry :ping-ack-round-trip-ms :buckets [0 5 30 50 100 200 500 1000 2000])
-  (metric/register-metric-meta metric/registry :indirect-ping-ack-round-trip-ms :buckets [0 5 30 50 100 200 500 1000 2000])
+  #_(metric/register-metric-meta metric/registry :indirect-ping-ack-round-trip-ms :buckets [0 5 30 50 100 200 500 1000 2000])
   (metric/gauge metric/registry :ping-heartbeat-ms {:node-id (get-id this)} 0))
 
 
