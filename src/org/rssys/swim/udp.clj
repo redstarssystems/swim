@@ -46,11 +46,11 @@
   * `process-cb-fn` - call-back function to process data from UDP packets.
 
   Opts:
-  * `timeout` - time in ms which server waits for incoming packet, default 0 (infinite).
-  * `max-packet-size` - max UDP packet size we are ready to accept, default is 1024.
+  * `timeout` - time in ms which server waits for incoming packet, default is 0.
+  * `max-packet-size` - max UDP packet size we are ready to accept, default is 1432.
   * `*server-ready-promise` - if promise is present then deliver *server when server is ready to accept UDP."
   [node-id host port process-cb-fn & {:keys [^long timeout ^long max-packet-size *server-ready-promise]
-                                      :or   {timeout 500 max-packet-size 1024}}]
+                                      :or   {timeout 0 max-packet-size 1432}}]
   (try
     (let [*server       (atom
                           {:node-id         node-id
