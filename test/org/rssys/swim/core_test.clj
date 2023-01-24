@@ -4864,7 +4864,7 @@
   (defn add-node!
     [*node-number *nodes]
     (let [n @*node-number
-          uuid (UUID. 1 n)
+          uuid (UUID. 0 (+ 100 n))
           port (+ 5377 n)
           node (sut/new-node-object {:id uuid :host "127.0.0.1" :port port} cluster)]
       (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
@@ -4877,6 +4877,8 @@
   (add-node! *node-number *nodes)
 
   (org.rssys.swim.metric/serialize org.rssys.swim.metric/registry)
+  (org.rssys.swim.metric/get-metric org.rssys.swim.metric/registry :packet-per-sec)
+  (org.rssys.swim.metric/get-metric org.rssys.swim.metric/registry :rejoin-number)
   (sut/node-reset-metrics! node1)
   (deref user/*max-ping-ack-round-trip)
 
