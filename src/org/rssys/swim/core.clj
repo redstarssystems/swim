@@ -1925,7 +1925,6 @@
 
 
 
-;; FIXME: start process of periodic event send from buffer
 
 
 (defn indirect-ack-timeout-watcher
