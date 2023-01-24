@@ -78,9 +78,9 @@
                       packet-per-sec (or (safe (int (Math/floor (/ packets-since-start start-time)))) 0)]
                   (swap! *server update :packet-count inc)
                   (safe (metric/gauge metric/registry :packet-per-sec {:node-id node-id} packet-per-sec))
-                   (when (pos? (.getLength packet))
-                     (let [data (byte-array (.getLength packet) (.getData packet))]
-                       (exec-time node-id :process-udp-packet-max-ms (process-cb-fn data))))))
+                  (when (pos? (.getLength packet))
+                    (let [data (byte-array (.getLength packet) (.getData packet))]
+                      (exec-time node-id :process-udp-packet-max-ms (process-cb-fn data))))))
               (catch SocketTimeoutException _)
               (catch Exception e
                 (.close server-socket)
