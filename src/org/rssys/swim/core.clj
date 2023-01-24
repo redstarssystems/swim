@@ -1686,12 +1686,15 @@
     (cond
 
       (= (get-id this) (.-neighbour_id e))
-      (when (and
+      (if (and
               (alive-neighbour? sender)
               (suitable-restart-counter? this e)
-              (suitable-tx? this e))
-        (d> :dead-event-about-this-node-error (get-id this) e)
-        (set-left-status this))
+              (suitable-tx? this e)
+              (>= (.-neighbour_restart_counter e) (get-restart-counter this)))
+        (do
+          (d> :dead-event-about-this-node-error (get-id this) e)
+          (set-left-status this))
+        (d> :dead-event-about-this-node-outdated-error (get-id this) e))
 
       (not (alive-node? this))
       (d> :dead-event-not-alive-node-error (get-id this) e)
