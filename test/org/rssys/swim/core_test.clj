@@ -4895,36 +4895,52 @@
   (count (filterv #{:join} (mapv #(sut/get-status %) @*nodes)))
   (count (filterv #{:left} (mapv #(sut/get-status %) @*nodes)))
   (count (filterv #{:stop} (mapv #(sut/get-status %) @*nodes)))
+  (count (filterv #{:dead} (mapv #(sut/get-status %) @*nodes)))
 
   (mapv #(sut/node-stop %) @*nodes)
 
 
+  (defn neighbours-alive? [this]
+    (if (every? #(= :alive (:status (val %))) (sut/get-neighbours this))
+      (sut/get-id this)
+      false))
 
-  (def nodes
-     (mapv
-       (fn [n]
-         (let [uuid (UUID. 1 n)
-               port (+ 5377 n)
-               node (sut/new-node-object {:id uuid :host "127.0.0.1" :port port} cluster)]
-           (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
-           (sut/node-start node  sut/udp-packet-processor)
-           (sut/node-join node)
-           ;;(Thread/sleep 100)
-           node))
-      (range 0 16)))
+  (mapv neighbours-alive? @*nodes)
+  (sut/node-stop node1)
 
-  (mapv #(sut/get-status %) nodes)
-  (count (filterv #{:alive} (mapv #(sut/get-status %) nodes)))
-  (count (filterv #{:join} (mapv #(sut/get-status %) nodes)))
-  (count (filterv #{:left} (mapv #(sut/get-status %) nodes)))
-  (count (filterv #{:stop} (mapv #(sut/get-status %) nodes)))
+  (defn get-node [nodes node-id]
+    (first (filter #(= node-id (sut/get-id %)) nodes)))
+
+  (get-node @*nodes node-id)
+
+  (defn rejoin-node [*nodes node-id]
+    (let [node (get-node @*nodes node-id)]
+      (sut/node-stop node)
+      (sut/node-start node sut/udp-packet-processor)
+      (sut/upsert-neighbour node (sut/new-neighbour-node node1-nb-data))
+      (sut/node-join node)))
+
+  (def node-id #uuid"00000000-0000-0000-0000-000000000064")
+  (def node-id #uuid"00000000-0000-0000-0000-000000000065")
+  (def node-id #uuid"00000000-0000-0000-0000-000000000066")
+
+  (rejoin-node *nodes node-id)
+
+  (sut/get-neighbours-with-status
+    (get-node @*nodes node-id)
+    #{:dead :left :suspect})
 
 
-  (doseq [node nodes]
-    (org.rssys.vthread/vthread (sut/node-leave node)))
 
-  (doseq [node nodes]
-    (org.rssys.vthread/vthread (sut/node-stop node)))
+  (sut/get-neighbours-with-status node1 #{:dead :left :suspect})
+
+  (def node-id #uuid"00000000-0000-0000-0000-000000000077")
+
+  (sut/get-neighbours-with-status
+    (get-node @*nodes node-id)
+    #{:alive})
+
+
 
 
   (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster))
