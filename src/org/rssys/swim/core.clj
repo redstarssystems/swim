@@ -1490,7 +1490,7 @@
             current-delay (or (metric/get-metric metric/registry :ping-ack-roundtrip-max-ms {:label (str (get-id this))}) 0)]
         (d> :ack-event (get-id this) e)
         (delete-ping this [sender-id (.-ts e)])
-        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive :access :direct))
         (when (> diff current-delay)
           (metric/gauge metric/registry :ping-ack-roundtrip-max-ms {:label (str (get-id this))} diff))
         #_(metric/histogram metric/registry :ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
