@@ -1976,11 +1976,12 @@
   (Thread/sleep ^Long ack-timeout-ms)
   (when (= (get-restart-counter this) restart-counter-this)
     (when-let [ping-event (get-ping-event this [neighbour-id ts])]
-      (let [attempt-number (.-attempt_number ping-event)]
+      (let [attempt-number (.-attempt_number ping-event)
+            nb (get-neighbour this neighbour-id)]
         (d> :ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
         (delete-ping this [neighbour-id ts])
         (if (< attempt-number max-ping-without-ack-before-suspect)
-          (when-let [nb (get-neighbour this neighbour-id)]
+          (when (alive-neighbour? nb)
             (when (= (get-restart-counter this) restart-counter-this)
               (let [next-ping-event (new-ping-event this neighbour-id (inc attempt-number))]
                 (insert-ping this next-ping-event)
@@ -1989,14 +1990,15 @@
           (let [_                  (set-nb-suspect-status this neighbour-id)
                 alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
                 alive-nodes-number (count alive-neighbours)]
-            (if (zero? alive-nodes-number)
-              (set-nb-dead-status this neighbour-id)
-              (when (= (get-restart-counter this) restart-counter-this)
-                (let [random-alive-nb     (rand-nth alive-neighbours)
-                      indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
-                  (insert-indirect-ping this indirect-ping-event)
-                  (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event) restart-counter-this))
-                  (send-event this indirect-ping-event (:id random-alive-nb)))))))))))
+            (when (alive-neighbour? nb)
+              (if (zero? alive-nodes-number)
+                (set-nb-dead-status this neighbour-id)
+                (when (= (get-restart-counter this) restart-counter-this)
+                  (let [random-alive-nb     (rand-nth alive-neighbours)
+                        indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
+                    (insert-indirect-ping this indirect-ping-event)
+                    (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts indirect-ping-event) restart-counter-this))
+                    (send-event this indirect-ping-event (:id random-alive-nb))))))))))))
 
 
 
