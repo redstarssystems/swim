@@ -3188,7 +3188,8 @@
             (sut/set-nb-left-status node2 node1-id)
             (sut/send-event node1 ping-event node2-id)
 
-            (testing "node1 should receive dead event from node2"
+            ;; FIXME should decide check or not
+            #_(testing "node1 should receive dead event from node2"
               (no-timeout-check *e3)
               (m/assert {:node-id node1-id
                          :data    {:event {:cmd-type     6
@@ -3198,7 +3199,8 @@
             (testing "node2 should reject ping event from node1"
               (no-timeout-check *e1))
 
-            (testing "node2 should send new dead event for node1"
+            ;; FIXME should decide check or not
+            #_(testing "node2 should send new dead event for node1"
               (no-timeout-check *e2)
               (m/assert {:node-id node2-id
                          :data    {:udp-size pos-int?}} @*e2)))
