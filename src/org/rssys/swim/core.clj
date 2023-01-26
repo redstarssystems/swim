@@ -1342,10 +1342,17 @@
       :else
       (let [neighbour-vec (->> e (.-anti_entropy_data) (mapv vec->neighbour))]
         (doseq [ae-neighbour neighbour-vec]
-          (when-not (get-neighbour this (:id ae-neighbour))
-            (when-not (= (get-id this) (:id ae-neighbour)) ;; we don't want to put itself to a neighbours map
-              (d> :anti-entropy-event (get-id this) ae-neighbour)
-              (upsert-neighbour this ae-neighbour))))      ;; add a new neighbour
+          (when-not (= (get-id this) (:id ae-neighbour))    ;; we don't want to put itself to a neighbours map
+            (d> :anti-entropy-event (get-id this) ae-neighbour)
+            (let [nb (get-neighbour this (:id ae-neighbour))]
+              (if-not nb
+                (upsert-neighbour this ae-neighbour)
+                (when (or
+                        (> (:restart-counter ae-neighbour) (.-restart_counter nb))
+                        (and
+                          (> (:tx ae-neighbour) (:tx nb))
+                          (= (:restart-counter ae-neighbour) (.-restart_counter nb))))
+                  (upsert-neighbour this ae-neighbour))))))
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
 
 
