@@ -828,7 +828,7 @@
   This data is propagated from node to node and thus nodes can get knowledge about unknown nodes.
   To apply anti-entropy data receiver should compare incarnation pair [restart-counter tx] and apply only
   if node has older data.
-  Returns vector of known alive neighbors size of `num` if any or empty vector.
+  Returns vector of known neighbors size of `num` if any or empty vector.
   Any item in returned vector is vectorized NeighbourNode.
   If key :neighbour-id present then returns anti-entropy data for this neighbour only"
   [^NodeObject this & {:keys [num neighbour-id] :or {num (:max-anti-entropy-items @*config)}}]
@@ -840,7 +840,6 @@
       (some->>
         (get-neighbours this)
         vals
-        (filter (fn [nb] (= :alive (:status nb))))
         shuffle
         (take num)
         (map neighbour->vec)
