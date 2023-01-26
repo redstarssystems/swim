@@ -12,6 +12,13 @@
     (cprn "-----------------------------------------------------")))
 
 
+(defn node-id-prn>
+  [v]
+  (when (and (:org.rssys.swim.core/cmd v) (= #uuid"00000000-0000-0000-0000-000000000074" (:node-id v)))
+    (cprn v)
+    (cprn "-----------------------------------------------------")))
+
+
 (defn filtered-prn>
   [v]
   (when-not (#{:udp-packet-processor :upsert-neighbour :send-events-udp-size}
@@ -59,10 +66,12 @@
   (add-tap filtered-prn>)
 
   (add-tap file-prn>)
+  (add-tap node-id-prn>)
 
   (require '[taoensso.tufte :as tufte :refer (defnp p profiled profile)])
   (tufte/add-basic-println-handler! {})
 
+  (remove-tap node-id-prn>)
   (remove-tap ping-ack-round-trip>)
   (remove-tap t-prn>)
   (remove-tap filtered-prn>)
