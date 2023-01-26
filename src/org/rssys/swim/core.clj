@@ -1526,7 +1526,7 @@
 
       (not (suitable-restart-counter? this e))
       (do
-        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
+        (send-event this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-bad-restart-counter-error (get-id this) e))
 
       (not (= (get-id this) (.-neighbour_id e)))
@@ -1556,14 +1556,14 @@
       (and (neighbour-exist? this (.-id e))
         (not (suitable-restart-counter? this e)))
       (do
-        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
+        (send-event this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
         (d> :join-event-bad-restart-counter-error (get-id this) e))
 
       (and
         (not (neighbour-exist? this (.-id e)))
         (cluster-size-exceed? this))
       (do
-        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
+        (send-event this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
         (d> :join-event-cluster-size-exceeded-error (get-id this) e))
 
       (and (neighbour-exist? this (.-id e))
