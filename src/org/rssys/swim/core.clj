@@ -1522,16 +1522,12 @@
       (d> :ping-event-unknown-neighbour-error (get-id this) e)
 
       (not (alive-neighbour? sender))
-      (do
-        (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
-        (d> :ping-event-not-alive-neighbour-error (get-id this) e))
+      (d> :ping-event-not-alive-neighbour-error (get-id this) e)
 
       (not (suitable-restart-counter? this e))
       (do
         (send-event-ae this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-bad-restart-counter-error (get-id this) e))
-
-
 
       (not (= (get-id this) (.-neighbour_id e)))
       (d> :ping-event-neighbour-id-mismatch-error (get-id this) e)
