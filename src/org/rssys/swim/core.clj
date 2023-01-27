@@ -1955,7 +1955,8 @@
                         next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
                     (insert-indirect-ping this next-indirect-ping-event)
                     (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event) restart-counter-this))
-                    (send-event this next-indirect-ping-event neighbour-id)))
+                    (when (alive-neighbour? (get-neighbour this neighbour-id))
+                      (send-event this next-indirect-ping-event neighbour-id))))
                 (when (= (get-restart-counter this) restart-counter-this)
                   (when (neighbour-exist? this neighbour-id)
                     (set-nb-dead-status this neighbour-id)
