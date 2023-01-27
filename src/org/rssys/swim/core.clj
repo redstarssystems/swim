@@ -1456,7 +1456,7 @@
 
       :else
       (let [_                  (d> :indirect-ping-event (get-id this) e)
-            _                  (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
+            _                  (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
             indirect-ack-event (new-indirect-ack-event this e)]
         (d> :indirect-ack-event (get-id this) indirect-ack-event)
         (send-event this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
