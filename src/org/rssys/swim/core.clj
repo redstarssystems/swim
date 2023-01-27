@@ -1628,6 +1628,7 @@
             alive-id (.-neighbour_id e)
             alive-nb (assoc (new-neighbour-node alive-id (.-neighbour_host e) (.-neighbour_port e))
                        :tx (.-neighbour_tx e)
+                       :status :alive
                        :restart-counter (.-neighbour_restart_counter e))]
 
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
