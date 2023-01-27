@@ -2017,7 +2017,7 @@
             (when (= (get-restart-counter this) restart-counter-this)
               (let [nb         (get-neighbour this neighbour-id)
                     ping-event (new-ping-event this neighbour-id 1)
-                    nb-events  (conj events ping-event)]
+                    nb-events  (vec (concat [ping-event] events))]
                 (insert-ping this ping-event)
                 (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event) restart-counter-this))
                 (send-events this nb-events (.-host nb) (.-port nb))
