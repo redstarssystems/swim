@@ -4959,12 +4959,16 @@
 
   (sut/node-join node2)
 
+  (sut/node-stop node2)
+
 
   (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster))
   (sut/upsert-neighbour node3 (sut/new-neighbour-node node1-nb-data))
   (sut/node-start node3  sut/udp-packet-processor)
 
   (sut/node-join node3)
+
+  (sut/node-stop node3)
 
 
   (def node4 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000004" :host "127.0.0.1" :port 5379} cluster))
@@ -4973,6 +4977,8 @@
 
   (sut/node-join node4)
 
+  (sut/node-stop node4)
+
 
   (def node5 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000005" :host "127.0.0.1" :port 5380} cluster))
   (sut/upsert-neighbour node5 (sut/new-neighbour-node node1-nb-data))
@@ -4980,12 +4986,16 @@
 
   (sut/node-join node5)
 
+  (sut/node-stop node5)
+
 
   (def node6 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000006" :host "127.0.0.1" :port 5381} cluster))
   (sut/upsert-neighbour node6 (sut/new-neighbour-node node1-nb-data))
   (sut/node-start node6  sut/udp-packet-processor)
 
   (sut/node-join node6)
+
+  (sut/node-stop node6)
 
   (def node7 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000007" :host "127.0.0.1" :port 5382} cluster))
   (sut/upsert-neighbour node7 (sut/new-neighbour-node node1-nb-data))
