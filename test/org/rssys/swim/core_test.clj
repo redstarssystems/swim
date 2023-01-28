@@ -4763,9 +4763,7 @@
           (sut/node-stop node2))))))
 
 
-;; TODO measure increase of packet rate depending on number of nodes
 ;; TODO measure time of round trip ping-ack
-;; FIXME in 7+ nodes cluster we see periodically nodes have status left. Why nodes miss each other?
 
 (comment
 

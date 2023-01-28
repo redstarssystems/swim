@@ -1828,9 +1828,6 @@
                                                                             (swap! *stat update :bad-udp-counter inc))}))))))
 
 
-;; TODO: run periodic process for clean probe ack events - remember uuid key for non empty maps.
-;; On next iteration remembered uuids should be cleaned.
-
 (defn node-process-fn
   [^NodeObject this]
   (let [*idx (atom 0)
@@ -1903,7 +1900,6 @@
     (d> :rejoin-watcher-stop (get-id this) {})))
 
 
-;; TODO: stop process of periodic event send from buffer
 (defn node-leave
   "Leave the cluster"
   [^NodeObject this]
