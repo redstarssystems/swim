@@ -2013,35 +2013,6 @@
             (sut/node-stop node1)
             (sut/node-stop node2)))))
 
-    (testing "should do nothing if anti-entropy event has bad tx"
-      (let [node1    (sut/new-node-object node1-data cluster)
-            node2    (sut/new-node-object node2-data cluster)
-            node2-id (sut/get-id node2)
-            [*e1 e1-tap-fn] (set-event-catcher node2-id :anti-entropy-event-bad-tx-error)]
-
-        (try
-          (sut/node-start node1  sut/udp-packet-processor)
-          (sut/node-start node2  sut/udp-packet-processor)
-
-          (sut/upsert-neighbour node1 (sut/new-neighbour-node node3-nb-data))
-          (sut/upsert-neighbour node2 (sut/new-neighbour-node
-                                        (assoc node1-nb-data :tx 999)))
-
-          (testing "node2 should have one neighbour before anti-entropy event "
-            (m/assert 1 (count (sut/get-neighbours node2))))
-
-          (sut/send-event node1 (sut/new-anti-entropy-event node1) (sut/get-host node2) (sut/get-port node2))
-          (no-timeout-check *e1)
-
-          (testing "node2 should have one neighbour after anti-entropy event "
-            (m/assert 1 (count (sut/get-neighbours node2))))
-
-          (catch Exception e
-            (print-ex e))
-          (finally
-            (remove-tap e1-tap-fn)
-            (sut/node-stop node1)
-            (sut/node-stop node2)))))
 
     (testing "should do nothing if anti-entropy event from not alive node"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -2969,40 +2940,6 @@
             (sut/node-stop node1)
             (sut/node-stop node2)))))
 
-    (testing "destination node should reject event with bad tx"
-      (let [node1    (sut/new-node-object node1-data cluster)
-            node2    (sut/new-node-object node2-data cluster)
-            node1-id (sut/get-id node1)
-            node2-id (sut/get-id node2)
-            [*e1 e1-tap-fn] (set-event-catcher node1-id :ack-event-bad-tx-error)]
-
-        (try
-          (sut/node-start node1  sut/udp-packet-processor)
-          (sut/node-start node2  sut/udp-packet-processor)
-
-          (sut/set-alive-status node1)
-          (sut/set-alive-status node2)
-
-          (sut/upsert-neighbour node1 (sut/new-neighbour-node node2-nb-data))
-          (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
-
-          (let [ping-event (sut/new-ping-event node1 node2-id 1)
-                _          (sut/insert-ping node1 ping-event)
-                ack-event  (sut/new-ack-event node2 ping-event)]
-
-
-            (sut/set-nb-tx node1 node2-id 999)
-            (sut/send-event node2 ack-event node1-id)
-
-            (testing "node1 should reject ack event with outdated tx"
-              (no-timeout-check *e1)))
-
-          (catch Exception e
-            (print-ex e))
-          (finally
-            (remove-tap e1-tap-fn)
-            (sut/node-stop node1)
-            (sut/node-stop node2)))))
 
     (testing "destination node should reject event if ping request was never sent"
       (let [node1    (sut/new-node-object node1-data cluster)
@@ -3168,9 +3105,7 @@
             node2    (sut/new-node-object node2-data cluster)
             node1-id (sut/get-id node1)
             node2-id (sut/get-id node2)
-            [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-not-alive-neighbour-error)
-            [*e2 e2-tap-fn] (set-event-catcher node2-id :send-events-udp-size)
-            [*e3 e3-tap-fn] (set-event-catcher node1-id :udp-packet-processor)]
+            [*e1 e1-tap-fn] (set-event-catcher node2-id :ping-event-not-alive-neighbour-error)]
 
         (try
           (sut/node-start node1  sut/udp-packet-processor)

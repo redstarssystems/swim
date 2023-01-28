@@ -1333,9 +1333,6 @@
       (not (suitable-restart-counter? this e))
       (d> :anti-entropy-event-bad-restart-counter-error (get-id this) e)
 
-      (not (suitable-tx? this e))
-      (d> :anti-entropy-event-bad-tx-error (get-id this) e)
-
       (not (alive-neighbour? sender))
       (d> :anti-entropy-event-not-alive-neighbour-error (get-id this) e)
 
@@ -1485,9 +1482,6 @@
 
       (not (suitable-restart-counter? this e))
       (d> :ack-event-bad-restart-counter-error (get-id this) e)
-
-      (not (suitable-tx? this e))
-      (d> :ack-event-bad-tx-error (get-id this) e)
 
       (not (expected-ack-event? this e))
       (d> :ack-event-not-expected-error (get-id this) e)
