@@ -4921,6 +4921,8 @@
 
   (sut/node-join node7)
 
+  (sut/node-stop node7)
+
 
   (def node8 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000008" :host "127.0.0.1" :port 5383} cluster))
   (sut/upsert-neighbour node8 (sut/new-neighbour-node node1-nb-data))
@@ -4928,18 +4930,15 @@
 
   (sut/node-join node8)
 
-  (def node9 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000009" :host "127.0.0.1" :port 5384} cluster))
-  (sut/upsert-neighbour node9 (sut/new-neighbour-node node1-nb-data))
-  (sut/node-start node9  sut/udp-packet-processor)
-
-  (sut/node-join node9)
-
+  (sut/node-stop node8)
 
   (def node9 (sut/new-node-object {:id   #uuid "00000000-0000-0000-0000-000000000009" :host "127.0.0.1" :port 5384} cluster))
   (sut/upsert-neighbour node9 (sut/new-neighbour-node node1-nb-data))
   (sut/node-start node9  sut/udp-packet-processor)
 
   (sut/node-join node9)
+
+  (sut/node-stop node9)
 
 
   (mapv #(sut/get-status %) [node1 node2 node3 node4 node5 node6])
