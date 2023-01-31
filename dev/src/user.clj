@@ -21,7 +21,10 @@
 
 (defn filtered-prn>
   [v]
-  (when-not (#{:udp-packet-processor :upsert-neighbour :send-events-udp-size}
+  (when-not (#{:udp-packet-processor :upsert-neighbour :send-events-udp-size
+               :new-cluster-size-event :ack-event :ping-event :insert-ping :ping-heartbeat :delete-ping
+               :new-node-object :start :set-cluster-size :set-restart-counter :set-status :anti-entropy-event
+               :ack-timeout}
               (:org.rssys.swim.core/cmd v))
     (cprn v)
     (cprn "-----------------------------------------------------")))

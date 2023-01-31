@@ -1304,51 +1304,52 @@
                              :updated-at      (System/currentTimeMillis)})]
 
     (if (expected-probe-event? this e)
-      (do (upsert-probe-ack this e)
-          (when (not (alive-node? this))
-            (if (not (cluster-size-exceed? this))
-              (upsert-neighbour this nb)
-              (d> :probe-ack-event-cluster-size-exceeded-error (get-id this) {:nodes-in-cluster (nodes-in-cluster this)
-                                                                              :cluster-size     (get-cluster-size this)})))
-          (d> :probe-ack-event (get-id this) nb))
+      (do
+        (upsert-probe-ack this e)
+        (when (not (alive-node? this))
+          (upsert-neighbour this nb))
+        (d> :probe-ack-event (get-id this) nb))
       (d> :probe-ack-event-probe-never-send-error (get-id this) e))))
 
 
 
 (defmethod event-processing AntiEntropy
   [^NodeObject this ^AntiEntropy e]
-  (let [sender-id (:id e)
+  (let [node-id   (get-id this)
+        sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
-    (metric/counter-add metric/registry :anti-entropy-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :anti-entropy-event-count {:node-id node-id} 1)
 
     (cond
 
-      (= sender-id (get-id this))
+      (= sender-id node-id)
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :anti-entropy-event-unknown-neighbour-error (get-id this) e)
+      (d> :anti-entropy-event-unknown-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :anti-entropy-event-bad-restart-counter-error (get-id this) e)
+      (d> :anti-entropy-event-bad-restart-counter-error node-id e)
 
       (not (alive-neighbour? sender))
-      (d> :anti-entropy-event-not-alive-neighbour-error (get-id this) e)
+      (d> :anti-entropy-event-not-alive-neighbour-error node-id e)
 
       :else
       (let [neighbour-vec (->> e (.-anti_entropy_data) (mapv vec->neighbour))]
         (doseq [ae-neighbour neighbour-vec]
-          (when-not (= (get-id this) (:id ae-neighbour))    ;; we don't want to put itself to a neighbours map
-            (d> :anti-entropy-event (get-id this) ae-neighbour)
+          (when-not (= node-id (:id ae-neighbour))    ;; we don't want to put itself to a neighbours map
             (let [nb (get-neighbour this (:id ae-neighbour))]
               (if-not nb
-                (upsert-neighbour this ae-neighbour)
+                (do
+                  (d> :anti-entropy-event node-id ae-neighbour)
+                  (upsert-neighbour this ae-neighbour))
                 (when (or
                         (> (:restart-counter ae-neighbour) (.-restart_counter nb))
                         (and
                           (> (:tx ae-neighbour) (:tx nb))
                           (= (:restart-counter ae-neighbour) (.-restart_counter nb))))
+                  (d> :anti-entropy-event node-id ae-neighbour)
                   (upsert-neighbour this ae-neighbour))))))
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
 
@@ -1382,194 +1383,176 @@
 
 (defmethod event-processing IndirectAckEvent
   [^NodeObject this ^IndirectAckEvent e]
-  (let [sender-id (:id e)
+  (let [node-id   (get-id this)
+        sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
-    (metric/counter-add metric/registry :indirect-ack-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :indirect-ack-event-count {:node-id node-id} 1)
 
     (cond
 
       (not (alive-node? this))
-      (d> :indirect-ack-event-not-alive-node-error (get-id this) e)
+      (d> :indirect-ack-event-not-alive-node-error node-id e)
 
       (intermediate-node? this e)
       (do
-        (d> :intermediate-node-indirect-ack-event (get-id this) e)
+        (d> :intermediate-node-indirect-ack-event node-id e)
         (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
 
-      (= sender-id (get-id this))
+      (= sender-id node-id)
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :indirect-ack-event-unknown-neighbour-error (get-id this) e)
+      (d> :indirect-ack-event-unknown-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :indirect-ack-event-bad-restart-counter-error (get-id this) e)
-
-      (not (suitable-tx? this e))
-      (d> :indirect-ack-event-bad-tx-error (get-id this) e)
+      (d> :indirect-ack-event-bad-restart-counter-error node-id e)
 
       (not (expected-indirect-ack-event? this e))
-      (d> :indirect-ack-event-not-expected-error (get-id this) e)
+      (d> :indirect-ack-event-not-expected-error node-id e)
 
       :else
       (let [diff (- (System/currentTimeMillis) (.-ts e))]
         (upsert-neighbour this (assoc sender :tx (.-tx e) :access :indirect :restart-counter (.-restart_counter e)
-                                 :status :alive))
-        (d> :indirect-ack-event (get-id this) e)
+                                             :status :alive))
+        (d> :indirect-ack-event node-id e)
         (delete-indirect-ping this [sender-id (.-ts e)])
-        #_(metric/histogram metric/registry :indirect-ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
+        (metric/histogram metric/registry :indirect-ping-ack-round-trip-ms {:label (str node-id)} diff)))))
 
 
 (defmethod event-processing IndirectPingEvent
   [^NodeObject this ^IndirectPingEvent e]
-  (let [sender-id (:id e)
+  (let [node-id   (get-id this)
+        sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
-    (metric/counter-add metric/registry :indirect-ping-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :indirect-ping-event-count {:node-id node-id} 1)
 
     (cond
 
       (not (alive-node? this))
-      (d> :indirect-ping-event-not-alive-node-error (get-id this) e)
+      (d> :indirect-ping-event-not-alive-node-error node-id e)
 
       (intermediate-node? this e)
       (do
-        (d> :intermediate-node-indirect-ping-event (get-id this) e)
+        (d> :intermediate-node-indirect-ping-event node-id e)
         (send-event this e (.-neighbour_host e) (.-neighbour_port e)))
 
-      (= sender-id (get-id this))
+      (= sender-id node-id)
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :indirect-ping-event-unknown-neighbour-error (get-id this) e)
+      (d> :indirect-ping-event-unknown-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :indirect-ping-event-bad-restart-counter-error (get-id this) e)
+      (d> :indirect-ping-event-bad-restart-counter-error node-id e)
 
 
-      (not (= (get-id this) (.-neighbour_id e)))
-      (d> :indirect-ping-event-neighbour-id-mismatch-error (get-id this) e)
+      (not (= node-id (.-neighbour_id e)))
+      (d> :indirect-ping-event-neighbour-id-mismatch-error node-id e)
 
       :else
-      (let [_                  (d> :indirect-ping-event (get-id this) e)
+      (let [_                  (d> :indirect-ping-event node-id e)
             _                  (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive))
             indirect-ack-event (new-indirect-ack-event this e)]
-        (d> :indirect-ack-event (get-id this) indirect-ack-event)
+        (d> :indirect-ack-event node-id indirect-ack-event)
         (send-event this indirect-ack-event (.-intermediate_host e) (.-intermediate_port e))))))
+
 
 
 (defmethod event-processing AckEvent
   [^NodeObject this ^AckEvent e]
-  (let [sender-id (:id e)
+  (let [node-id   (get-id this)
+        sender-id (:id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
-    (metric/counter-add metric/registry :ack-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :ack-event-count {:node-id node-id} 1)
 
     (cond
 
-      (not (alive-node? this))
-      (d> :ack-event-not-alive-node-error (get-id this) e)
-
-      (= sender-id (get-id this))
-      :ignore-own-event
-
-      (= :unknown-neighbour sender)
-      (d> :ack-event-unknown-neighbour-error (get-id this) e)
-
-      (not (alive-neighbour? sender))
-      (d> :ack-event-not-alive-neighbour-error (get-id this) e)
-
       (not (suitable-restart-counter? this e))
-      (d> :ack-event-bad-restart-counter-error (get-id this) e)
+      (d> :ack-event-bad-restart-counter-error node-id e)
 
       (not (expected-ack-event? this e))
-      (d> :ack-event-not-expected-error (get-id this) e)
+      (d> :ack-event-not-expected-error node-id e)
 
       :else
-      (let [diff (- (System/currentTimeMillis) (.-ts e))
-            current-delay (or (metric/get-metric metric/registry :ping-ack-roundtrip-max-ms {:label (str (get-id this))}) 0)]
-        (d> :ack-event (get-id this) e)
+      (let [diff          (- (System/currentTimeMillis) (.-ts e))
+            current-delay (or (metric/get-metric metric/registry :ping-ack-round-trip-max-ms {:label (str node-id)}) 0)]
+        (d> :ack-event node-id e)
         (delete-ping this [sender-id (.-ts e)])
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive :access :direct))
         (when (> diff current-delay)
-          (metric/gauge metric/registry :ping-ack-roundtrip-max-ms {:label (str (get-id this))} diff))
-        #_(metric/histogram metric/registry :ping-ack-round-trip-ms {:label (str (get-id this))} diff)))))
+          (metric/gauge metric/registry :ping-ack-round-trip-max-ms {:label (str node-id)} diff))
+        (metric/histogram metric/registry :ping-ack-round-trip-ms {:label (str node-id)} diff)))))
 
 
 (defmethod event-processing PingEvent
   [^NodeObject this ^PingEvent e]
-  (let [sender-id (:id e)
-        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
+  (let [node-id   (get-id this)
+        sender-id (:id e)
+        sender    (get-neighbour this sender-id)]
 
-    (metric/counter-add metric/registry :ping-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :ping-event-count {:node-id node-id} 1)
 
     (cond
 
       (not (alive-node? this))
-      (d> :ping-event-not-alive-node-error (get-id this) e)
+      (d> :ping-event-not-alive-node-error node-id e)
 
-      (= sender-id (get-id this))
-      :ignore-own-event
-
-      (= :unknown-neighbour sender)
-      (d> :ping-event-unknown-neighbour-error (get-id this) e)
-
-      (not (alive-neighbour? sender))
-      (d> :ping-event-not-alive-neighbour-error (get-id this) e)
-
-      (not (suitable-restart-counter? this e))
+      (when sender
+        (or
+          (not (alive-neighbour? sender))
+          (not (suitable-restart-counter? this e))))
       (do
+        #p [node-id sender-id :ping-event-error]
         (send-event this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
-        (d> :ping-event-bad-restart-counter-error (get-id this) e))
+        (d> :ping-event-bad-restart-counter-error node-id e))
 
-      (not (= (get-id this) (.-neighbour_id e)))
-      (d> :ping-event-neighbour-id-mismatch-error (get-id this) e)
+      (not (= node-id (.-neighbour_id e)))
+      (d> :ping-event-neighbour-id-mismatch-error node-id e)
 
       :else
       (do
-        (d> :ping-event (get-id this) e)
+        (d> :ping-event node-id e)
         (upsert-neighbour this (assoc sender :host (.-host e) :port (.-port e) :tx (.-tx e) :restart-counter (.-restart_counter e)))
         (let [ack-event (new-ack-event this e)]
           (send-event-ae this ack-event (.-host sender) (.-port sender))
-          (d> :ack-event (get-id this) ack-event))))))
+          (d> :ack-event node-id ack-event))))))
 
 
 (defmethod event-processing JoinEvent
   [^NodeObject this ^JoinEvent e]
-  (let [sender-id (:id e)
+  (let [node-id   (get-id this)
+        sender-id (.-id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
-    (metric/counter-add metric/registry :join-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :join-event-count {:node-id node-id} 1)
 
     (cond
 
       (not (alive-node? this))
-      (d> :join-event-not-alive-node-error (get-id this) e)
+      (d> :join-event-not-alive-node-error node-id e)
 
-      (and (neighbour-exist? this (.-id e))
-        (not (suitable-restart-counter? this e)))
+      (and (neighbour-exist? this sender-id)
+        (<= (.-restart_counter e) (.-restart_counter sender)))
       (do
         (send-event this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
-        (d> :join-event-bad-restart-counter-error (get-id this) e))
+        (d> :join-event-bad-restart-counter-error node-id e))
 
       (and
         (not (neighbour-exist? this (.-id e)))
         (cluster-size-exceed? this))
       (do
         (send-event this (new-dead-event this (.-id e) (.-restart_counter e) (.-tx e)) (.-host e) (.-port e))
-        (d> :join-event-cluster-size-exceeded-error (get-id this) e))
+        (d> :join-event-cluster-size-exceeded-error node-id e))
 
-      (and (neighbour-exist? this (.-id e))
-        (not (suitable-tx? this e))
-        (= (.-restart_counter e) (:restart-counter (get-neighbour this (.-id e)))))
-      (d> :join-event-bad-tx-error (get-id this) e)
 
       :else
-      (let [_                  (d> :join-event (get-id this) e)
+      (let [_                  (d> :join-event node-id e)
             nb                 (new-neighbour-node (.-id e) (.-host e) (.-port e))
             _                  (upsert-neighbour this (assoc nb :tx (.-tx e) :restart-counter (.-restart_counter e)
-                                                        :status :alive :access :direct))
+                                                                :status :alive :access :direct))
             alive-event        (new-alive-event this e)
             cluster-size-event (new-cluster-size-event this (get-cluster-size this))
             ae-event           (new-anti-entropy-event this)]
@@ -1586,10 +1569,12 @@
 
 (defmethod event-processing AliveEvent
   [^NodeObject this ^AliveEvent e]
-  (let [sender-id (.-id e)
-        sender    (or (get-neighbour this (:id e)) :unknown-neighbour)]
+  (let [node-id   (get-id this)
+        sender-id (.-id e)
+        alive-id (.-neighbour_id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
 
-    (metric/counter-add metric/registry :alive-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :alive-event-count {:node-id node-id} 1)
 
     (cond
 
@@ -1597,29 +1582,38 @@
       (do
         (set-status this :alive)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
-        (d> :alive-event-join-confirmed (get-id this) e))
+        (d> :alive-event-join-confirmed node-id e))
 
       (not (alive-node? this))
-      (d> :alive-event-not-alive-node-error (get-id this) e)
+      (d> :alive-event-not-alive-node-error node-id e)
 
-      (= sender-id (get-id this))
+      (or
+        (= sender-id node-id)
+        (= alive-id node-id))
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :alive-event-unknown-neighbour-error (get-id this) e)
+      (d> :alive-event-unknown-neighbour-error node-id e)
 
       (not (alive-neighbour? sender))
-      (d> :alive-event-not-alive-neighbour-error (get-id this) e)
+      (d> :alive-event-not-alive-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :alive-event-bad-restart-counter-error (get-id this) e)
+      (d> :alive-event-bad-restart-counter-error node-id e)
 
-      (not (suitable-tx? this e))
-      (d> :alive-event-bad-tx-error (get-id this) e)
+      (when-let [nb (get-neighbour this alive-id)]
+        (> (.-restart_counter nb) (.-neighbour_restart_counter e)))
+      (do
+        (d> :alive-event-bad-restart-counter-error node-id e))
+
+
+      (when-let [nb (get-neighbour this alive-id)]
+        (>= (.-tx nb) (.-neighbour_tx e)))
+      (do
+        (d> :alive-event-bad-tx-error node-id e))
 
       :else
-      (let [_        (d> :alive-event (get-id this) e)
-            alive-id (.-neighbour_id e)
+      (let [_        (d> :alive-event node-id e)
             alive-nb (assoc (new-neighbour-node alive-id (.-neighbour_host e) (.-neighbour_port e))
                        :tx (.-neighbour_tx e)
                        :status :alive
@@ -1627,47 +1621,46 @@
 
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
 
-        (when (or
-                (not (neighbour-exist? this alive-id))
-                (suitable-incarnation? this alive-nb))
-          (upsert-neighbour this alive-nb)
-          (put-event this e))))))
+
+        (upsert-neighbour this alive-nb)
+        (put-event this e)))))
 
 
 
 (defmethod event-processing NewClusterSizeEvent
   [^NodeObject this ^NewClusterSizeEvent e]
-  (let [sender-id    (:id e)
+  (let [node-id   (get-id this)
+        sender-id    (.-id e)
         sender       (or (get-neighbour this sender-id) :unknown-neighbour)
         new-size     (.-new_cluster_size e)
         alive-number (nodes-in-cluster this)]
-    (metric/counter-add metric/registry :new-cluster-size-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :new-cluster-size-event-count {:node-id node-id} 1)
     (cond
 
       (not (alive-node? this))
-      (d> :new-cluster-size-event-not-alive-node-error (get-id this) e)
+      (d> :new-cluster-size-event-not-alive-node-error node-id e)
 
-      (= sender-id (get-id this))
+      (= sender-id node-id)
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :new-cluster-size-event-unknown-neighbour-error (get-id this) e)
+      (d> :new-cluster-size-event-unknown-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :new-cluster-size-event-bad-restart-counter-error (get-id this) e)
+      (d> :new-cluster-size-event-bad-restart-counter-error node-id e)
 
       (not (suitable-tx? this e))
-      (d> :new-cluster-size-event-bad-tx-error (get-id this) e)
+      (d> :new-cluster-size-event-bad-tx-error node-id e)
 
       (not (alive-neighbour? sender))
-      (d> :new-cluster-size-event-not-alive-neighbour-error (get-id this) e)
+      (d> :new-cluster-size-event-not-alive-neighbour-error node-id e)
 
       (> alive-number new-size)
-      (d> :new-cluster-size-event-less-than-alive-nodes-error (get-id this) e)
+      (d> :new-cluster-size-event-less-than-alive-nodes-error node-id e)
 
       :else
       (do
-        (d> :new-cluster-size-event (get-id this) e)
+        (d> :new-cluster-size-event node-id e)
         (set-cluster-size this (.-new_cluster_size e))
         (put-event this e)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
@@ -1676,51 +1669,57 @@
 
 (defmethod event-processing DeadEvent
   [^NodeObject this ^DeadEvent e]
-  (let [sender-id (:id e)
-        sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
-    (metric/counter-add metric/registry :dead-event-count {:node-id (get-id this)} 1)
+  (let [node-id   (get-id this)
+        sender-id (.-id e)
+        sender    (or (get-neighbour this sender-id) :unknown-neighbour)
+        dead-id (.-neighbour_id e)]
+    (metric/counter-add metric/registry :dead-event-count {:node-id node-id} 1)
     (cond
 
-      (= (get-id this) (.-neighbour_id e))
+      (= node-id dead-id)
       (if (and
             (alive-neighbour? sender)
             (suitable-restart-counter? this e)
             (suitable-tx? this e)
             (>= (.-neighbour_restart_counter e) (get-restart-counter this)))
         (do
-          (d> :dead-event-about-this-node-error (get-id this) e)
+          (d> :dead-event-about-this-node-error node-id e)
           (set-left-status this))
-        (d> :dead-event-about-this-node-outdated-error (get-id this) e))
+        (d> :dead-event-about-this-node-outdated-error node-id e))
 
       (not (alive-node? this))
-      (d> :dead-event-not-alive-node-error (get-id this) e)
+      (d> :dead-event-not-alive-node-error node-id e)
 
-      (= sender-id (get-id this))
+      (= sender-id node-id)
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :dead-event-unknown-neighbour-error (get-id this) e)
+      (d> :dead-event-unknown-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :dead-event-bad-restart-counter-error (get-id this) e)
-
-      (not (suitable-tx? this e))
-      (d> :dead-event-bad-tx-error (get-id this) e)
+      (d> :dead-event-bad-restart-counter-error node-id e)
 
       (not (alive-neighbour? sender))
-      (d> :dead-event-not-alive-neighbour-error (get-id this) e)
+      (d> :dead-event-not-alive-neighbour-error node-id e)
+
+      (when-let [nb (get-neighbour this dead-id)]
+        (> (.-restart_counter nb) (.-neighbour_restart_counter e)))
+      (do
+        (d> :dead-event-bad-restart-counter-error node-id e))
+
+      (when-let [nb (get-neighbour this dead-id)]
+        (>= (.-tx nb) (.-neighbour_tx e)))
+      (do
+        (d> :dead-event-bad-tx-error node-id e))
 
       :else
-      (let [dead-id (.-neighbour_id e)
-            dead-nb (get-neighbour this dead-id)]
+      (let []
 
-        (d> :dead-event (get-id this) e)
+        (d> :dead-event node-id e)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))
 
-        (when (neighbour-exist? this dead-id)
-          (when (suitable-restart-counter? this (assoc dead-nb :restart-counter (.-neighbour_restart_counter e)))
-            (set-nb-dead-status this dead-id)
-            (put-event this e)))))))
+        (set-nb-dead-status this dead-id)
+        (put-event this e)))))
 
 
 
@@ -1733,65 +1732,64 @@
 
 (defmethod event-processing LeftEvent
   [^NodeObject this ^LeftEvent e]
-  (let [sender-id (:id e)
+  (let [node-id   (get-id this)
+        sender-id (.-id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
-    (metric/counter-add metric/registry :left-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :left-event-count {:node-id node-id} 1)
     (cond
 
       (not (alive-node? this))
-      (d> :left-event-not-alive-node-error (get-id this) e)
+      (d> :left-event-not-alive-node-error node-id e)
 
-      (= sender-id (get-id this))
+      (= sender-id node-id)
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :left-event-unknown-neighbour-error (get-id this) e)
+      (d> :left-event-unknown-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :left-event-bad-restart-counter-error (get-id this) e)
+      (d> :left-event-bad-restart-counter-error node-id e)
 
       (not (suitable-tx? this e))
-      (d> :left-event-bad-tx-error (get-id this) e)
-
-      (not (alive-neighbour? sender))
-      (d> :left-event-not-alive-neighbour-error (get-id this) e)
+      (d> :left-event-bad-tx-error node-id e)
 
       :else
-      (do
-        (d> :left-event (get-id this) e)
-        (set-nb-left-status this (.-id e))
+      (let []
+        (d> :left-event node-id e)
+        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :left))
         (put-event this e)))))
 
 
 
 (defmethod event-processing PayloadEvent
   [^NodeObject this ^PayloadEvent e]
-  (let [sender-id (:id e)
+  (let [node-id   (get-id this)
+        sender-id (.-id e)
         sender    (or (get-neighbour this sender-id) :unknown-neighbour)]
-    (metric/counter-add metric/registry :payload-event-count {:node-id (get-id this)} 1)
+    (metric/counter-add metric/registry :payload-event-count {:node-id node-id} 1)
     (cond
 
       (not (alive-node? this))
-      (d> :payload-event-not-alive-node-error (get-id this) e)
+      (d> :payload-event-not-alive-node-error node-id e)
 
-      (= sender-id (get-id this))
+      (= sender-id node-id)
       :ignore-own-event
 
       (= :unknown-neighbour sender)
-      (d> :payload-event-unknown-neighbour-error (get-id this) e)
+      (d> :payload-event-unknown-neighbour-error node-id e)
 
       (not (suitable-restart-counter? this e))
-      (d> :payload-event-bad-restart-counter-error (get-id this) e)
+      (d> :payload-event-bad-restart-counter-error node-id e)
 
       (not (suitable-tx? this e))
-      (d> :payload-event-bad-tx-error (get-id this) e)
+      (d> :payload-event-bad-tx-error node-id e)
 
       (not (alive-neighbour? sender))
-      (d> :payload-event-not-alive-neighbour-error (get-id this) e)
+      (d> :payload-event-not-alive-neighbour-error node-id e)
 
       :else
       (do
-        (d> :payload-event (get-id this) e)
+        (d> :payload-event node-id e)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :payload (.-payload e)))
         (put-event this e)))))
 
@@ -1931,29 +1929,30 @@
 
   (when (= (get-restart-counter this) restart-counter-this)
     (when-let [indirect-ping-event (get-indirect-ping-event this [neighbour-id ts])]
-      (let [attempt-number (.-attempt_number indirect-ping-event)
-            nb (get-neighbour this neighbour-id)]
-        (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
-        (delete-indirect-ping this [neighbour-id ts])
-        (if (< attempt-number max-ping-without-ack-before-dead)
-          (when (alive-neighbour? nb)
-            (let [alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
-                  alive-nodes-number (count alive-neighbours)]
-              (if (pos-int? alive-nodes-number)
-                (when (= (get-restart-counter this) restart-counter-this)
-                  (let [random-alive-nb          (rand-nth alive-neighbours)
-                        next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
-                    (insert-indirect-ping this next-indirect-ping-event)
-                    (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event) restart-counter-this))
-                    (safe (send-event this next-indirect-ping-event neighbour-id))))
-                (when (= (get-restart-counter this) restart-counter-this)
-                  (when (neighbour-exist? this neighbour-id)
-                    (set-nb-dead-status this neighbour-id)
-                    (safe (put-event this (new-dead-event this neighbour-id))))))))
-          (when (alive-neighbour? nb)
-            (when (= (get-restart-counter this) restart-counter-this)
-              (set-nb-dead-status this neighbour-id)
-              (safe (put-event this (new-dead-event this neighbour-id))))))))))
+      (when (alive-neighbour? (get-neighbour this neighbour-id))
+        (let [attempt-number (.-attempt_number indirect-ping-event)
+             nb             (get-neighbour this neighbour-id)]
+         (d> :indirect-ack-timeout (get-id this) {:neighbour-id neighbour-id :attempt-number attempt-number})
+         (delete-indirect-ping this [neighbour-id ts])
+         (if (< attempt-number max-ping-without-ack-before-dead)
+           (when (alive-neighbour? nb)
+             (let [alive-neighbours   (remove (fn [nb] (= (:id nb) neighbour-id)) (get-alive-neighbours this))
+                   alive-nodes-number (count alive-neighbours)]
+               (if (pos-int? alive-nodes-number)
+                 (when (= (get-restart-counter this) restart-counter-this)
+                   (let [random-alive-nb          (rand-nth alive-neighbours)
+                         next-indirect-ping-event (new-indirect-ping-event this (:id random-alive-nb) neighbour-id (inc attempt-number))]
+                     (insert-indirect-ping this next-indirect-ping-event)
+                     (vthread (indirect-ack-timeout-watcher this neighbour-id (.-ts next-indirect-ping-event) restart-counter-this))
+                     (safe (send-event this next-indirect-ping-event neighbour-id))))
+                 (when (= (get-restart-counter this) restart-counter-this)
+                   (when (neighbour-exist? this neighbour-id)
+                     (set-nb-dead-status this neighbour-id)
+                     (safe (put-event this (new-dead-event this neighbour-id))))))))
+           (when (alive-neighbour? nb)
+             (when (= (get-restart-counter this) restart-counter-this)
+               (set-nb-dead-status this neighbour-id)
+               (safe (put-event this (new-dead-event this neighbour-id)))))))))))
 
 
 
@@ -2007,7 +2006,7 @@
             (when (= (get-restart-counter this) restart-counter-this)
               (let [nb         (get-neighbour this neighbour-id)
                     ping-event (new-ping-event this neighbour-id 1)
-                    nb-events  (vec (concat [ping-event] events))]
+                    nb-events  (vec (concat events [ping-event] ))]
                 (insert-ping this ping-event)
                 (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event) restart-counter-this))
                 (send-events this nb-events (.-host nb) (.-port nb))
@@ -2185,3 +2184,5 @@
   [^NodeObject this new-payload]
   (set-payload this new-payload)
   (put-event this (new-payload-event this)))
+
+;; TODO check d> impact on performance

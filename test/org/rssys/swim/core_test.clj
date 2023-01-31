@@ -4770,6 +4770,7 @@
   (def *node-number (atom 0))
   (def *nodes (atom []))
 
+  (sut/node-payload-update node1 {:c 3})
 
   (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster))
   (sut/set-cluster-size node1 1)
@@ -4841,6 +4842,10 @@
   (def node-id #uuid"00000000-0000-0000-0000-000000000064")
   (def node-id #uuid"00000000-0000-0000-0000-000000000065")
   (def node-id #uuid"00000000-0000-0000-0000-000000000066")
+  (def node-id #uuid"00000000-0000-0000-0000-000000000067")
+  (def node-id #uuid"00000000-0000-0000-0000-000000000068")
+  (def node-id #uuid"00000000-0000-0000-0000-000000000069")
+
 
   (rejoin-node *nodes node-id)
 
@@ -4871,7 +4876,7 @@
 
 
 
-  (def node2 (sut/new-node-object (dissoc node2-data :restart-counter) cluster))
+  (def node2 (sut/new-node-object (assoc (dissoc node2-data :restart-counter) :port 5477) cluster))
   (sut/upsert-neighbour node2 (sut/new-neighbour-node node1-nb-data))
   (sut/node-start node2  sut/udp-packet-processor)
 
