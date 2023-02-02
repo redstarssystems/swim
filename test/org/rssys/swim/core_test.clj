@@ -4767,10 +4767,17 @@
 
 (comment
 
+  (require '[clj-async-profiler.core :as prof])
+
+  (prof/start)
+  (prof/stop)
+
+  (def prof-server (prof/serve-ui 8080))
+  (.stop prof-server 0)
+  (clojure.reflect/reflect prof-server)
+
   (def *node-number (atom 0))
   (def *nodes (atom []))
-
-  (sut/node-payload-update node1 {:c 3})
 
   (def node1 (sut/new-node-object (dissoc node1-data :restart-counter) cluster))
   (sut/set-cluster-size node1 1)
@@ -4780,7 +4787,7 @@
 
   (sut/node-stop node1)
 
-
+  (sut/node-payload-update node1 {:c 3})
 
   (defn add-node!
     [*node-number *nodes]
@@ -4800,6 +4807,8 @@
   (org.rssys.swim.metric/serialize org.rssys.swim.metric/registry)
   (org.rssys.swim.metric/get-metric org.rssys.swim.metric/registry :packet-per-sec)
   (org.rssys.swim.metric/get-metric org.rssys.swim.metric/registry :rejoin-number)
+  (org.rssys.swim.metric/get-metric org.rssys.swim.metric/registry :process-udp-packet-max-ms)
+  (org.rssys.swim.metric/get-metric org.rssys.swim.metric/registry :ping-ack-round-trip-max-ms)
   (sut/node-reset-metrics! node1)
   (deref user/*max-ping-ack-round-trip)
 
