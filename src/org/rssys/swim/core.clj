@@ -1505,7 +1505,6 @@
           (not (alive-neighbour? sender))
           (not (suitable-restart-counter? this e))))
       (do
-        [node-id sender-id :ping-event-error]
         (send-event this (new-dead-event this (.-id e) (.-restart_counter sender) (.-tx e)) (.-host e) (.-port e))
         (d> :ping-event-bad-restart-counter-error node-id e))
 
