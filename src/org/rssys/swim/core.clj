@@ -89,7 +89,10 @@
   "Calculate how many nodes should we notify.
   n - number of nodes in the cluster."
   [^long n]
-  (int (Math/floor (/ (Math/log n) (Math/log 2)))))
+  (cond
+    (<= n 1) 0
+    (= n 2) 1
+    :else (int (inc (Math/floor (/ (Math/log n) (Math/log 2)))))))
 
 
 (defn serialize
