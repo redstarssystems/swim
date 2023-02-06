@@ -4767,15 +4767,6 @@
 
 (comment
 
-  (require '[clj-async-profiler.core :as prof])
-
-  (prof/start)
-  (prof/stop)
-
-  (def prof-server (prof/serve-ui 8080))
-  (.stop prof-server 0)
-  (clojure.reflect/reflect prof-server)
-
   (def *node-number (atom 0))
   (def *nodes (atom []))
 
@@ -4803,6 +4794,8 @@
       {:id (sut/get-id node) :status (sut/get-status node) :n n}))
 
   (add-node! *node-number *nodes)
+
+  (mapv #(sut/node-stop %) @*nodes)
 
   (org.rssys.swim.metric/serialize org.rssys.swim.metric/registry)
   (org.rssys.swim.metric/get-metric org.rssys.swim.metric/registry :packet-per-sec)
@@ -4866,7 +4859,7 @@
 
   (sut/get-neighbours-with-status node1 #{:dead :left :suspect})
 
-  (def node-id #uuid"00000000-0000-0000-0000-000000000077")
+  (def node-id #uuid"00000000-0000-0000-0000-000000000064")
 
   (sut/get-neighbours-with-status
     (get-node @*nodes node-id)
@@ -4892,6 +4885,8 @@
   (sut/node-join node2)
 
   (sut/node-stop node2)
+  (sut/node-payload-update node2 {:c 3})
+  (sut/put-event node2 (sut/new-cluster-size-event node2 105))
 
 
   (def node3 (sut/new-node-object (dissoc node3-data :restart-counter) cluster))
