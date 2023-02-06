@@ -1990,29 +1990,38 @@
                     (send-event this indirect-ping-event (:id random-alive-nb))))))))))))
 
 
+(defn- node-not-restarted? [this start-restart-counter]
+  (and
+    (alive-node? this)
+    (= (get-restart-counter this) start-restart-counter)))
 
-(defn ping-heartbeat
+(defn alive-nodes-number [this]
+  (count (concat (get-alive-neighbours this) (get-suspect-neighbours this))))
+
+(defn heartbeat-logic
+  [^NodeObject this start-restart-counter]
+  (let [n (calc-n (alive-nodes-number this))]
+    (when (pos-int? n)
+      (let [neighbour-ids (take-ids-for-ping this n)
+           events         (take-events this)]
+       (doseq [neighbour-id neighbour-ids]
+         (when (node-not-restarted? this start-restart-counter)
+           (let [nb         (get-neighbour this neighbour-id)
+                 ping-event (new-ping-event this neighbour-id 1)
+                 nb-events  (vec (concat events [ping-event]))]
+             (insert-ping this ping-event)
+             (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event) start-restart-counter))
+             (send-events this nb-events (.-host nb) (.-port nb)))))))))
+
+
+(defn ping-heartbeat-process
   "Should run in a separate virtual thread."
-  [^NodeObject this restart-counter-this & {:keys [ping-heartbeat-ms] :or {ping-heartbeat-ms (-> @*config :ping-heartbeat-ms)}}]
-  (while (and (alive-node? this) (= (get-restart-counter this) restart-counter-this))
+  [^NodeObject this start-restart-counter & {:keys [ping-heartbeat-ms] :or {ping-heartbeat-ms (-> @*config :ping-heartbeat-ms)}}]
+  (while (node-not-restarted? this start-restart-counter)
     (try
       (Thread/sleep ^Long ping-heartbeat-ms)
-      (when (= (get-restart-counter this) restart-counter-this)
-        (let [events        (take-events this)
-              n             (calc-n (nodes-in-cluster this))
-              neighbour-ids (take-ids-for-ping this n)]
-          (doseq [neighbour-id neighbour-ids]
-            (when (= (get-restart-counter this) restart-counter-this)
-              (let [nb         (get-neighbour this neighbour-id)
-                    ping-event (new-ping-event this neighbour-id 1)
-                    nb-events  (vec (concat events [ping-event] ))]
-                (insert-ping this ping-event)
-                (vthread (ack-timeout-watcher this neighbour-id (.-ts ping-event) restart-counter-this))
-                (send-events this nb-events (.-host nb) (.-port nb))
-                (d> :ping-heartbeat (get-id this) {:known-nodes-number  (count (get-alive-neighbours this))
-                                                   :events-sent-number  (count nb-events)
-                                                   :active-pings-number (count (get-ping-events this))
-                                                   :ping-heartbeat-ms   ping-heartbeat-ms}))))))
+      (when (node-not-restarted? this start-restart-counter)
+        (heartbeat-logic this start-restart-counter))
       (catch Exception e
         (d> :ping-heartbeat-error (get-id this) {:message (ex-message e)})))))
 
@@ -2084,7 +2093,7 @@
           (delete-neighbours this)
           (set-alive-status this)
           (when rejoin-if-dead? (start-rejoin-watcher this))
-          (vthread (ping-heartbeat this (get-restart-counter this)))
+          (vthread (ping-heartbeat-process this (get-restart-counter this)))
           true)
 
         (> cluster-size 1)
@@ -2113,7 +2122,7 @@
             (do
               (remove-watch (:*node this) :join-await-watcher)
               (when rejoin-if-dead? (start-rejoin-watcher this))
-              (vthread (ping-heartbeat this (get-restart-counter this)))
+              (vthread (ping-heartbeat-process this (get-restart-counter this)))
               true)
             (do
               (deref *join-await-promise max-join-time-ms :timeout)
@@ -2121,7 +2130,7 @@
               (if (alive-node? this)
                 (do
                   (when rejoin-if-dead? (start-rejoin-watcher this))
-                  (vthread (ping-heartbeat this (get-restart-counter this)))
+                  (vthread (ping-heartbeat-process this (get-restart-counter this)))
                   true)
                 (do
                   (set-left-status this)
