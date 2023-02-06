@@ -1517,9 +1517,9 @@
       :else
       (do
         (d> :ping-event node-id e)
-        (upsert-neighbour this (assoc sender :host (.-host e) :port (.-port e) :tx (.-tx e) :restart-counter (.-restart_counter e)))
+        (safe (upsert-neighbour this (assoc sender :host (.-host e) :port (.-port e) :restart-counter (.-restart_counter e))))
         (let [ack-event (new-ack-event this e)]
-          (send-event-ae this ack-event (.-host sender) (.-port sender))
+          (send-event-ae this ack-event (.-host e) (.-port e))
           (d> :ack-event node-id ack-event))))))
 
 
@@ -1610,7 +1610,9 @@
 
 
       (when-let [nb (get-neighbour this alive-id)]
-        (>= (.-tx nb) (.-neighbour_tx e)))
+        (and
+          (= (.-restart_counter nb) (.-neighbour_restart_counter e))
+          (>= (.-tx nb) (.-neighbour_tx e))))
       (do
         (d> :alive-event-bad-tx-error node-id e))
 
@@ -1756,7 +1758,7 @@
       (d> :left-event-bad-tx-error node-id e)
 
       :else
-      (let []
+      (do
         (d> :left-event node-id e)
         (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :left))
         (put-event this e)))))
