@@ -147,7 +147,7 @@
   (testing "should calculate correct number of nodes for notification depending on cluster size"
     (let [nodes-in-cluster [1 2 4 8 16 32 64 128 256 512 1024]
           result           (mapv sut/calc-n nodes-in-cluster)]
-      (m/assert [0 1 2 3 4 5 6 7 8 9 10] result))))
+      (m/assert [0 1 3 4 5 6 7 8 9 10 11] result))))
 
 
 (deftest serialize-test
