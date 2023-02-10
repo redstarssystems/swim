@@ -62,7 +62,7 @@
 
          :ping-heartbeat-ms                   1000           ;; Send ping+events to neighbours every N ms
          :ack-timeout-ms                      200           ;; How much time we wait for an ack event before next ping will be sent
-         :max-join-time-ms                    500          ;; How much time node awaits join confirmation before timeout
+         :max-join-time-ms                    500           ;; How much time node awaits join confirmation before timeout
          :rejoin-if-dead?                     true          ;; After node join, if cluster consider this node as dead, then do rejoin
          :rejoin-max-attempts                 10            ;; How many times try to rejoin
          }))
