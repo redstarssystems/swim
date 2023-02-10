@@ -1354,7 +1354,7 @@
                           (= (:restart-counter ae-neighbour) (.-restart_counter nb))))
                   (d> :anti-entropy-event node-id ae-neighbour)
                   (upsert-neighbour this ae-neighbour))))))
-        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e)))))))
+        (upsert-neighbour this (assoc sender :restart-counter (.-restart_counter e)))))))
 
 
 
@@ -1484,7 +1484,7 @@
             current-delay (or (metric/get-metric metric/registry :ping-ack-round-trip-max-ms {:label (str node-id)}) 0)]
         (d> :ack-event node-id e)
         (delete-ping this [sender-id (.-ts e)])
-        (upsert-neighbour this (assoc sender :tx (.-tx e) :restart-counter (.-restart_counter e) :status :alive :access :direct))
+        (upsert-neighbour this (assoc sender :restart-counter (.-restart_counter e) :status :alive :access :direct))
         (when (> diff current-delay)
           (metric/gauge metric/registry :ping-ack-round-trip-max-ms {:label (str node-id)} diff))
         (metric/histogram metric/registry :ping-ack-round-trip-ms {:label (str node-id)} diff)))))
