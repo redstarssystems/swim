@@ -33,7 +33,7 @@
                           status
                           access
                           restart-counter
-                          tx
+                          events-tx
                           payload
                           updated-at])
 

@@ -44,6 +44,7 @@
 (s/def ::attempt-number pos-int?)
 
 (s/def ::neighbour-tx ::tx)
+(s/def ::events-tx (s/map-of ::cmd-type ::tx))
 
 (s/def ::old-cluster-size ::cluster-size)
 (s/def ::new-cluster-size ::cluster-size)
@@ -133,7 +134,7 @@
 
 (s/def ::neighbour-node
   (s/keys :req-un [::id ::host ::port ::status ::access ::restart-counter
-                   ::tx ::payload ::updated-at]))
+                   ::events-tx ::payload ::updated-at]))
 
 
 (s/def ::neighbours (s/map-of ::neighbour-id ::neighbour-node))
