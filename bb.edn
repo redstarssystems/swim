@@ -1,5 +1,6 @@
 {:min-bb-version "0.4.0"
 
+ :deps        {healthsamurai/matcho       {:mvn/version "0.3.9"}}
  :tasks
  {:requires    ([babashka.fs :as fs]
                 [babashka.process :refer [process check]]
