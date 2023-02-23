@@ -32,12 +32,12 @@
 
 
 
-(defrecord ProbeEvent [cmd-type id host port restart-counter tx neighbour-host neighbour-port probe-key]
+(defrecord ProbeEvent [event-code id host port restart-counter tx neighbour-host neighbour-port probe-key]
 
            ISwimEvent
 
            (prepare [^ProbeEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e)
+             [(.event_code e) (.-id e) (.-host e) (.-port e) (.-restart_counter e)
               (.-tx e) (.-neighbour_host e) (.-neighbour_port e) (.-probe_key e)])
 
            (restore [^ProbeEvent _ v]
@@ -54,7 +54,7 @@
 (defn empty-probe
   "Returns empty probe event"
   ^ProbeEvent []
-  (map->ProbeEvent {:cmd-type        (:probe code)
+  (map->ProbeEvent {:event-code      (:probe code)
                     :id              (UUID. 0 0)
                     :host            "localhost"
                     :port            1
@@ -68,12 +68,12 @@
 ;;;;
 
 
-(defrecord ProbeAckEvent [cmd-type id host port status restart-counter tx neighbour-id probe-key]
+(defrecord ProbeAckEvent [event-code id host port status restart-counter tx neighbour-id probe-key]
 
            ISwimEvent
 
            (prepare [^ProbeAckEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-status e) (.-restart_counter e)
+             [(.event_code e) (.-id e) (.-host e) (.-port e) (.-status e) (.-restart_counter e)
               (.tx e) (.-neighbour_id e) (.-probe_key e)])
 
            (restore [^ProbeAckEvent _ v]
@@ -91,7 +91,7 @@
 (defn empty-probe-ack
   "Returns empty probe ack event"
   ^ProbeAckEvent []
-  (map->ProbeAckEvent {:cmd-type        (:probe-ack code)
+  (map->ProbeAckEvent {:event-code      (:probe-ack code)
                        :id              (UUID. 0 0)
                        :host            "localhost"
                        :port            1
@@ -105,12 +105,12 @@
 ;;;;
 
 
-(defrecord PingEvent [cmd-type id host port restart-counter tx neighbour-id attempt-number ts]
+(defrecord PingEvent [event-code id host port restart-counter tx neighbour-id attempt-number ts]
 
            ISwimEvent
 
            (prepare [^PingEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
+             [(.event_code e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
               (.-neighbour_id e) (.-attempt_number e) (.-ts e)])
 
            (restore [^PingEvent _ v]
@@ -126,7 +126,7 @@
 (defn empty-ping
   "Returns empty ping event"
   ^PingEvent []
-  (map->PingEvent {:cmd-type        (:ping code)
+  (map->PingEvent {:event-code      (:ping code)
                    :id              (UUID. 0 0)
                    :host            "localhost"
                    :port            1
@@ -139,12 +139,12 @@
 
 ;;;;
 
-(defrecord AckEvent [cmd-type id restart-counter tx neighbour-id neighbour-tx attempt-number ts]
+(defrecord AckEvent [event-code id restart-counter tx neighbour-id neighbour-tx attempt-number ts]
 
            ISwimEvent
 
            (prepare [^AckEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e)
+             [(.event_code e) (.-id e) (.-restart_counter e) (.tx e)
               (.-neighbour_id e) (.-neighbour_tx e) (.-attempt_number e) (.-ts e)])
 
            (restore [^AckEvent _ v]
@@ -160,19 +160,19 @@
 (defn empty-ack
   "Returns empty ack event"
   ^AckEvent []
-  (map->AckEvent {:cmd-type        (:ack code)
+  (map->AckEvent {:event-code      (:ack code)
                   :id              (UUID. 0 0)
                   :restart-counter 0
                   :tx              0
                   :neighbour-id    (UUID. 0 1)
                   :neighbour-tx    0
                   :attempt-number  1
-                  :ts 1}))
+                  :ts              1}))
 
 
 ;;;;
 
-(defrecord IndirectPingEvent [cmd-type id host port restart-counter tx
+(defrecord IndirectPingEvent [event-code id host port restart-counter tx
                               intermediate-id intermediate-host intermediate-port
                               neighbour-id neighbour-host neighbour-port
                               attempt-number ts]
@@ -180,7 +180,7 @@
            ISwimEvent
 
            (prepare [^IndirectPingEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
+             [(.event_code e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e)
               (.-intermediate_id e) (.-intermediate_host e) (.-intermediate_port e)
               (.-neighbour_id e) (.-neighbour_host e) (.-neighbour_port e)
               (.-attempt_number e) (.-ts e)])
@@ -200,7 +200,7 @@
 (defn empty-indirect-ping
   "Returns empty indirect ping event"
   ^IndirectPingEvent []
-  (map->IndirectPingEvent {:cmd-type          (:indirect-ping code)
+  (map->IndirectPingEvent {:event-code        (:indirect-ping code)
                            :id                (UUID. 0 0)
                            :host              "localhost"
                            :port              1
@@ -218,7 +218,7 @@
 
 ;;;;
 
-(defrecord IndirectAckEvent [cmd-type id host port restart-counter tx status
+(defrecord IndirectAckEvent [event-code id host port restart-counter tx status
                              intermediate-id intermediate-host intermediate-port
                              neighbour-id neighbour-host neighbour-port
                              attempt-number ts]
@@ -226,7 +226,7 @@
            ISwimEvent
 
            (prepare [^IndirectAckEvent e]
-             [(.-cmd_type e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e) (.-status e)
+             [(.event_code e) (.-id e) (.-host e) (.-port e) (.-restart_counter e) (.-tx e) (.-status e)
               (.-intermediate_id e) (.-intermediate_host e) (.-intermediate_port e)
               (.-neighbour_id e) (.-neighbour_host e) (.-neighbour_port e)
               (.-attempt_number e) (.-ts e)])
@@ -247,7 +247,7 @@
 (defn empty-indirect-ack
   "Returns empty indirect ack event"
   ^IndirectAckEvent []
-  (map->IndirectAckEvent {:cmd-type          (:indirect-ack code)
+  (map->IndirectAckEvent {:event-code        (:indirect-ack code)
                           :id                (UUID. 0 0)
                           :host              "localhost"
                           :port              1
@@ -267,14 +267,14 @@
 ;;;;
 
 
-(defrecord AliveEvent [cmd-type id restart-counter tx
+(defrecord AliveEvent [event-code id restart-counter tx
                        neighbour-id neighbour-restart-counter neighbour-tx
                        neighbour-host neighbour-port]
 
            ISwimEvent
 
            (prepare [^AliveEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e)
+             [(.event_code e) (.-id e) (.-restart_counter e) (.tx e)
               (.-neighbour_id e) (.-neighbour_restart_counter e) (.-neighbour_tx e)
               (.-neighbour_host e) (.-neighbour_port e)])
 
@@ -291,7 +291,7 @@
 (defn empty-alive
   "Returns empty alive event"
   ^AliveEvent []
-  (map->AliveEvent {:cmd-type                  (:alive code)
+  (map->AliveEvent {:event-code                (:alive code)
                     :id                        (UUID. 0 0)
                     :restart-counter           0
                     :tx                        0
@@ -304,12 +304,12 @@
 
 ;;;;
 
-(defrecord NewClusterSizeEvent [cmd-type id restart-counter tx old-cluster-size new-cluster-size]
+(defrecord NewClusterSizeEvent [event-code id restart-counter tx old-cluster-size new-cluster-size]
 
            ISwimEvent
 
            (prepare [^NewClusterSizeEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-old_cluster_size e) (.-new_cluster_size e)])
+             [(.event_code e) (.-id e) (.-restart_counter e) (.tx e) (.-old_cluster_size e) (.-new_cluster_size e)])
 
            (restore [^NewClusterSizeEvent _ v]
              (if (and
@@ -323,7 +323,7 @@
 (defn empty-new-cluster-size
   "Returns empty new cluster size event"
   ^NewClusterSizeEvent []
-  (map->NewClusterSizeEvent {:cmd-type         (:new-cluster-size code)
+  (map->NewClusterSizeEvent {:event-code       (:new-cluster-size code)
                              :id               (UUID. 0 0)
                              :restart-counter  0
                              :tx               0
@@ -334,12 +334,12 @@
 ;;;;
 
 
-(defrecord DeadEvent [cmd-type id restart-counter tx neighbour-id neighbour-restart-counter neighbour-tx]
+(defrecord DeadEvent [event-code id restart-counter tx neighbour-id neighbour-restart-counter neighbour-tx]
 
            ISwimEvent
 
            (prepare [^DeadEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e)
+             [(.event_code e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e)
               (.-neighbour_restart_counter e) (.-neighbour_tx e)])
 
            (restore [^DeadEvent _ v]
@@ -354,7 +354,7 @@
 (defn empty-dead
   "Returns empty dead event"
   ^DeadEvent []
-  (map->DeadEvent {:cmd-type                  (:dead code)
+  (map->DeadEvent {:event-code                (:dead code)
                    :id                        (UUID. 0 0)
                    :restart-counter           0
                    :tx                        0
@@ -366,11 +366,11 @@
 ;;;;
 
 
-(defrecord AntiEntropy [cmd-type id restart-counter tx anti-entropy-data]
+(defrecord AntiEntropy [event-code id restart-counter tx anti-entropy-data]
            ISwimEvent
 
            (prepare [^AntiEntropy e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx e) (.-anti_entropy_data e)])
+             [(.event_code e) (.-id e) (.-restart_counter e) (.-tx e) (.-anti_entropy_data e)])
 
            (restore [^AntiEntropy _ v]
              (if (and
@@ -384,7 +384,7 @@
 (defn empty-anti-entropy
   "Returns empty anti-entropy event"
   ^AntiEntropy []
-  (map->AntiEntropy {:cmd-type          (:anti-entropy code)
+  (map->AntiEntropy {:event-code        (:anti-entropy code)
                      :id                (UUID. 0 0)
                      :restart-counter   0
                      :tx                0
@@ -393,12 +393,12 @@
 
 ;;;;
 
-(defrecord JoinEvent [cmd-type id restart-counter tx host port]
+(defrecord JoinEvent [event-code id restart-counter tx host port]
 
            ISwimEvent
 
            (prepare [^JoinEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-host e) (.-port e)])
+             [(.event_code e) (.-id e) (.-restart_counter e) (.tx e) (.-host e) (.-port e)])
 
            (restore [^JoinEvent _ v]
              (if (and
@@ -413,7 +413,7 @@
 (defn empty-join
   "Returns empty join event"
   ^JoinEvent []
-  (map->JoinEvent {:cmd-type        (:join code)
+  (map->JoinEvent {:event-code      (:join code)
                    :id              (UUID. 0 0)
                    :restart-counter 0
                    :tx              0
@@ -424,12 +424,12 @@
 ;;;;
 
 
-(defrecord SuspectEvent [cmd-type id restart-counter tx neighbour-id neighbour-restart-counter neighbour-tx]
+(defrecord SuspectEvent [event-code id restart-counter tx neighbour-id neighbour-restart-counter neighbour-tx]
 
            ISwimEvent
 
            (prepare [^SuspectEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e)
+             [(.event_code e) (.-id e) (.-restart_counter e) (.tx e) (.-neighbour_id e)
               (.-neighbour_restart_counter e) (.-neighbour_tx e)])
 
            (restore [^SuspectEvent _ v]
@@ -444,7 +444,7 @@
 (defn empty-suspect
   "Returns empty suspect event"
   ^SuspectEvent []
-  (map->SuspectEvent {:cmd-type                  (:suspect code)
+  (map->SuspectEvent {:event-code                (:suspect code)
                       :id                        (UUID. 0 0)
                       :restart-counter           0
                       :tx                        0
@@ -455,12 +455,12 @@
 
 ;;;;
 
-(defrecord LeftEvent [cmd-type id restart-counter tx]
+(defrecord LeftEvent [event-code id restart-counter tx]
 
            ISwimEvent
 
            (prepare [^LeftEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.tx e)])
+             [(.event_code e) (.-id e) (.-restart_counter e) (.tx e)])
 
            (restore [^LeftEvent _ v]
              (if (and
@@ -474,7 +474,7 @@
 (defn empty-left
   "Returns empty left event"
   ^LeftEvent []
-  (map->LeftEvent {:cmd-type        (:left code)
+  (map->LeftEvent {:event-code      (:left code)
                    :id              (UUID. 0 0)
                    :restart-counter 0
                    :tx              0}))
@@ -482,12 +482,12 @@
 
 ;;;;
 
-(defrecord PayloadEvent [cmd-type id restart-counter tx payload]
+(defrecord PayloadEvent [event-code id restart-counter tx payload]
 
            ISwimEvent
 
            (prepare [^PayloadEvent e]
-             [(.-cmd_type e) (.-id e) (.-restart_counter e) (.-tx e) (.-payload e)])
+             [(.event_code e) (.-id e) (.-restart_counter e) (.-tx e) (.-payload e)])
 
            (restore [^PayloadEvent _ v]
              (if (and
@@ -501,7 +501,7 @@
 (defn empty-payload
   "Returns empty payload event"
   ^PayloadEvent []
-  (map->PayloadEvent {:cmd-type        (:payload code)
+  (map->PayloadEvent {:event-code      (:payload code)
                       :id              (UUID. 0 0)
                       :restart-counter 0
                       :tx              0

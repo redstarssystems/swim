@@ -26,7 +26,7 @@
 
 (deftest map->ProbeEvent-test
   (testing "ProbeEvent"
-    (let [probe-event (sut/map->ProbeEvent {:cmd-type        9
+    (let [probe-event (sut/map->ProbeEvent {:event-code      9
                                             :id              #uuid "00000000-0000-0000-0000-000000000001"
                                             :host            "127.0.0.1"
                                             :port            5376
@@ -81,7 +81,7 @@
 
 
 (deftest empty-probe-test
-  (m/assert ^:matcho/strict {:cmd-type        (:probe sut/code)
+  (m/assert ^:matcho/strict {:event-code      (:probe sut/code)
                              :id              uuid?
                              :host            string?
                              :port            nat-int?
@@ -98,7 +98,7 @@
 (deftest map->ProbeAckEvent-test
   (testing "ProbeAckEvent"
     (let [probe-ack-event
-          (sut/map->ProbeAckEvent {:cmd-type        10
+          (sut/map->ProbeAckEvent {:event-code      10
                                    :id              #uuid "00000000-0000-0000-0000-000000000001"
                                    :host            "127.0.0.1"
                                    :port            5376
@@ -153,7 +153,7 @@
 
 
 (deftest empty-probe-ack-test
-  (m/assert ^:matcho/strict {:cmd-type        (:probe-ack sut/code)
+  (m/assert ^:matcho/strict {:event-code      (:probe-ack sut/code)
                              :id              uuid?
                              :host            string?
                              :port            nat-int?
@@ -171,7 +171,7 @@
 (deftest map->PingEvent-test
   (testing "PingEvent"
     (let [ping-event
-          (sut/map->PingEvent {:cmd-type        0
+          (sut/map->PingEvent {:event-code      0
                                :id              #uuid "00000000-0000-0000-0000-000000000001"
                                :host            "127.0.0.1"
                                :port            5376
@@ -226,7 +226,7 @@
 
 
 (deftest empty-ping-test
-  (m/assert ^:matcho/strict {:cmd-type        (:ping sut/code)
+  (m/assert ^:matcho/strict {:event-code      (:ping sut/code)
                              :id              uuid?
                              :host            string?
                              :port            nat-int?
@@ -243,7 +243,7 @@
 
 (deftest map->AckEvent-test
   (testing "AckEvent"
-    (let [ack-event (sut/map->AckEvent {:cmd-type        1
+    (let [ack-event (sut/map->AckEvent {:event-code      1
                                         :id              #uuid "00000000-0000-0000-0000-000000000002"
                                         :restart-counter 5
                                         :tx              2
@@ -294,7 +294,7 @@
 
 
 (deftest empty-ack-test
-  (m/assert ^:matcho/strict {:cmd-type        (:ack sut/code)
+  (m/assert ^:matcho/strict {:event-code      (:ack sut/code)
                              :id              uuid?
                              :restart-counter nat-int?
                              :tx              nat-int?
@@ -311,7 +311,7 @@
 (deftest map->IndirectPingEvent-test
   (testing "IndirectPingEvent"
     (let [indirect-ping-event
-          (sut/map->IndirectPingEvent {:cmd-type          14
+          (sut/map->IndirectPingEvent {:event-code        14
                                        :id                #uuid "00000000-0000-0000-0000-000000000001"
                                        :host              "127.0.0.1"
                                        :port              5376
@@ -385,7 +385,7 @@
 
 
 (deftest empty-indirect-ping-test
-  (m/assert ^:matcho/strict {:cmd-type          (:indirect-ping sut/code)
+  (m/assert ^:matcho/strict {:event-code        (:indirect-ping sut/code)
                              :id                uuid?
                              :host              string?
                              :port              nat-int?
@@ -409,7 +409,7 @@
 (deftest map->IndirectAckEvent-test
   (testing "IndirectAckEvent"
     (let [indirect-ack-event
-          (sut/map->IndirectAckEvent {:cmd-type          15
+          (sut/map->IndirectAckEvent {:event-code        15
                                       :id                #uuid "00000000-0000-0000-0000-000000000001"
                                       :host              "127.0.0.1"
                                       :port              5376
@@ -489,7 +489,7 @@
 
 
 (deftest empty-indirect-ack-test
-  (m/assert ^:matcho/strict {:cmd-type          (:indirect-ack sut/code)
+  (m/assert ^:matcho/strict {:event-code        (:indirect-ack sut/code)
                              :id                uuid?
                              :host              string?
                              :port              nat-int?
@@ -512,7 +512,7 @@
 (deftest map->AliveEvent-test
   (testing "AliveEvent"
     (let [alive-event
-          (sut/map->AliveEvent {:cmd-type                  3
+          (sut/map->AliveEvent {:event-code                3
                                 :id                        #uuid "00000000-0000-0000-0000-000000000002"
                                 :restart-counter           5
                                 :tx                        0
@@ -567,7 +567,7 @@
 
 
 (deftest empty-alive-test
-  (m/assert ^:matcho/strict {:cmd-type                  (:alive sut/code)
+  (m/assert ^:matcho/strict {:event-code                (:alive sut/code)
                              :id                        uuid?
                              :restart-counter           nat-int?
                              :tx                        nat-int?
@@ -584,7 +584,7 @@
 (deftest map->NewClusterSizeEvent-test
   (testing "NewClusterSizeEvent"
     (let [ncs-event
-          (sut/map->NewClusterSizeEvent {:cmd-type         13
+          (sut/map->NewClusterSizeEvent {:event-code       13
                                          :id               #uuid "00000000-0000-0000-0000-000000000002"
                                          :restart-counter  5
                                          :tx               0
@@ -626,7 +626,7 @@
 
 
 (deftest empty-new-cluster-size-test
-  (m/assert ^:matcho/strict {:cmd-type         (:new-cluster-size sut/code)
+  (m/assert ^:matcho/strict {:event-code       (:new-cluster-size sut/code)
                              :id               uuid?
                              :restart-counter  nat-int?
                              :tx               nat-int?
@@ -641,7 +641,7 @@
 (deftest map->DeadEvent-test
   (testing "DeadEvent"
     (let [dead-event
-          (sut/map->DeadEvent {:cmd-type                  6
+          (sut/map->DeadEvent {:event-code                6
                                :id                        #uuid "00000000-0000-0000-0000-000000000002"
                                :restart-counter           5
                                :tx                        0
@@ -688,7 +688,7 @@
 
 
 (deftest empty-dead-test
-  (m/assert ^:matcho/strict {:cmd-type                  (:dead sut/code)
+  (m/assert ^:matcho/strict {:event-code                (:dead sut/code)
                              :id                        uuid?
                              :restart-counter           nat-int?
                              :tx                        nat-int?
@@ -705,7 +705,7 @@
 (deftest map->AntiEntropy-test
   (testing "AntiEntropy"
     (let [anti-entropy-event
-          (sut/map->AntiEntropy {:cmd-type          8
+          (sut/map->AntiEntropy {:event-code        8
                                  :id                #uuid "00000000-0000-0000-0000-000000000001"
                                  :restart-counter   1
                                  :tx                2
@@ -777,7 +777,7 @@
 
 
 (deftest empty-anti-entropy-test
-  (m/assert ^:matcho/strict {:cmd-type          8
+  (m/assert ^:matcho/strict {:event-code        8
                              :id                #uuid "00000000-0000-0000-0000-000000000000"
                              :restart-counter   0
                              :tx                0
@@ -790,7 +790,7 @@
 (deftest map->JoinEvent-test
   (testing "JoinEvent"
     (let [join-event
-          (sut/map->JoinEvent {:cmd-type        2
+          (sut/map->JoinEvent {:event-code      2
                                :id              #uuid "00000000-0000-0000-0000-000000000001"
                                :restart-counter 5
                                :tx              1
@@ -833,7 +833,7 @@
 
 
 (deftest empty-join-test
-  (m/assert ^:matcho/strict {:cmd-type        (:join sut/code)
+  (m/assert ^:matcho/strict {:event-code      (:join sut/code)
                              :id              uuid?
                              :restart-counter nat-int?
                              :tx              nat-int?
@@ -848,7 +848,7 @@
 (deftest map->SuspectEvent-test
   (testing "SuspectEvent"
     (let [suspect-event
-          (sut/map->SuspectEvent {:cmd-type                  4
+          (sut/map->SuspectEvent {:event-code                4
                                   :id                        #uuid "00000000-0000-0000-0000-000000000002"
                                   :restart-counter           5
                                   :tx                        0
@@ -895,7 +895,7 @@
 
 
 (deftest empty-suspect-test
-  (m/assert ^:matcho/strict {:cmd-type                  (:suspect sut/code)
+  (m/assert ^:matcho/strict {:event-code                (:suspect sut/code)
                              :id                        uuid?
                              :restart-counter           nat-int?
                              :tx                        nat-int?
@@ -911,7 +911,7 @@
 (deftest map->LeftEvent-test
   (testing "LeftEvent"
     (let [left-event
-          (sut/map->LeftEvent {:cmd-type        5
+          (sut/map->LeftEvent {:event-code      5
                                :id              #uuid "00000000-0000-0000-0000-000000000001"
                                :restart-counter 7
                                :tx              1})]
@@ -946,7 +946,7 @@
 
 
 (deftest empty-left-test
-  (m/assert ^:matcho/strict {:cmd-type        (:left sut/code)
+  (m/assert ^:matcho/strict {:event-code      (:left sut/code)
                              :id              uuid?
                              :restart-counter nat-int?
                              :tx              nat-int?}
@@ -958,7 +958,7 @@
 (deftest map->PayloadEvent-test
   (testing "PayloadEvent"
     (let [payload-event
-          (sut/map->PayloadEvent {:cmd-type        7
+          (sut/map->PayloadEvent {:event-code      7
                                   :id              #uuid "00000000-0000-0000-0000-000000000001"
                                   :restart-counter 5
                                   :tx              1
@@ -996,7 +996,7 @@
 
 
 (deftest empty-payload-test
-  (m/assert ^:matcho/strict {:cmd-type        (:payload sut/code)
+  (m/assert ^:matcho/strict {:event-code      (:payload sut/code)
                              :id              uuid?
                              :restart-counter nat-int?
                              :tx              nat-int?
