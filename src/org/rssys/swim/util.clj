@@ -4,6 +4,7 @@
 
 
 (defmacro safe
+  "Execute body and suppress an Exception if occurs."
   [& body]
   `(try
      ~@body
@@ -11,6 +12,11 @@
 
 
 (defmacro exec-time
+  "Set max detected execution time for expression to gauge.
+  Params:
+  `node-id` - node id where an `expr` is executed.
+  `metric-kwd` - unique id for code place where an `expr` is executed.
+  `expr` - an expression to be executed."
   [node-id metric-kwd expr]
   `(let [current-max# (or (metric/get-metric metric/registry ~metric-kwd {:node-id ~node-id}) 0)
          start#  (. System (nanoTime))
