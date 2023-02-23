@@ -63,19 +63,19 @@
         (m/assert message (String. ^bytes (deref *data-promise)))))))
 
 
-(deftest start-test
+(deftest start-server-test
   (let [host                  "localhost"
         port                  (+ 10000 (rand-int 50000))
         *server-ready-promise (promise)
         messages              #{"one" "two" "three" "four" "abcdefg" "12345"}
         *results              (atom #{})
         process-message-fn    (fn [data] (swap! *results conj (String. ^bytes data)))
-        *server               (sut/start (UUID. 0 1) host port process-message-fn {:*server-ready-promise *server-ready-promise})]
+        *server               (sut/start-server (UUID. 0 1) host port process-message-fn {:*server-ready-promise *server-ready-promise})]
     @*server-ready-promise                                  ;; wait until server is ready
     (doseq [m messages]
       (sut/send-packet (.getBytes ^String m) host port)
       (Thread/sleep 10))
-    (let [*stop-result (sut/stop *server)]
+    (let [*stop-result (sut/stop-server *server)]
 
       (testing "all received messages should be equal to original messages"
         (m/assert messages @*results))
