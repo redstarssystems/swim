@@ -23,17 +23,18 @@
 (s/def ::access #{:direct :indirect})                       ;; 0 - :direct, 1 - :indirect
 (s/def ::object any?)
 (s/def ::tags set?)                                         ;; #{"dc1" "test"}
-(s/def ::nspace (s/or :symbol symbol? :keyword keyword? :string string?)) ;; cluster namespace
+(s/def ::namespace (s/or :symbol symbol? :keyword keyword? :string string?)) ;; cluster namespace
 (s/def ::secret-token string?)                              ;; string token for secret key gen to access to cluster
 (s/def ::secret-key ::object)                               ;; 256-bit SecretKey generated from secret token
 (s/def ::cluster-size pos-int?)                             ;; number of nodes in the cluster
-(s/def ::cluster (s/keys :req-un [::id ::name ::desc ::secret-token ::nspace ::tags] :opt-un [::secret-key ::cluster-size]))
+(s/def ::cluster (s/keys :req-un [::id ::name ::desc ::secret-token ::namespace ] :opt-un [::secret-key ::cluster-size]))
 (s/def ::probe-key any?)                                    ;; unique key for probe <--> probe-ack
 
 (s/def ::restart-counter nat-int?)                          ;; increase every node restart. part of incarnation.
 (s/def ::tx nat-int?)                                       ;; increase every event on node. part of incarnation.
 (s/def ::payload ::object)                                  ;; some data attached to node and propagated to cluster
 (s/def ::updated-at nat-int?)
+(s/def ::event-code nat-int?)
 
 (s/def ::neighbour-status ::status)
 (s/def ::neighbour-restart-counter ::restart-counter)
@@ -44,7 +45,8 @@
 (s/def ::attempt-number pos-int?)
 
 (s/def ::neighbour-tx ::tx)
-(s/def ::events-tx (s/map-of ::cmd-type ::tx))
+
+(s/def ::events-tx (s/map-of ::event-code ::tx))
 
 (s/def ::old-cluster-size ::cluster-size)
 (s/def ::new-cluster-size ::cluster-size)
@@ -54,72 +56,63 @@
 ;; Event specs
 
 (s/def ::probe-event
-  (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx ::neighbour-host
+  (s/keys :req-un [::event-code ::id ::host ::port ::restart-counter ::tx ::neighbour-host
                    ::neighbour-port ::probe-key]))
 
 
 (s/def ::probe-ack-event
-  (s/keys :req-un [::cmd-type ::id ::host ::port ::status ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::host ::port ::status ::restart-counter ::tx
                    ::neighbour-id ::probe-key]))
 
 
 (s/def ::ping-event
-  (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::host ::port ::restart-counter ::tx
                    ::neighbour-id ::attempt-number ::ts]))
 
 
 (s/def ::ack-event
-  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::restart-counter ::tx
                    ::neighbour-id ::neighbour-tx ::attempt-number ::ts]))
 
 
 (s/def ::indirect-ping-event
-  (s/keys :req-un [::cmd-type ::id ::host ::port ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::host ::port ::restart-counter ::tx
                    ::intermediate-id ::intermediate-host ::intermediate-port
                    ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number ::ts]))
 
 
 (s/def ::indirect-ack-event
-  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::status ::host ::port
+  (s/keys :req-un [::event-code ::id ::restart-counter ::tx ::status ::host ::port
                    ::intermediate-id ::intermediate-host ::intermediate-port
                    ::neighbour-id ::neighbour-host ::neighbour-port ::attempt-number ::ts]))
 
 
-;; alive node is a neighbour
 (s/def ::alive-event
-  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::restart-counter ::tx
                    ::neighbour-id ::neighbour-restart-counter ::neighbour-tx
                    ::neighbour-host ::neighbour-port]))
 
 
 (s/def ::new-cluster-size-event
-  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::restart-counter ::tx
                    ::old-cluster-size ::new-cluster-size]))
 
 
-;; ::neighbour-id - dead node
 (s/def ::dead-event
-  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::restart-counter ::tx
                    ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
 
 
 (s/def ::anti-entropy-event
-  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
+  (s/keys :req-un [::event-code ::id ::restart-counter ::tx
                    ::anti-entropy-data]))
 
 
-(s/def ::join-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::host ::port]))
+(s/def ::join-event (s/keys :req-un [::event-code ::id ::restart-counter ::tx ::host ::port]))
 
+(s/def ::left-event (s/keys :req-un [::event-code ::id ::restart-counter ::tx]))
 
-;; suspect node is a neighbour
-(s/def ::suspect-event
-  (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx
-                   ::neighbour-id ::neighbour-restart-counter ::neighbour-tx]))
-
-
-(s/def ::left-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx]))
-
-(s/def ::payload-event (s/keys :req-un [::cmd-type ::id ::restart-counter ::tx ::payload]))
+(s/def ::payload-event (s/keys :req-un [::event-code ::id ::restart-counter ::tx ::payload]))
 
 
 ;;;;;;;;;;
@@ -145,11 +138,9 @@
 
 (s/def ::probe-events (s/map-of ::probe-key (s/nilable ::probe-ack-event)))
 
-
-;; buffer for ping events we sent and waiting for an ack
-
 (s/def ::ping-key (s/tuple ::neighbour-id ::ts))
 
+;; buffer for ping events we sent and waiting for an ack
 (s/def ::ping-events (s/map-of ::ping-key ::ping-event))
 
 
@@ -157,7 +148,7 @@
 (s/def ::indirect-ping-events (s/map-of ::ping-key ::indirect-ping-event))
 
 
-;; buffer for outgoing events which we propagate via piggieback with ping events
+;; buffer for outgoing events which we propagate via pigпieback with ping events
 (s/def ::outgoing-events vector?)
 
 
@@ -166,7 +157,6 @@
 
 
 (s/def ::*udp-server ::object)
-
 
 ;;;;;;;;;;
 
