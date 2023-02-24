@@ -1,6 +1,7 @@
 (ns org.rssys.swim.util
   (:require
-    [org.rssys.swim.metric :as metric]))
+    [org.rssys.swim.metric :as metric])
+  (:import (java.time Instant)))
 
 
 (defmacro safe
@@ -33,5 +34,5 @@
   [node event-kwd data]
   (tap> {:node-id    (:id node)
          :event-type event-kwd
-         :ts         (System/currentTimeMillis)
+         :ts         (-> (Instant/now) str)
          :data       data}))
