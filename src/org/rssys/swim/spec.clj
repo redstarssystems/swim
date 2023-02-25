@@ -26,7 +26,7 @@
 (s/def ::namespace (s/or :symbol symbol? :keyword keyword? :string string?)) ;; cluster namespace
 (s/def ::password (s/and string? #(>= (.length %) 16)))     ;; password for secret key generation to access to cluster
 (s/def ::cluster-size pos-int?)                             ;; number of nodes in the cluster
-(s/def ::cluster (s/keys :req-un [::id ::name ::password ::namespace] :opt-un [::desc ::cluster-size ::tags]))
+(s/def ::cluster (s/keys :req-un [::id ::name ::namespace] :opt-un [::desc ::cluster-size ::tags]))
 (s/def ::probe-key any?)                                    ;; unique key for probe <--> probe-ack
 
 (s/def ::restart-counter nat-int?)                          ;; increase every node restart. part of incarnation.
