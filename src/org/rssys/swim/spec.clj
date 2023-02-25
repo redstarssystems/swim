@@ -113,12 +113,43 @@
 
 (s/def ::payload-event (s/keys :req-un [::event-code ::id ::restart-counter ::tx ::payload]))
 
+;;;;;;;;;;
+;; Node config spec
+
+(s/def :config/enable-diag-tap? boolean?)
+(s/def :config/max-udp-size pos-int?)
+(s/def :config/ignore-max-udp-size?  boolean?)
+(s/def :config/max-payload-size pos-int?)
+(s/def :config/max-anti-entropy-items nat-int?)
+(s/def :config/max-ping-without-ack-before-suspect pos-int?)
+(s/def :config/max-ping-without-ack-before-dead pos-int?)
+(s/def :config/ping-heartbeat-ms pos-int?)
+(s/def :config/ack-timeout-ms pos-int?)
+(s/def :config/max-join-time-ms pos-int?)
+(s/def :config/rejoin-if-dead? boolean?)
+(s/def :config/rejoin-max-attempts pos-int?)
+
+
+(s/def ::config (s/keys :req-un [:config/enable-diag-tap?
+                                 :config/max-udp-size
+                                 :config/ignore-max-udp-size?
+                                 :config/max-payload-size
+                                 :config/max-anti-entropy-items
+                                 :config/max-ping-without-ack-before-suspect
+                                 :config/max-ping-without-ack-before-dead
+                                 :config/ping-heartbeat-ms
+                                 :config/ack-timeout-ms
+                                 :config/max-join-time-ms
+                                 :config/rejoin-if-dead?
+                                 :config/rejoin-max-attempts]))
+
+
 
 ;;;;;;;;;;
 ;; Domain specs
 
 (s/def ::node
-  (s/keys :req-un [::id ::host ::port ::cluster ::status ::neighbours ::restart-counter
+  (s/keys :req-un [::config ::id ::host ::port ::cluster ::status ::neighbours ::restart-counter
                    ::tx ::ping-events ::indirect-ping-events
                    ::payload ::*udp-server ::outgoing-events
                    ::ping-round-buffer ::probe-events]))
