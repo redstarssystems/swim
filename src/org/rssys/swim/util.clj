@@ -1,7 +1,9 @@
 (ns org.rssys.swim.util
   (:require
+    [cognitect.transit :as transit]
     [org.rssys.swim.metric :as metric])
-  (:import (java.time Instant)))
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
+           (java.time Instant)))
 
 
 (defmacro safe
@@ -29,10 +31,29 @@
 
 
 (defn d>
-  "Put diagnostic data to tap>.
+  "Put node diagnostic data to tap>.
    Returns true if there was room in the tap> queue, false if not (dropped)."
-  [node event-kwd data]
-  (tap> {:node-id    (:id node)
-         :event-type event-kwd
-         :ts         (-> (Instant/now) str)
-         :data       data}))
+  [this event-kwd data]
+  (when (-> @(:*node this) :config :enable-diag-tap?)
+    (tap> {:node-id    (-> @(:*node this) :id)
+           :event-type event-kwd
+           :ts         (-> (Instant/now) str)
+           :data       data})))
+
+
+(defn serialize
+  "Serializes value, returns a byte array"
+  [v]
+  (let [out    (ByteArrayOutputStream. 1024)
+        writer (transit/writer out :msgpack)]
+    (transit/write writer v)
+    (.toByteArray out)))
+
+
+(defn deserialize
+  "Accepts a byte array, returns deserialized value"
+  [^bytes barray]
+  (when barray
+    (let [in     (ByteArrayInputStream. barray)
+          reader (transit/reader in :msgpack)]
+      (transit/read reader))))
